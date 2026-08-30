@@ -1,0 +1,179 @@
+<?php
+
+use App\Models\Organization;
+use App\Models\PlanPrice;
+use App\Models\User;
+use App\Services\AccountingService;
+use Database\Seeders\PlanCatalogSeeder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+
+beforeEach(function () {
+    $this->withoutVite();
+    $this->seed(PlanCatalogSeeder::class);
+    $this->travelTo(now()->setDate(2026, 8, 26));
+});
+
+function purchaseFixture(): array
+{
+    $owner = User::factory()->create();
+    $organization = Organization::create(['name' => 'Compras oficina', 'status' => 'active']);
+    $organization->users()->attach($owner->id, ['role' => 'owner', 'status' => 'active']);
+    $price = PlanPrice::whereHas('plan', fn ($query) => $query->where('code', 'essential'))
+        ->where('billing_period', 'monthly')
+        ->firstOrFail();
+    $subscription = $organization->subscriptions()->create(['status' => 'active']);
+    $subscription->items()->create(['plan_price_id' => $price->id, 'item_type' => 'base_plan']);
+    $office = $organization->offices()->create([
+        'code' => 'MAIN',
+        'name' => 'Sede principal',
+        'status' => 'active',
+        'is_primary' => true,
+    ]);
+    $uuid = (string) Str::uuid();
+    $companyId = DB::table('companies')->insertGetId([
+        'public_id' => $uuid,
+        'office_id' => $office->id,
+        'name' => 'Empresa con compras',
+        'tax_id' => 'COMPRA-01',
+        'currency' => 'GTQ',
+    ]);
+    app(AccountingService::class)->installDefaultChart($companyId);
+    DB::table('accounting_periods')->insert([
+        'company_id' => $companyId,
+        'name' => 'Agosto 2026',
+        'starts_on' => '2026-08-01',
+        'ends_on' => '2026-08-31',
+    ]);
+
+    return compact('owner', 'organization', 'office', 'uuid', 'companyId');
+}
+
+function projectDatabaseTables(): array
+{
+    return [
+        'users', 'password_reset_tokens', 'sessions', 'cache', 'cache_locks', 'jobs', 'job_batches',
+        'failed_jobs', 'passkeys', 'plans', 'plan_prices', 'provider_prices', 'plan_limits', 'features',
+        'feature_plan', 'organizations', 'organization_user', 'offices', 'office_user', 'subscriptions',
+        'subscription_items', 'usage_records', 'payments', 'payment_attempts', 'webhook_events',
+        'invitations', 'invitation_office', 'audit_logs', 'companies', 'company_user', 'ledger_accounts',
+        'accounting_periods', 'journal_entries', 'journal_lines', 'journal_entry_documents',
+        'sales_customers', 'sales_invoices', 'sales_invoice_lines', 'sales_receipts',
+        'company_accounting_mappings', 'purchase_suppliers', 'purchase_documents',
+        'purchase_document_lines', 'purchase_payments', 'purchase_document_files',
+        'accounting_source_entries',
+    ];
+}
+
+test('database schema contains every operational module and its purchase integrity columns', function () {
+    foreach (projectDatabaseTables() as $table) {
+        expect(Schema::hasTable($table))->toBeTrue("Missing table: {$table}");
+    }
+
+    expect(Schema::hasColumns('purchase_documents', [
+        'public_id', 'company_id', 'purchase_supplier_id', 'number', 'document_type', 'external_reference',
+        'status', 'document_date', 'due_on', 'total_cents', 'supplier_name', 'supplier_tax_id',
+        'created_by', 'approved_by', 'approved_at', 'voided_by', 'voided_at', 'void_reason',
+    ]))->toBeTrue();
+    expect(Schema::hasColumns('accounting_source_entries', [
+        'company_id', 'source_type', 'source_id', 'event', 'journal_entry_id',
+    ]))->toBeTrue();
+});
+
+test('every project table has one dedicated create migration', function () {
+    $files = glob(database_path('migrations/*_create_*_table.php')) ?: [];
+    $migrationTables = [];
+
+    foreach ($files as $file) {
+        $contents = file_get_contents($file);
+
+        expect($contents)->not->toBeFalse()
+            ->and(substr_count((string) $contents, 'Schema::create('))
+            ->toBe(1, basename($file).' must create exactly one table');
+
+        preg_match("/Schema::create\\('([^']+)'/", (string) $contents, $matches);
+        expect($matches[1] ?? null)->not->toBeNull(basename($file).' must declare its table name');
+        $migrationTables[] = $matches[1];
+    }
+
+    sort($migrationTables);
+    $expectedTables = projectDatabaseTables();
+    sort($expectedTables);
+
+    expect($files)->toHaveCount(46)
+        ->and($migrationTables)->toBe($expectedTables);
+});
+
+test('purchase approval payment and cancellation remain balanced and traceable', function () {
+    $fixture = purchaseFixture();
+    $this->actingAs($fixture['owner']);
+
+    $this->post(route('accounting.purchaseSupplier', $fixture['uuid']), [
+        'name' => 'Proveedor de prueba',
+        'tax_id' => '123456-7',
+        'email' => 'proveedor@example.com',
+        'phone' => '55550000',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $supplierId = (int) DB::table('purchase_suppliers')->value('id');
+    $expenseAccountId = (int) DB::table('ledger_accounts')
+        ->where('company_id', $fixture['companyId'])
+        ->where('code', '5201')
+        ->value('id');
+    $documentId = (string) Str::uuid();
+    $this->post(route('accounting.purchaseStore', $fixture['uuid']), [
+        'request_id' => $documentId,
+        'supplier_id' => $supplierId,
+        'document_type' => 'purchase',
+        'external_reference' => 'FAC-INTERNA-001',
+        'document_date' => '2026-08-10',
+        'due_on' => '2026-08-31',
+        'lines' => [[
+            'account_id' => $expenseAccountId,
+            'description' => 'Servicios profesionales',
+            'quantity' => 2,
+            'unit_price' => '125.50',
+        ]],
+    ])->assertRedirect(route('accounting.purchaseShow', [$fixture['uuid'], $documentId]))
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('purchase_documents', [
+        'public_id' => $documentId,
+        'status' => 'draft',
+        'total_cents' => 25100,
+        'supplier_name' => 'Proveedor de prueba',
+    ]);
+    $this->post(route('accounting.purchaseProcess', [$fixture['uuid'], $documentId]), [
+        'action' => 'approve',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('purchase_documents', ['public_id' => $documentId, 'status' => 'approved', 'number' => 1]);
+    $this->assertDatabaseHas('accounting_source_entries', ['source_type' => 'purchase_document', 'event' => 'origin']);
+    $this->assertDatabaseHas('journal_entries', ['status' => 'draft', 'reference' => 'COMPRA-'.$documentId]);
+    expect(DB::table('journal_lines')->sum('debit_cents'))->toBe(25100)
+        ->and(DB::table('journal_lines')->sum('credit_cents'))->toBe(25100);
+
+    $paymentId = (string) Str::uuid();
+    $this->post(route('accounting.purchasePayment', [$fixture['uuid'], $documentId]), [
+        'request_id' => $paymentId,
+        'amount' => '100.10',
+        'paid_on' => '2026-08-26',
+        'reference' => 'TRANSFERENCIA-001',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $payment = DB::table('purchase_payments')->where('public_id', $paymentId)->firstOrFail();
+    $this->assertDatabaseHas('purchase_payments', ['id' => $payment->id, 'amount_cents' => 10010, 'voided_at' => null]);
+    $this->assertDatabaseHas('accounting_source_entries', ['source_type' => 'purchase_payment', 'source_id' => $payment->id, 'event' => 'origin']);
+
+    $this->post(route('accounting.purchasePaymentVoid', [$fixture['uuid'], $documentId, $payment->id]), [
+        'reason' => 'Referencia bancaria incorrecta',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect(DB::table('purchase_payments')->where('id', $payment->id)->whereNotNull('voided_at')->exists())->toBeTrue();
+    $paymentEntry = DB::table('accounting_source_entries')
+        ->where('source_type', 'purchase_payment')
+        ->where('source_id', $payment->id)
+        ->value('journal_entry_id');
+    $this->assertDatabaseHas('journal_entries', ['id' => $paymentEntry, 'status' => 'void']);
+});
