@@ -85,7 +85,10 @@ jobs:
 
   dependency-review:
     name: Pull request dependency review
-    if: github.event_name == 'pull_request'
+    # GitHub's dependency-review action requires Advanced Security on private
+    # repositories. The dependency-audit job above remains the private-repo
+    # fallback and audits both Composer and pnpm lockfiles on every PR.
+    if: github.event_name == 'pull_request' && github.event.repository.private == false
     runs-on: ubuntu-latest
 
     steps:
