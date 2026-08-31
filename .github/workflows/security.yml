@@ -71,13 +71,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Scan Git history without external credential verification
-        uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
-        with:
-          path: ./
-          base: ''
-          head: HEAD
-          extra_args: --no-verification
+      - name: Scan complete Git history without external credential verification
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/repo:ro" \
+            ghcr.io/trufflesecurity/trufflehog@sha256:deb2af10659a488a14d262a323addcde099d99827a1cf1dc4e93c17915c39f08 \
+            git file:///repo \
+            --branch HEAD \
+            --fail \
+            --no-update \
+            --github-actions \
+            --no-verification
 
   dependency-review:
     name: Pull request dependency review

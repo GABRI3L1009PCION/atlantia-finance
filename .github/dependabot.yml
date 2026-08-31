@@ -5,30 +5,33 @@ updates:
     schedule:
       interval: 'weekly'
     cooldown:
-      default-days: 5
+      default-days: 7
     groups:
       github-actions:
         patterns:
           - '*'
-
   - package-ecosystem: 'composer'
     directory: '/'
     schedule:
       interval: 'weekly'
     cooldown:
-      default-days: 5
+      default-days: 7
     groups:
       composer:
         patterns:
           - '*'
-
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
       interval: 'weekly'
     cooldown:
-      default-days: 5
+      default-days: 7
     groups:
       npm:
         patterns:
           - '*'
+    ignore:
+      # TypeScript 7 is outside typescript-eslint's supported peer range.
+      - dependency-name: 'typescript'
+        update-types:
+          - 'version-update:semver-major'
