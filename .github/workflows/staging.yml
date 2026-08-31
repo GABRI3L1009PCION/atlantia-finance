@@ -1,0 +1,175 @@
+name: staging
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  verify-and-deploy:
+    name: Verify and deploy staging
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    env:
+      STAGING_HOST: ${{ secrets.STAGING_HOST }}
+      STAGING_PORT: ${{ secrets.STAGING_PORT }}
+      STAGING_USER: ${{ secrets.STAGING_USER }}
+      STAGING_PATH: ${{ secrets.STAGING_PATH }}
+      STAGING_URL: ${{ vars.STAGING_URL }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Verify deployment inputs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "$STAGING_HOST"
+          test -n "$STAGING_USER"
+          test -n "$STAGING_PATH"
+          test -n "$STAGING_URL"
+          case "$STAGING_URL" in
+            https://*) ;;
+            *) echo 'STAGING_URL must use HTTPS.' >&2; exit 1 ;;
+          esac
+
+      - name: Run acceptance checks
+        run: |
+          composer install --no-interaction --prefer-dist
+          npm ci
+          composer ci:check
+
+      - name: Build release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm run build
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+          tar \
+            --exclude=.git \
+            --exclude=.env \
+            --exclude=node_modules \
+            --exclude=storage \
+            --exclude=tests \
+            -czf "$RUNNER_TEMP/release-${GITHUB_SHA}.tar.gz" .
+
+      - name: Configure SSH trust
+        shell: bash
+        env:
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$STAGING_SSH_PRIVATE_KEY"
+          test -n "$STAGING_KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$STAGING_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$STAGING_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          port="${STAGING_PORT:-22}"
+          ssh -p "$port" "$STAGING_USER@$STAGING_HOST" \
+            "mkdir -p '$STAGING_PATH/releases' \
+              '$STAGING_PATH/shared/storage/app/public' \
+              '$STAGING_PATH/shared/storage/framework/cache/data' \
+              '$STAGING_PATH/shared/storage/framework/sessions' \
+              '$STAGING_PATH/shared/storage/framework/views' \
+              '$STAGING_PATH/shared/storage/logs'"
+          scp -P "$port" "$RUNNER_TEMP/release-${GITHUB_SHA}.tar.gz" \
+            "$STAGING_USER@$STAGING_HOST:$STAGING_PATH/releases/"
+
+      - name: Activate release and migrate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          port="${STAGING_PORT:-22}"
+          ssh -p "$port" "$STAGING_USER@$STAGING_HOST" \
+            "DEPLOY_ROOT='$STAGING_PATH' RELEASE_ID='$GITHUB_SHA' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          release="$DEPLOY_ROOT/releases/$RELEASE_ID"
+          archive="$DEPLOY_ROOT/releases/release-$RELEASE_ID.tar.gz"
+
+          case "$release" in
+            "$DEPLOY_ROOT"/releases/*) ;;
+            *) echo 'Unsafe release path.' >&2; exit 1 ;;
+          esac
+          test -f "$DEPLOY_ROOT/shared/.env"
+          rm -rf "$release"
+          mkdir -p "$release"
+          tar -xzf "$archive" -C "$release"
+          ln -s "$DEPLOY_ROOT/shared/.env" "$release/.env"
+          ln -s "$DEPLOY_ROOT/shared/storage" "$release/storage"
+
+          cd "$release"
+          php artisan staging:preflight
+          php artisan migrate --force
+          php artisan storage:link
+          php artisan optimize
+
+          previous_release="$(readlink -f "$DEPLOY_ROOT/current" || true)"
+          printf '%s' "$previous_release" > "$DEPLOY_ROOT/.previous-release"
+          ln -sfn "$release" "$DEPLOY_ROOT/current.next"
+          mv -Tf "$DEPLOY_ROOT/current.next" "$DEPLOY_ROOT/current"
+          php artisan reload
+          REMOTE
+
+      - name: Run HTTPS smoke test
+        id: smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error --location \
+            --proto '=https' --tlsv1.2 "$STAGING_URL/up" > /dev/null
+          headers="$(curl --fail --silent --show-error --head \
+            --proto '=https' --tlsv1.2 "$STAGING_URL/login")"
+          printf '%s\n' "$headers" | grep -Eiq '^strict-transport-security:'
+
+      - name: Restore previous release after a failed smoke test
+        if: steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          port="${STAGING_PORT:-22}"
+          ssh -p "$port" "$STAGING_USER@$STAGING_HOST" \
+            "DEPLOY_ROOT='$STAGING_PATH' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          previous_release="$(cat "$DEPLOY_ROOT/.previous-release" 2>/dev/null || true)"
+          if [ -n "$previous_release" ] && [ -d "$previous_release" ]; then
+            case "$previous_release" in
+              "$DEPLOY_ROOT"/releases/*) ;;
+              *) echo 'Unsafe previous release path.' >&2; exit 1 ;;
+            esac
+            ln -sfn "$previous_release" "$DEPLOY_ROOT/current.next"
+            mv -Tf "$DEPLOY_ROOT/current.next" "$DEPLOY_ROOT/current"
+            cd "$previous_release"
+            php artisan optimize
+            php artisan reload
+          fi
+          REMOTE
