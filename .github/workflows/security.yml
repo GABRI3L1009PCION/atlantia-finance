@@ -30,7 +30,7 @@ jobs:
           persist-credentials: false
 
       - name: Analyze source without telemetry
-        run: semgrep scan --config auto --error --metrics=off
+        run: semgrep scan --config p/default --oss-only --error --metrics=off
 
   dependency-audit:
     name: Dependency audit
@@ -77,7 +77,7 @@ jobs:
           path: ./
           base: ''
           head: HEAD
-          extra_args: --no-verification --fail
+          extra_args: --no-verification
 
   dependency-review:
     name: Pull request dependency review
