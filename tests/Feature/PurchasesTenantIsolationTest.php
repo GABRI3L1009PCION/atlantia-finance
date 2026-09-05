@@ -173,12 +173,16 @@ function purchaseTenantEndpoints(array $company): array
         'read' => [
             ['get', route('accounting.purchases', $company['publicId']), []],
             ['get', route('accounting.purchasesExport', ['company' => $company['publicId'], 'format' => 'pdf']), []],
+            ['get', route('accounting.suppliers', $company['publicId']), []],
+            ['get', route('accounting.suppliersExport', ['company' => $company['publicId'], 'format' => 'pdf']), []],
+            ['get', route('accounting.payables', $company['publicId']), []],
             ['get', route('accounting.purchaseShow', [$company['publicId'], $company['draftPublicId']]), []],
             ['get', route('accounting.purchasePdf', [$company['publicId'], $company['draftPublicId']]), []],
             ['get', route('accounting.purchaseFileDownload', [$company['publicId'], $company['draftPublicId'], $company['filePublicId']]), []],
         ],
         'write' => [
             ['post', route('accounting.purchaseSupplier', $company['publicId']), ['name' => 'Proveedor autorizado', 'tax_id' => 'AUTH-001']],
+            ['patch', route('accounting.purchaseSupplierUpdate', [$company['publicId'], $company['supplierId']]), ['name' => 'Proveedor actualizado', 'tax_id' => 'AUTH-002']],
             ['post', route('accounting.purchaseStore', $company['publicId']), [
                 'request_id' => (string) Str::uuid(),
                 'supplier_id' => $company['supplierId'],

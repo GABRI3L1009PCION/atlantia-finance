@@ -8,6 +8,7 @@ use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     $this->withoutVite();
@@ -62,7 +63,7 @@ function projectDatabaseTables(): array
         'sales_customers', 'sales_invoices', 'sales_invoice_lines', 'sales_receipts',
         'company_accounting_mappings', 'purchase_suppliers', 'purchase_documents',
         'purchase_document_lines', 'purchase_payments', 'purchase_document_files',
-        'accounting_source_entries',
+        'accounting_source_entries', 'bank_accounts', 'bank_transactions',
     ];
 }
 
@@ -78,6 +79,14 @@ test('database schema contains every operational module and its purchase integri
     ]))->toBeTrue();
     expect(Schema::hasColumns('accounting_source_entries', [
         'company_id', 'source_type', 'source_id', 'event', 'journal_entry_id',
+    ]))->toBeTrue();
+    expect(Schema::hasColumns('bank_accounts', [
+        'public_id', 'company_id', 'ledger_account_id', 'bank_name', 'account_name',
+        'account_type', 'last_four', 'currency', 'bank_balance_cents', 'last_reconciled_on', 'status',
+    ]))->toBeTrue();
+    expect(Schema::hasColumns('bank_transactions', [
+        'public_id', 'bank_account_id', 'matched_journal_entry_id', 'transaction_date',
+        'reference', 'description', 'flow', 'amount_cents', 'running_balance_cents', 'reconciliation_status',
     ]))->toBeTrue();
 });
 
@@ -101,7 +110,7 @@ test('every project table has one dedicated create migration', function () {
     $expectedTables = projectDatabaseTables();
     sort($expectedTables);
 
-    expect($files)->toHaveCount(46)
+    expect($files)->toHaveCount(48)
         ->and($migrationTables)->toBe($expectedTables);
 });
 
@@ -176,4 +185,82 @@ test('purchase approval payment and cancellation remain balanced and traceable',
         ->where('source_id', $payment->id)
         ->value('journal_entry_id');
     $this->assertDatabaseHas('journal_entries', ['id' => $paymentEntry, 'status' => 'void']);
+});
+
+test('supplier workspace shows only real portfolio balances and supports safe editing', function () {
+    $fixture = purchaseFixture();
+    $this->actingAs($fixture['owner']);
+    $supplierId = DB::table('purchase_suppliers')->insertGetId([
+        'company_id' => $fixture['companyId'],
+        'name' => 'Distribuidora Central',
+        'tax_id' => '8456123-7',
+        'email' => 'ventas@discentral.com',
+        'phone' => '2323-4545',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $documentId = DB::table('purchase_documents')->insertGetId([
+        'public_id' => (string) Str::uuid(),
+        'company_id' => $fixture['companyId'],
+        'purchase_supplier_id' => $supplierId,
+        'number' => 1,
+        'document_type' => 'purchase',
+        'external_reference' => 'FC-4587',
+        'status' => 'approved',
+        'document_date' => '2026-08-01',
+        'due_on' => '2026-08-20',
+        'total_cents' => 10000,
+        'supplier_name' => 'Distribuidora Central',
+        'supplier_tax_id' => '8456123-7',
+        'created_by' => $fixture['owner']->id,
+        'approved_by' => $fixture['owner']->id,
+        'approved_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('purchase_payments')->insert([
+        'public_id' => (string) Str::uuid(),
+        'purchase_document_id' => $documentId,
+        'amount_cents' => 4000,
+        'paid_on' => '2026-08-10',
+        'reference' => 'TR-001',
+        'created_by' => $fixture['owner']->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->get(route('accounting.suppliers', $fixture['uuid']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('accounting/suppliers')
+            ->where('summary.active', 1)
+            ->where('summary.pending', 1)
+            ->where('summary.outstanding', 6000)
+            ->where('summary.overdue', 6000)
+            ->where('suppliers.data.0.name', 'Distribuidora Central')
+            ->where('suppliers.data.0.recent_documents.0.external_reference', 'FC-4587'));
+
+    $this->get(route('accounting.payables', $fixture['uuid']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('accounting/payables')
+            ->where('summary.outstanding', 6000)
+            ->where('summary.overdue', 6000)
+            ->where('summary.partial_count', 1)
+            ->where('payables.data.0.external_reference', 'FC-4587')
+            ->where('payables.data.0.payments.0.amount_cents', 4000));
+
+    $this->patch(route('accounting.purchaseSupplierUpdate', [$fixture['uuid'], $supplierId]), [
+        'name' => 'Distribuidora Central GT',
+        'tax_id' => '8456123-7',
+        'email' => 'cuentas@discentral.com',
+        'phone' => '2323-4545',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('purchase_suppliers', [
+        'id' => $supplierId,
+        'company_id' => $fixture['companyId'],
+        'name' => 'Distribuidora Central GT',
+        'email' => 'cuentas@discentral.com',
+    ]);
 });

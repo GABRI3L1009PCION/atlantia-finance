@@ -3,13 +3,17 @@
 use App\Http\Controllers\AccountingController;
 use App\Http\Controllers\AccountingDocumentController;
 use App\Http\Controllers\AccountingReportController;
+use App\Http\Controllers\BankController;
 use App\Http\Controllers\Billing\CheckoutController;
 use App\Http\Controllers\Billing\CreateCheckoutController;
+use App\Http\Controllers\CompanyDashboardController;
+use App\Http\Controllers\FiscalSettingsController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\Webhooks\RecurrenteWebhookController;
 use App\Http\Controllers\WorkspaceController;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -22,10 +26,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('subscription.active')->prefix('accounting')->name('accounting.')->group(function () {
         Route::get('/', [AccountingController::class, 'index'])->name('index');
         Route::post('companies', [AccountingController::class, 'storeCompany'])->middleware('throttle:20,1')->name('storeCompany');
+        Route::get('companies/{company}/dashboard', CompanyDashboardController::class)->name('companyDashboard');
         Route::get('companies/{company}', [AccountingController::class, 'show'])->name('show');
         Route::get('companies/{company}/reports', [AccountingReportController::class, 'index'])->name('reports');
         Route::get('companies/{company}/export', [AccountingReportController::class, 'export'])->middleware('throttle:10,1')->name('export');
         Route::get('companies/{company}/sales', [SalesController::class, 'index'])->name('sales');
+        Route::get('companies/{company}/customers', [SalesController::class, 'customers'])->name('salesCustomers');
+        Route::get('companies/{company}/receivables', [SalesController::class, 'receivables'])->name('receivables');
         Route::post('companies/{company}/sales/customers', [SalesController::class, 'customer'])->middleware('throttle:30,1')->name('salesCustomer');
         Route::get('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerShow'])->name('salesCustomerShow');
         Route::patch('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerUpdate'])->middleware('throttle:30,1')->name('salesCustomerUpdate');
@@ -37,7 +44,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/sales/invoices/{invoice}/receipts/{receipt}/void', [SalesController::class, 'voidReceipt'])->middleware('throttle:30,1')->name('voidReceipt');
         Route::get('companies/{company}/purchases', [PurchaseController::class, 'index'])->name('purchases');
         Route::get('companies/{company}/purchases/export', [PurchaseController::class, 'export'])->middleware('throttle:10,1')->name('purchasesExport');
+        Route::get('companies/{company}/suppliers', [PurchaseController::class, 'suppliers'])->name('suppliers');
+        Route::get('companies/{company}/suppliers/export', [PurchaseController::class, 'suppliersExport'])->middleware('throttle:10,1')->name('suppliersExport');
+        Route::get('companies/{company}/payables', [PurchaseController::class, 'payables'])->name('payables');
+        Route::get('companies/{company}/banks', [BankController::class, 'index'])->name('banks');
+        Route::get('companies/{company}/banks/export', [BankController::class, 'export'])->middleware('throttle:10,1')->name('banksExport');
+        Route::get('companies/{company}/fiscal-settings', [FiscalSettingsController::class, 'index'])->name('fiscalSettings');
+        Route::patch('companies/{company}/fiscal-settings', [FiscalSettingsController::class, 'update'])->middleware('throttle:20,1')->name('fiscalSettingsUpdate');
+        Route::post('companies/{company}/fiscal-settings/tax-rules', [FiscalSettingsController::class, 'storeRule'])->middleware('throttle:20,1')->name('fiscalTaxRuleStore');
+        Route::post('companies/{company}/fiscal-settings/exchange-rates', [FiscalSettingsController::class, 'storeExchangeRate'])->middleware('throttle:20,1')->name('fiscalExchangeRateStore');
+        Route::post('companies/{company}/banks/accounts', [BankController::class, 'storeAccount'])->middleware('throttle:20,1')->name('bankAccountStore');
+        Route::post('companies/{company}/banks/transactions', [BankController::class, 'storeTransaction'])->middleware('throttle:30,1')->name('bankTransactionStore');
         Route::post('companies/{company}/purchases/suppliers', [PurchaseController::class, 'supplier'])->middleware('throttle:30,1')->name('purchaseSupplier');
+        Route::patch('companies/{company}/purchases/suppliers/{supplier}', [PurchaseController::class, 'supplierUpdate'])->middleware('throttle:30,1')->name('purchaseSupplierUpdate');
         Route::patch('companies/{company}/accounting-mapping', [PurchaseController::class, 'mapping'])->middleware('throttle:20,1')->name('accountingMapping');
         Route::post('companies/{company}/purchases/documents', [PurchaseController::class, 'store'])->middleware('throttle:30,1')->name('purchaseStore');
         Route::get('companies/{company}/purchases/documents/{document}', [PurchaseController::class, 'show'])->name('purchaseShow');
@@ -79,6 +98,34 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('workspace/setup', [WorkspaceController::class, 'update'])->middleware(['subscription.active', 'throttle:10,1'])->name('workspace.setup');
     Route::post('workspace/invitations', [InvitationController::class, 'store'])->middleware(['subscription.active', 'throttle:5,1'])->name('workspace.invite');
     Route::delete('workspace/invitations/{invitation}', [InvitationController::class, 'destroy'])->middleware('subscription.active')->name('workspace.revoke');
+});
+
+Route::get('/test-atlantia-ai', function () {
+    try {
+        $response = Http::timeout(5)
+            ->get(config('services.atlantia_ai.url').'/health');
+
+        if ($response->successful()) {
+            return response()->json([
+                'status' => 'ok',
+                'message' => 'Laravel está conectado correctamente con Atlantia AI',
+                'atlantia_ai' => $response->json(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Atlantia AI respondió con un error',
+            'http_status' => $response->status(),
+        ], 500);
+
+    } catch (Throwable $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'No se pudo conectar con Atlantia AI',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
 });
 
 require __DIR__.'/settings.php';

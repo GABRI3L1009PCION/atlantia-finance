@@ -232,10 +232,25 @@ test('drafts do not affect books posting is exact numbered audited and cannot re
     $data = accountingDraft($f);
     $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), $data)->assertRedirect();
     $this->post(route('accounting.entry', $f['uuid']), $data)->assertSessionHasErrors('accounting');
-    $this->get(route('accounting.show', $f['uuid']))->assertInertia(fn (Assert $p) => $p->has('balances', 0)->has('journal.data', 1));
+    $this->get(route('accounting.show', $f['uuid']))->assertInertia(fn (Assert $p) => $p
+        ->has('balances', 0)
+        ->has('journal.data', 1)
+        ->where('periods.0.entries_count', 1)
+        ->where('periods.0.draft_count', 1)
+        ->where('periods.0.posted_count', 0)
+        ->where('periods.0.debit_cents', 0)
+        ->where('periods.0.credit_cents', 0));
     $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'post'])->assertRedirect();
     $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'post'])->assertSessionHasErrors('accounting');
-    $this->get(route('accounting.show', ['company' => $f['uuid'], 'account' => $f['account1']]))->assertInertia(fn (Assert $p) => $p->has('balances', 2)->where('balances.0.debit_cents', fn ($v) => (int) $v === 100010)->has('ledger.data', 1));
+    $this->get(route('accounting.show', ['company' => $f['uuid'], 'account' => $f['account1']]))->assertInertia(fn (Assert $p) => $p
+        ->has('balances', 2)
+        ->where('balances.0.debit_cents', fn ($v) => (int) $v === 100010)
+        ->has('ledger.data', 1)
+        ->where('periods.0.entries_count', 1)
+        ->where('periods.0.draft_count', 0)
+        ->where('periods.0.posted_count', 1)
+        ->where('periods.0.debit_cents', 100010)
+        ->where('periods.0.credit_cents', 100010));
     $this->assertDatabaseHas('journal_entries', ['public_id' => $data['request_id'], 'status' => 'posted', 'number' => 1, 'posted_by' => $f['owner']->id]);
     $this->assertDatabaseHas('audit_logs', ['action' => 'entry.post', 'user_id' => $f['owner']->id]);
     $this->assertDatabaseCount('journal_entries', 1);

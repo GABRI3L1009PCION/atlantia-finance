@@ -28,12 +28,12 @@ class AccountingReportController extends Controller
     {
         $record = $this->authorizedCompany($request, $company);
         [$from, $to] = $this->dates($request);
-        $data = $request->validate(['kind' => 'required|in:journal,ledger,trial,income,balance', 'format' => 'required|in:pdf,xlsx']);
+        $data = $request->validate(['kind' => 'required|in:accounts,journal,ledger,trial,income,balance', 'format' => 'required|in:pdf,xlsx']);
         $book = $this->reports->book($record->id, $data['kind'], $from, $to, $data['format'] === 'pdf' ? 1000 : 10000);
 
         return $exporter->download([...$book, 'company' => $record->name.' · NIT '.$record->tax_id,
-            'scope' => $data['kind'] === 'balance' ? 'Acumulado desde el inicio de registros hasta '.$to : 'Desde '.$from.' hasta '.$to,
-            'note' => 'GTQ · Solo asientos contabilizados. Reporte interno no certificado. El balance general incluye resultados acumulados no transferidos; los libros por rango no incluyen saldos anteriores.'], $data['format']);
+            'scope' => $data['kind'] === 'accounts' ? 'Catálogo vigente' : ($data['kind'] === 'balance' ? 'Acumulado desde el inicio de registros hasta '.$to : 'Desde '.$from.' hasta '.$to),
+            'note' => $data['kind'] === 'accounts' ? 'Catálogo interno vigente de cuentas contables.' : 'GTQ · Solo asientos contabilizados. Reporte interno no certificado. El balance general incluye resultados acumulados no transferidos; los libros por rango no incluyen saldos anteriores.'], $data['format']);
     }
 
     private function authorizedCompany(Request $request, string $company): \stdClass

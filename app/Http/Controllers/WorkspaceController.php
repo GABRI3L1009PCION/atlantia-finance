@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Services\AccountingService;
+use App\Services\ExecutiveDashboardService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,15 +15,25 @@ use Inertia\Response;
 
 class WorkspaceController extends Controller
 {
-    public function show(Request $request, WorkspaceContext $context, AccountingService $accounting): Response
+    public function show(Request $request, WorkspaceContext $context, AccountingService $accounting, ExecutiveDashboardService $dashboard): Response|RedirectResponse
     {
         $organization = $context->organization($request->user());
         $owner = $organization->pivot->role === 'owner';
         $office = $organization->offices()->where('is_primary', true)->first();
         $price = $context->price($organization);
-        $companies = $accounting->companies($organization, $request->user())
+        $companyRows = $accounting->companies($organization, $request->user())
             ->orderBy('companies.name')
-            ->get(['companies.public_id', 'companies.name', 'companies.tax_id', 'offices.name as office_name']);
+            ->get(['companies.id', 'companies.public_id', 'companies.name', 'companies.tax_id', 'offices.name as office_name']);
+        $companies = $companyRows->map(fn (object $company): array => [
+            'public_id' => $company->public_id,
+            'name' => $company->name,
+            'tax_id' => $company->tax_id,
+            'office_name' => $company->office_name,
+        ]);
+
+        if (! $request->boolean('organization') && $companies->isNotEmpty()) {
+            return to_route('accounting.companyDashboard', $companies->first()['public_id']);
+        }
 
         return Inertia::render('dashboard', [
             'workspace' => [
@@ -37,12 +48,15 @@ class WorkspaceController extends Controller
                 'companies' => $companies,
             ],
             'catalog' => $owner && $price ? [
+                'code' => $price->plan->code,
                 'name' => $price->plan->name,
                 'amount' => $price->amount,
                 'currency' => $price->currency_code,
                 'period' => $price->billing_period,
                 'limits' => $price->plan->limits->pluck('limit_value', 'metric'),
+                'features' => $price->plan->features()->orderBy('name')->get(['code', 'name']),
             ] : null,
+            'metrics' => $dashboard->organization($companyRows->pluck('id')),
             'notice' => $request->session()->get('workspace_notice'),
         ]);
     }

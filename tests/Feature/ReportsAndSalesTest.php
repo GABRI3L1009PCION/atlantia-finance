@@ -53,6 +53,8 @@ test('statements separate range results from accumulated position and ignore dra
         ->assertOk()->assertInertia(fn (Assert $p) => $p->component('accounting/reports')->where('statements.income', 50000)->where('statements.expenses', 20000)->where('statements.profit', 30000)->where('statements.assets', 130000)->where('statements.equity', 100000)->where('statements.accumulated', 30000)->where('statements.difference', 0));
     $book = app(FinancialReportService::class)->book($f['company'], 'journal', '2026-08-01', '2026-08-31', 1000);
     expect($book['rows'])->toHaveCount(5);
+    $accountsBook = app(FinancialReportService::class)->book($f['company'], 'accounts', '2026-08-01', '2026-08-31', 1000);
+    expect($accountsBook['title'])->toBe('Plan de cuentas')->and($accountsBook['rows'])->toHaveCount(4);
     $url = route('accounting.export', [$f['uuid'], 'from' => '2026-08-01', 'to' => '2026-08-31', 'kind' => 'journal', 'format' => 'xlsx']);
     $response = $this->get($url)->assertOk()->assertDownload('atlantia-reporte.xlsx');
     $file = tempnam(sys_get_temp_dir(), 'atlantia-xlsx-');
@@ -77,7 +79,7 @@ test('statements separate range results from accumulated position and ignore dra
 test('empty statements exports and invalid filters are handled', function () {
     $f = reportFixture();
     $this->actingAs($f['owner'])->get(route('accounting.reports', $f['uuid']))->assertOk()->assertInertia(fn (Assert $p) => $p->where('statements.difference', 0));
-    foreach (['journal', 'ledger', 'trial', 'income', 'balance'] as $kind) {
+    foreach (['accounts', 'journal', 'ledger', 'trial', 'income', 'balance'] as $kind) {
         $this->get(route('accounting.export', [$f['uuid'], 'kind' => $kind, 'format' => 'pdf']))->assertOk();
     }
     $this->get(route('accounting.reports', [$f['uuid'], 'from' => '2026-08-31', 'to' => '2026-08-01']))->assertSessionHasErrors('to');
@@ -159,9 +161,14 @@ test('customer portfolio filters overdue invoices and preserves complete receipt
 
     $this->get(route('accounting.sales', [$f['uuid'], 'status' => 'overdue']))
         ->assertOk()->assertInertia(fn (Assert $page) => $page
-        ->component('accounting/sales')->has('invoices.data', 1)
+        ->component('accounting/sales')->has('invoices.data', 1)->has('invoices.data.0.lines', 1)
+        ->where('invoices.data.0.receipt_count', 1)
         ->where('portfolio.invoiced', 30030)->where('portfolio.collected', 10010)
-        ->where('portfolio.outstanding', 20020)->where('portfolio.overdue', 20020));
+        ->where('portfolio.outstanding', 20020)->where('portfolio.overdue', 20020)
+        ->where('portfolio.documents', 1)->where('portfolio.collected_documents', 0)
+        ->where('portfolio.pending_documents', 1));
+    $this->get(route('accounting.sales', [$f['uuid'], 'from' => '2026-09-01', 'to' => '2026-09-30']))
+        ->assertOk()->assertInertia(fn (Assert $page) => $page->has('invoices.data', 0));
     $this->get(route('accounting.sales', [$f['uuid'], 'status' => 'paid']))
         ->assertOk()->assertInertia(fn (Assert $page) => $page->has('invoices.data', 0));
     $this->get(route('accounting.salesCustomerShow', [$f['uuid'], $f['customer']]))
@@ -178,4 +185,68 @@ test('customer portfolio filters overdue invoices and preserves complete receipt
     $other = reportFixture();
     $this->actingAs($other['owner'])->get(route('accounting.salesCustomerShow', [$f['uuid'], $f['customer']]))->assertNotFound();
     $this->patch(route('accounting.salesCustomerUpdate', [$f['uuid'], $f['customer']]), ['name' => 'Ataque'])->assertNotFound();
+});
+
+test('dedicated customers portfolio exposes only the authorized company financial data', function () {
+    $f = reportFixture();
+    $data = invoicePayload($f);
+    $this->actingAs($f['owner'])->post(route('accounting.salesStore', $f['uuid']), $data)->assertSessionHasNoErrors();
+    $args = [$f['uuid'], $data['request_id']];
+    $this->post(route('accounting.invoiceProcess', $args), ['action' => 'issue'])->assertSessionHasNoErrors();
+    $this->post(route('accounting.receipt', $args), [
+        'request_id' => (string) Str::uuid(),
+        'amount' => '100.10',
+        'received_on' => '2026-08-26',
+        'reference' => 'Cobro para portafolio',
+    ])->assertSessionHasNoErrors();
+
+    $this->get(route('accounting.salesCustomers', [$f['uuid'], 'situation' => 'overdue']))
+        ->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->component('accounting/customers')
+        ->has('customers.data', 1)
+        ->where('customers.data.0.id', $f['customer'])
+        ->where('customers.data.0.invoiced_cents', 30030)
+        ->where('customers.data.0.collected_cents', 10010)
+        ->where('customers.data.0.outstanding_cents', 20020)
+        ->where('customers.data.0.overdue_cents', 20020)
+        ->has('customers.data.0.recent_documents', 1)
+        ->where('summary.active', 1)
+        ->where('summary.pending', 1)
+        ->where('summary.outstanding', 20020)
+        ->where('summary.overdue', 20020));
+
+    $other = reportFixture();
+    $this->actingAs($other['owner'])->get(route('accounting.salesCustomers', $f['uuid']))->assertNotFound();
+});
+
+test('receivables workspace calculates aging and rejects cross company access', function () {
+    $f = reportFixture();
+    $data = invoicePayload($f);
+    $this->actingAs($f['owner'])->post(route('accounting.salesStore', $f['uuid']), $data)->assertSessionHasNoErrors();
+    $args = [$f['uuid'], $data['request_id']];
+    $this->post(route('accounting.invoiceProcess', $args), ['action' => 'issue'])->assertSessionHasNoErrors();
+    $this->post(route('accounting.receipt', $args), [
+        'request_id' => (string) Str::uuid(),
+        'amount' => '100.10',
+        'received_on' => '2026-08-26',
+        'reference' => 'Transferencia de cliente',
+    ])->assertSessionHasNoErrors();
+
+    $this->get(route('accounting.receivables', [$f['uuid'], 'status' => 'overdue', 'age' => '1_30']))
+        ->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->component('accounting/receivables')
+        ->has('receivables.data', 1)
+        ->where('receivables.data.0.outstanding_cents', 20020)
+        ->has('receivables.data.0.payments', 1)
+        ->where('summary.outstanding', 20020)
+        ->where('summary.current', 0)
+        ->where('summary.overdue', 20020)
+        ->where('summary.days_1_30', 20020)
+        ->where('summary.overdue_documents', 1)
+        ->where('summary.delinquent_customers', 1)
+        ->where('summary.collected_this_month', 10010)
+        ->has('topCustomers', 1));
+
+    $other = reportFixture();
+    $this->actingAs($other['owner'])->get(route('accounting.receivables', $f['uuid']))->assertNotFound();
 });

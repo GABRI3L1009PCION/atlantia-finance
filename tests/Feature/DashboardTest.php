@@ -75,9 +75,14 @@ test('dashboard exposes authorized companies for direct customer and billing acc
     $office = $organization->offices()->create(['name' => 'Oficina principal', 'code' => 'MAIN', 'status' => 'active', 'is_primary' => true]);
     DB::table('companies')->insert(['public_id' => '5a861ed2-88b1-4af1-9eab-13b358d96f93', 'office_id' => $office->id, 'name' => 'Empresa Demo, S.A.', 'tax_id' => '1234567-8', 'currency' => 'GTQ', 'created_at' => now(), 'updated_at' => now()]);
 
-    $this->actingAs($user)->get(route('dashboard'))->assertOk()->assertInertia(fn (Assert $page) => $page
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertRedirect(route('accounting.companyDashboard', '5a861ed2-88b1-4af1-9eab-13b358d96f93'));
+
+    $this->get(route('dashboard', ['organization' => 1]))->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('dashboard')
         ->has('workspace.companies', 1)
         ->where('workspace.companies.0.name', 'Empresa Demo, S.A.')
-        ->where('workspace.companies.0.office_name', 'Oficina principal'));
+        ->where('workspace.companies.0.office_name', 'Oficina principal')
+        ->where('workspaceNavigation.currentCompany.public_id', '5a861ed2-88b1-4af1-9eab-13b358d96f93')
+        ->where('workspaceNavigation.currentCompany.name', 'Empresa Demo, S.A.'));
 });

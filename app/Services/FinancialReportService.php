@@ -58,6 +58,16 @@ class FinancialReportService
     /** @return Book */
     public function book(int $companyId, string $kind, string $from, string $to, int $limit): array
     {
+        if ($kind === 'accounts') {
+            $types = ['asset' => 'Activo', 'liability' => 'Pasivo', 'equity' => 'Patrimonio', 'income' => 'Ingreso', 'expense' => 'Gasto'];
+            $accounts = DB::table('ledger_accounts')->where('company_id', $companyId)
+                ->orderBy('code')->limit($limit + 1)->get(['code', 'name', 'type']);
+            abort_if($accounts->count() > $limit, 422, 'Demasiadas cuentas para esta descarga.');
+
+            return ['title' => 'Plan de cuentas', 'headers' => ['Código', 'Cuenta contable', 'Clasificación'], 'money' => [],
+                'rows' => $accounts->map(fn ($account) => [$account->code, $account->name, $types[$account->type] ?? $account->type])->all()];
+        }
+
         if (in_array($kind, ['journal', 'ledger'])) {
             $query = $this->lines($companyId, $to, $from);
             if ($kind === 'ledger') {

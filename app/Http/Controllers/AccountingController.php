@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\AccountingService;
+use App\Services\FiscalConfigurationService;
 use App\Services\WorkspaceContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -17,7 +18,11 @@ use stdClass;
 
 class AccountingController extends Controller
 {
-    public function __construct(private WorkspaceContext $context, private AccountingService $accounting) {}
+    public function __construct(
+        private WorkspaceContext $context,
+        private AccountingService $accounting,
+        private FiscalConfigurationService $fiscal,
+    ) {}
 
     /** GET accounting: company directory, scoped by office and assignment. No writes. */
     public function index(Request $request): Response
@@ -58,6 +63,7 @@ class AccountingController extends Controller
             }
             $id = DB::table('companies')->insertGetId(['public_id' => $uuid, 'office_id' => $office->id, 'name' => $data['name'], 'tax_id' => $taxId, 'email' => $data['email'] ?? null, 'currency' => 'GTQ', 'created_at' => now(), 'updated_at' => now()]);
             $this->accounting->installDefaultChart($id);
+            $this->fiscal->ensureDefaults($id, $request->user()->id);
             $this->accounting->audit($org, $request->user(), 'company.created', 'companies', $id);
         });
 
@@ -71,6 +77,30 @@ class AccountingController extends Controller
         $record = $this->accounting->company($org, $request->user(), $company);
         $owner = $org->pivot->role === 'owner';
         $periods = DB::table('accounting_periods')->where('company_id', $record->id)->orderByDesc('starts_on')->get();
+        $periodStats = DB::table('journal_entries as e')
+            ->leftJoin('journal_lines as l', 'l.journal_entry_id', '=', 'e.id')
+            ->whereIn('e.accounting_period_id', $periods->pluck('id'))
+            ->select('e.accounting_period_id')
+            ->selectRaw('COUNT(DISTINCT e.id) as entries_count')
+            ->selectRaw("COUNT(DISTINCT CASE WHEN e.status = 'posted' THEN e.id END) as posted_count")
+            ->selectRaw("COUNT(DISTINCT CASE WHEN e.status = 'draft' THEN e.id END) as draft_count")
+            ->selectRaw("COUNT(DISTINCT CASE WHEN e.status = 'void' THEN e.id END) as void_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN e.status = 'posted' THEN l.debit_cents ELSE 0 END), 0) as debit_cents")
+            ->selectRaw("COALESCE(SUM(CASE WHEN e.status = 'posted' THEN l.credit_cents ELSE 0 END), 0) as credit_cents")
+            ->groupBy('e.accounting_period_id')
+            ->get()
+            ->keyBy('accounting_period_id');
+        $periods->transform(function ($period) use ($periodStats) {
+            $stats = $periodStats->get($period->id);
+            $period->entries_count = (int) ($stats->entries_count ?? 0);
+            $period->posted_count = (int) ($stats->posted_count ?? 0);
+            $period->draft_count = (int) ($stats->draft_count ?? 0);
+            $period->void_count = (int) ($stats->void_count ?? 0);
+            $period->debit_cents = (int) ($stats->debit_cents ?? 0);
+            $period->credit_cents = (int) ($stats->credit_cents ?? 0);
+
+            return $period;
+        });
         $periodId = $request->integer('period');
         $accountId = $request->integer('account');
         $accounts = DB::table('ledger_accounts')->where('company_id', $record->id)->orderBy('code')->get();

@@ -42,4 +42,8 @@ return [
         ],
     ],
 
+    'atlantia_ai' => [
+        'url' => env('ATLANTIA_AI_URL', 'http://127.0.0.1:8100'),
+    ],
+
 ];

@@ -5,6 +5,8 @@ import {
     Building2,
     Check,
     CheckCircle2,
+    CircleDollarSign,
+    Clock3,
     CreditCard,
     FileText,
     Mail,
@@ -12,15 +14,18 @@ import {
     Settings2,
     ShieldCheck,
     Sparkles,
+    TrendingDown,
+    TrendingUp,
     Users,
+    WalletCards,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { dashboard } from '@/routes';
 import {
     index as accounting,
+    companyDashboard as accountingDashboard,
     sales as accountingSales,
-    show as accountingCompany,
 } from '@/routes/accounting';
 import { setup, invite, revoke } from '@/routes/workspace';
 
@@ -50,12 +55,40 @@ type Props = {
         }[];
     };
     catalog: {
+        code: string;
         name: string;
         amount: string;
         currency: string;
         period: string;
         limits: Record<string, number | null>;
+        features: { code: string; name: string }[];
     } | null;
+    metrics: {
+        sales_cents: number;
+        collections_cents: number;
+        purchases_cents: number;
+        payments_cents: number;
+        receivable_cents: number;
+        payable_cents: number;
+        overdue_receivable_cents: number;
+        overdue_payable_cents: number;
+        income_cents: number;
+        expense_cents: number;
+        profit_cents: number;
+        drafts: number;
+        trend: {
+            label: string;
+            sales_cents: number;
+            purchases_cents: number;
+        }[];
+        recent: {
+            kind: string;
+            title: string;
+            detail: string;
+            date: string;
+            company_id: string;
+        }[];
+    };
     notice: string | null;
 };
 const primary =
@@ -70,8 +103,19 @@ const number = (value: number | null | undefined) =>
         : value === undefined
           ? 'No definido'
           : new Intl.NumberFormat('es-GT').format(value);
+const money = (value: number) =>
+    new Intl.NumberFormat('es-GT', {
+        style: 'currency',
+        currency: 'GTQ',
+        maximumFractionDigits: 0,
+    }).format(value / 100);
 
-export default function Dashboard({ workspace, catalog, notice }: Props) {
+export default function Dashboard({
+    workspace,
+    catalog,
+    metrics,
+    notice,
+}: Props) {
     const [editing, setEditing] = useState(false);
     const [step, setStep] = useState(0);
     const form = useForm({
@@ -189,17 +233,17 @@ export default function Dashboard({ workspace, catalog, notice }: Props) {
                         <div className="relative flex flex-wrap items-center justify-between gap-6">
                             <div className="max-w-2xl">
                                 <p className="mb-3 text-xs font-semibold tracking-[0.25em] text-[#e7bbbb]">
-                                    ATLANTIA SYSTEMS / TU ESPACIO DE TRABAJO
+                                    ATLANTIA FINANCE / PANEL EJECUTIVO
                                 </p>
                                 <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
                                     {showSetup
                                         ? 'El siguiente capítulo empieza aquí.'
-                                        : workspace.name}
+                                        : `Control total de ${workspace.name}`}
                                 </h1>
                                 <p className="mt-3 max-w-xl text-sm leading-6 text-[#edcece]">
                                     {showSetup
                                         ? 'Tu suscripción está activa. Personaliza tu organización y prepara tu primera oficina en unos pasos.'
-                                        : 'Tu organización, tu equipo y tu suscripción. Todo bajo una misma visión.'}
+                                        : 'Una sola vista para supervisar empresas, ventas, compras, cartera, resultados y operación contable.'}
                                 </p>
                             </div>
                             <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm">
@@ -427,6 +471,108 @@ export default function Dashboard({ workspace, catalog, notice }: Props) {
                         </div>
                     ) : (
                         <>
+                            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                                {[
+                                    {
+                                        label: 'Ventas del mes',
+                                        value: money(metrics.sales_cents),
+                                        detail: `${money(metrics.collections_cents)} cobrados`,
+                                        icon: TrendingUp,
+                                        tone: 'bg-emerald-50 text-emerald-700',
+                                    },
+                                    {
+                                        label: 'Resultado contable',
+                                        value: money(metrics.profit_cents),
+                                        detail: `${money(metrics.income_cents)} ingresos · ${money(metrics.expense_cents)} gastos`,
+                                        icon:
+                                            metrics.profit_cents >= 0
+                                                ? TrendingUp
+                                                : TrendingDown,
+                                        tone:
+                                            metrics.profit_cents >= 0
+                                                ? 'bg-sky-50 text-sky-700'
+                                                : 'bg-amber-50 text-amber-700',
+                                    },
+                                    {
+                                        label: 'Cuentas por cobrar',
+                                        value: money(metrics.receivable_cents),
+                                        detail: `${money(metrics.overdue_receivable_cents)} vencidos`,
+                                        icon: CircleDollarSign,
+                                        tone: 'bg-[#f4e5e5] text-[#640000]',
+                                    },
+                                    {
+                                        label: 'Cuentas por pagar',
+                                        value: money(metrics.payable_cents),
+                                        detail: `${money(metrics.overdue_payable_cents)} vencidos`,
+                                        icon: WalletCards,
+                                        tone: 'bg-amber-50 text-amber-700',
+                                    },
+                                ].map((card) => (
+                                    <section
+                                        key={card.label}
+                                        className={`${panel} p-5`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-medium text-slate-500">
+                                                    {card.label}
+                                                </p>
+                                                <p className="mt-3 text-2xl font-semibold tracking-tight">
+                                                    {card.value}
+                                                </p>
+                                            </div>
+                                            <span
+                                                className={`grid size-10 shrink-0 place-items-center rounded-xl ${card.tone}`}
+                                            >
+                                                <card.icon className="size-5" />
+                                            </span>
+                                        </div>
+                                        <p className="mt-3 text-xs leading-5 text-slate-500">
+                                            {card.detail}
+                                        </p>
+                                    </section>
+                                ))}
+                            </section>
+
+                            <section className={`${panel} p-5 sm:p-6`}>
+                                <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
+                                    <div>
+                                        <p className="text-xs font-semibold tracking-widest text-[#965f5f]">
+                                            SITUACIÓN OPERATIVA
+                                        </p>
+                                        <h2 className="mt-2 text-xl font-semibold">
+                                            La oficina en una sola lectura
+                                        </h2>
+                                        <p className="mt-2 text-sm leading-6 text-slate-500">
+                                            {workspace.companies.length}{' '}
+                                            empresas autorizadas ·{' '}
+                                            {money(metrics.purchases_cents)} en
+                                            compras del mes ·{' '}
+                                            {money(metrics.payments_cents)} en
+                                            pagos realizados.
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-3">
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                                            <p className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                                                <Clock3 className="size-4" />
+                                                {metrics.drafts} pendientes
+                                            </p>
+                                            <p className="mt-1 text-xs text-amber-800/75">
+                                                Documentos sin contabilizar
+                                            </p>
+                                        </div>
+                                        <Link
+                                            href={accounting()}
+                                            className={primary}
+                                        >
+                                            Abrir centro de empresas
+                                            <ArrowRight size={16} />
+                                        </Link>
+                                    </div>
+                                </div>
+                            </section>
+
                             <section className={`${panel} p-5 sm:p-6`}>
                                 <div className="flex flex-wrap items-start justify-between gap-4">
                                     <div>
@@ -478,21 +624,21 @@ export default function Dashboard({ workspace, catalog, notice }: Props) {
                                                 </div>
                                                 <div className="mt-4 flex flex-wrap gap-2">
                                                     <Link
-                                                        href={accountingSales(
+                                                        href={accountingDashboard(
                                                             company.public_id,
                                                         )}
                                                         className={primary}
                                                     >
-                                                        Clientes y facturación
+                                                        Abrir panel financiero
                                                         <ArrowRight size={16} />
                                                     </Link>
                                                     <Link
-                                                        href={accountingCompany(
+                                                        href={accountingSales(
                                                             company.public_id,
                                                         )}
                                                         className={secondary}
                                                     >
-                                                        Libros contables
+                                                        Ventas y cobros
                                                     </Link>
                                                 </div>
                                             </article>
@@ -834,21 +980,19 @@ export default function Dashboard({ workspace, catalog, notice }: Props) {
                                     <section className="rounded-2xl bg-[#f1e4e4] p-6">
                                         <Sparkles className="size-6 text-[#640000]" />
                                         <h2 className="mt-4 font-semibold text-[#640000]">
-                                            Tu espacio contable, listo.
+                                            Suite contable habilitada
                                         </h2>
                                         <p className="mt-3 text-sm leading-6 text-[#755050]">
-                                            Gestiona empresas, cuentas, períodos
-                                            y asientos. Consulta el diario y el
-                                            mayor según tus permisos.
-                                            Documentos, automatizaciones e IA se
-                                            incorporarán en las siguientes
-                                            etapas.
+                                            Gestiona ventas, compras, cobros,
+                                            pagos, catálogo, períodos, asientos,
+                                            documentos y estados financieros con
+                                            el aislamiento definido por tu plan.
                                         </p>
                                         <Link
                                             href={accounting()}
                                             className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#640000] underline"
                                         >
-                                            Ir a empresas y contabilidad{' '}
+                                            Abrir centro contable{' '}
                                             <ArrowRight size={16} />
                                         </Link>
                                     </section>

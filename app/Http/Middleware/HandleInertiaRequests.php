@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\AccountingService;
+use App\Services\WorkspaceContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -41,7 +43,45 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'workspaceNavigation' => fn (): ?array => $this->workspaceNavigation($request),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function workspaceNavigation(Request $request): ?array
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return null;
+        }
+
+        $organization = $user->organizations()->wherePivot('status', 'active')
+            ->where('organizations.status', 'active')
+            ->whereHas('subscriptions', fn ($query) => $query->where('status', 'active'))
+            ->orderByDesc('organizations.id')->first();
+        if ($organization === null) {
+            return null;
+        }
+
+        $price = app(WorkspaceContext::class)->price($organization);
+        $companies = app(AccountingService::class)->companies($organization, $user)
+            ->orderBy('companies.name')->get(['companies.public_id', 'companies.name', 'companies.tax_id']);
+        $currentCompany = $companies->first();
+
+        return [
+            'organization' => ['name' => $organization->name, 'role' => $organization->pivot->role],
+            'plan' => $price ? [
+                'code' => $price->plan->code,
+                'name' => $price->plan->name,
+                'features' => $price->plan->features()->pluck('code')->values(),
+            ] : null,
+            'companies' => $companies,
+            'currentCompany' => $currentCompany ? [
+                'public_id' => $currentCompany->public_id,
+                'name' => $currentCompany->name,
+                'tax_id' => $currentCompany->tax_id,
+            ] : null,
         ];
     }
 }

@@ -193,3 +193,30 @@
         opacity: 0.28;
     }
 }
+
+.atlantia-plan-sidebar {
+    --sidebar: #460004;
+    --sidebar-foreground: #fff7f1;
+    --sidebar-primary: #c99b43;
+    --sidebar-primary-foreground: #2f0001;
+    --sidebar-accent: #640000;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: rgb(255 255 255 / 0.1);
+    --sidebar-ring: #c99b43;
+}
+
+.atlantia-plan-sidebar [data-sidebar='sidebar'] {
+    background: linear-gradient(180deg, #520006 0%, #3b0003 52%, #270002 100%);
+}
+
+.atlantia-plan-sidebar [data-slot='sidebar-menu-button'] {
+    min-height: 2rem;
+    font-size: 0.78rem;
+}
+
+.atlantia-plan-sidebar [data-slot='sidebar-group-label'] {
+    color: rgb(255 255 255 / 0.48);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}

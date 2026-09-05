@@ -26,11 +26,15 @@ class SalesController extends Controller
             'search' => 'nullable|string|max:100',
             'status' => 'nullable|in:all,draft,pending,partial,paid,overdue,void',
             'customer' => 'nullable|integer',
+            'from' => 'nullable|date_format:Y-m-d',
+            'to' => 'nullable|date_format:Y-m-d|after_or_equal:from',
         ]);
         $receiptTotals = DB::table('sales_receipts')->select('sales_invoice_id')
-            ->selectRaw('SUM(amount_cents) AS paid_cents')->whereNull('voided_at')->groupBy('sales_invoice_id');
+            ->selectRaw('SUM(amount_cents) AS paid_cents')->selectRaw('COUNT(*) AS receipt_count')->whereNull('voided_at')->groupBy('sales_invoice_id');
         $query = DB::table('sales_invoices')->leftJoinSub($receiptTotals, 'receipt_totals', 'receipt_totals.sales_invoice_id', '=', 'sales_invoices.id')
-            ->where('sales_invoices.company_id', $record->id)->select('sales_invoices.*')->selectRaw('COALESCE(receipt_totals.paid_cents, 0) AS paid_cents');
+            ->leftJoin('sales_customers as customer', 'customer.id', '=', 'sales_invoices.sales_customer_id')
+            ->where('sales_invoices.company_id', $record->id)->select('sales_invoices.*', 'customer.email as customer_email')
+            ->selectRaw('COALESCE(receipt_totals.paid_cents, 0) AS paid_cents')->selectRaw('COALESCE(receipt_totals.receipt_count, 0) AS receipt_count');
         if ($search = trim((string) ($filters['search'] ?? ''))) {
             $query->where(function ($builder) use ($search): void {
                 $pattern = '%'.mb_strtolower($search).'%';
@@ -44,13 +48,25 @@ class SalesController extends Controller
         if (isset($filters['customer'])) {
             $query->where('sales_invoices.sales_customer_id', $filters['customer']);
         }
+        $query->when($filters['from'] ?? null, fn (Builder $builder, string $from) => $builder->whereDate('sales_invoices.issued_on', '>=', $from))
+            ->when($filters['to'] ?? null, fn (Builder $builder, string $to) => $builder->whereDate('sales_invoices.issued_on', '<=', $to));
         $this->applyStatus($query, $filters['status'] ?? 'all');
         $invoices = $query->orderByDesc('id')->paginate(15)->withQueryString();
+        $lines = DB::table('sales_invoice_lines')->whereIn('sales_invoice_id', $invoices->getCollection()->pluck('id'))
+            ->select('sales_invoice_id', 'position', 'description', 'quantity', 'unit_cents')->orderBy('position')->get()->groupBy('sales_invoice_id');
+        $invoices->getCollection()->transform(function ($invoice) use ($lines) {
+            $invoice->lines = $lines->get($invoice->id, collect());
+
+            return $invoice;
+        });
 
         $portfolio = DB::table('sales_invoices')->leftJoinSub($receiptTotals, 'receipt_totals', 'receipt_totals.sales_invoice_id', '=', 'sales_invoices.id')
             ->where('sales_invoices.company_id', $record->id)->where('sales_invoices.status', 'issued')
             ->selectRaw('COALESCE(SUM(sales_invoices.total_cents), 0) AS invoiced_cents')
             ->selectRaw('COALESCE(SUM(COALESCE(receipt_totals.paid_cents, 0)), 0) AS collected_cents')
+            ->selectRaw('COUNT(sales_invoices.id) AS document_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN sales_invoices.total_cents <= COALESCE(receipt_totals.paid_cents, 0) THEN 1 ELSE 0 END), 0) AS collected_documents')
+            ->selectRaw('COALESCE(SUM(CASE WHEN sales_invoices.total_cents > COALESCE(receipt_totals.paid_cents, 0) THEN 1 ELSE 0 END), 0) AS pending_documents')
             ->selectRaw('COALESCE(SUM(CASE WHEN sales_invoices.due_on < ? AND sales_invoices.total_cents > COALESCE(receipt_totals.paid_cents, 0) THEN sales_invoices.total_cents - COALESCE(receipt_totals.paid_cents, 0) ELSE 0 END), 0) AS overdue_cents', [now()->toDateString()])
             ->first();
         $customers = DB::table('sales_customers')->leftJoin('sales_invoices', 'sales_invoices.sales_customer_id', '=', 'sales_customers.id')
@@ -59,10 +75,201 @@ class SalesController extends Controller
             ->orderBy('sales_customers.name')->get();
 
         return Inertia::render('accounting/sales', ['company' => $record, 'invoices' => $invoices,
-            'customers' => $customers, 'filters' => ['search' => $search, 'status' => $filters['status'] ?? 'all', 'customer' => $filters['customer'] ?? null],
+            'customers' => $customers, 'filters' => ['search' => $search, 'status' => $filters['status'] ?? 'all', 'customer' => $filters['customer'] ?? null,
+                'from' => $filters['from'] ?? null, 'to' => $filters['to'] ?? null],
             'portfolio' => ['invoiced' => (int) $portfolio->invoiced_cents, 'collected' => (int) $portfolio->collected_cents,
-                'outstanding' => (int) $portfolio->invoiced_cents - (int) $portfolio->collected_cents, 'overdue' => (int) $portfolio->overdue_cents],
+                'outstanding' => (int) $portfolio->invoiced_cents - (int) $portfolio->collected_cents, 'overdue' => (int) $portfolio->overdue_cents,
+                'documents' => (int) $portfolio->document_count, 'collected_documents' => (int) $portfolio->collected_documents,
+                'pending_documents' => (int) $portfolio->pending_documents],
             'canWrite' => $this->canWrite($org, $record->id, $request->user()->id), 'today' => now()->toDateString()]);
+    }
+
+    /** Dedicated customer portfolio. All aggregates remain scoped to the authorized company. */
+    public function customers(Request $request, string $company): Response
+    {
+        [$org, $record] = $this->scope($request, $company);
+        $filters = $request->validate([
+            'search' => 'nullable|string|max:100',
+            'situation' => 'nullable|in:all,current,pending,overdue',
+        ]);
+        $today = now()->toDateString();
+        $receiptTotals = DB::table('sales_receipts')->select('sales_invoice_id')
+            ->selectRaw('SUM(amount_cents) AS paid_cents')->whereNull('voided_at')->groupBy('sales_invoice_id');
+        $portfolio = DB::table('sales_customers as customer')
+            ->leftJoin('sales_invoices as invoice', function ($join): void {
+                $join->on('invoice.sales_customer_id', '=', 'customer.id')->where('invoice.status', 'issued');
+            })
+            ->leftJoinSub($receiptTotals, 'receipt_totals', 'receipt_totals.sales_invoice_id', '=', 'invoice.id')
+            ->where('customer.company_id', $record->id)
+            ->groupBy('customer.id', 'customer.company_id', 'customer.name', 'customer.tax_id', 'customer.email', 'customer.created_at', 'customer.updated_at')
+            ->select('customer.id', 'customer.name', 'customer.tax_id', 'customer.email', 'customer.created_at', 'customer.updated_at')
+            ->selectRaw('COUNT(invoice.id) AS document_count')
+            ->selectRaw('COALESCE(SUM(invoice.total_cents), 0) AS invoiced_cents')
+            ->selectRaw('COALESCE(SUM(COALESCE(receipt_totals.paid_cents, 0)), 0) AS collected_cents')
+            ->selectRaw('COALESCE(SUM(invoice.total_cents - COALESCE(receipt_totals.paid_cents, 0)), 0) AS outstanding_cents')
+            ->selectRaw('COALESCE(SUM(CASE WHEN invoice.due_on < ? AND invoice.total_cents > COALESCE(receipt_totals.paid_cents, 0) THEN invoice.total_cents - COALESCE(receipt_totals.paid_cents, 0) ELSE 0 END), 0) AS overdue_cents', [$today])
+            ->selectRaw('MAX(invoice.issued_on) AS last_sale_on');
+
+        $summary = DB::query()->fromSub(clone $portfolio, 'customer_portfolio')
+            ->selectRaw('COUNT(*) AS active_count')
+            ->selectRaw('COALESCE(SUM(CASE WHEN outstanding_cents > 0 THEN 1 ELSE 0 END), 0) AS pending_count')
+            ->selectRaw('COALESCE(SUM(outstanding_cents), 0) AS outstanding_cents')
+            ->selectRaw('COALESCE(SUM(overdue_cents), 0) AS overdue_cents')
+            ->first();
+
+        $customers = DB::query()->fromSub($portfolio, 'customer_portfolio');
+        if ($search = trim((string) ($filters['search'] ?? ''))) {
+            $pattern = '%'.mb_strtolower($search).'%';
+            $customers->where(function ($query) use ($pattern): void {
+                $query->whereRaw('LOWER(name) LIKE ?', [$pattern])
+                    ->orWhereRaw("LOWER(COALESCE(tax_id, '')) LIKE ?", [$pattern])
+                    ->orWhereRaw("LOWER(COALESCE(email, '')) LIKE ?", [$pattern]);
+            });
+        }
+        match ($filters['situation'] ?? 'all') {
+            'current' => $customers->where('outstanding_cents', '<=', 0),
+            'pending' => $customers->where('outstanding_cents', '>', 0),
+            'overdue' => $customers->where('overdue_cents', '>', 0),
+            default => null,
+        };
+        $customers = $customers->orderBy('name')->paginate(12)->withQueryString();
+        $customerIds = $customers->getCollection()->pluck('id');
+        $documents = DB::table('sales_invoices as invoice')
+            ->leftJoinSub($receiptTotals, 'receipt_totals', 'receipt_totals.sales_invoice_id', '=', 'invoice.id')
+            ->where('invoice.company_id', $record->id)->whereIn('invoice.sales_customer_id', $customerIds)
+            ->select('invoice.id', 'invoice.public_id', 'invoice.sales_customer_id', 'invoice.number', 'invoice.status', 'invoice.issued_on', 'invoice.due_on', 'invoice.total_cents')
+            ->selectRaw('COALESCE(receipt_totals.paid_cents, 0) AS paid_cents')
+            ->orderByDesc('invoice.issued_on')->orderByDesc('invoice.id')->get()->groupBy('sales_customer_id');
+        $customers->getCollection()->transform(function (object $customer) use ($documents): array {
+            $row = (array) $customer;
+            $row['recent_documents'] = $documents->get((int) $row['id'], collect())->take(4)->values();
+
+            return $row;
+        });
+
+        return Inertia::render('accounting/customers', [
+            'company' => $record,
+            'customers' => $customers,
+            'filters' => ['search' => $search, 'situation' => $filters['situation'] ?? 'all'],
+            'summary' => [
+                'active' => (int) ($summary->active_count ?? 0),
+                'pending' => (int) ($summary->pending_count ?? 0),
+                'outstanding' => (int) ($summary->outstanding_cents ?? 0),
+                'overdue' => (int) ($summary->overdue_cents ?? 0),
+                'over_limit' => 0,
+            ],
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()->id),
+            'today' => $today,
+        ]);
+    }
+
+    /** Accounts receivable aging and collection workspace for one authorized company. */
+    public function receivables(Request $request, string $company): Response
+    {
+        [$org, $record] = $this->scope($request, $company);
+        $filters = $request->validate([
+            'search' => 'nullable|string|max:100',
+            'status' => 'nullable|in:all,pending,partial,overdue',
+            'age' => 'nullable|in:all,current,1_30,31_60,61_90,over_90',
+            'due_to' => 'nullable|date_format:Y-m-d',
+        ]);
+        $today = now()->startOfDay();
+        $dates = [
+            'today' => $today->toDateString(),
+            'd30' => $today->copy()->subDays(30)->toDateString(),
+            'd60' => $today->copy()->subDays(60)->toDateString(),
+            'd90' => $today->copy()->subDays(90)->toDateString(),
+        ];
+        $receiptTotals = DB::table('sales_receipts')->select('sales_invoice_id')
+            ->selectRaw('SUM(amount_cents) AS paid_cents')->whereNull('voided_at')->groupBy('sales_invoice_id');
+        $portfolio = DB::table('sales_invoices as invoice')
+            ->leftJoinSub($receiptTotals, 'receipt_totals', 'receipt_totals.sales_invoice_id', '=', 'invoice.id')
+            ->leftJoin('sales_customers as customer', 'customer.id', '=', 'invoice.sales_customer_id')
+            ->where('invoice.company_id', $record->id)->where('invoice.status', 'issued')
+            ->select('invoice.id', 'invoice.public_id', 'invoice.number', 'invoice.sales_customer_id', 'invoice.customer_name', 'invoice.customer_tax_id', 'invoice.issued_on', 'invoice.due_on', 'invoice.total_cents', 'customer.email as customer_email')
+            ->selectRaw('COALESCE(receipt_totals.paid_cents, 0) AS paid_cents')
+            ->selectRaw('invoice.total_cents - COALESCE(receipt_totals.paid_cents, 0) AS outstanding_cents');
+
+        $summary = DB::query()->fromSub(clone $portfolio, 'receivable')
+            ->selectRaw('COALESCE(SUM(outstanding_cents), 0) AS outstanding')
+            ->selectRaw('COALESCE(SUM(CASE WHEN due_on >= ? THEN outstanding_cents ELSE 0 END), 0) AS current_amount', [$dates['today']])
+            ->selectRaw('COALESCE(SUM(CASE WHEN due_on < ? THEN outstanding_cents ELSE 0 END), 0) AS overdue', [$dates['today']])
+            ->selectRaw('COALESCE(SUM(CASE WHEN due_on < ? THEN outstanding_cents ELSE 0 END), 0) AS over_90', [$dates['d90']])
+            ->selectRaw('COALESCE(SUM(CASE WHEN due_on < ? AND due_on >= ? THEN outstanding_cents ELSE 0 END), 0) AS days_1_30', [$dates['today'], $dates['d30']])
+            ->selectRaw('COALESCE(SUM(CASE WHEN due_on < ? AND due_on >= ? THEN outstanding_cents ELSE 0 END), 0) AS days_31_60', [$dates['d30'], $dates['d60']])
+            ->selectRaw('COALESCE(SUM(CASE WHEN due_on < ? AND due_on >= ? THEN outstanding_cents ELSE 0 END), 0) AS days_61_90', [$dates['d60'], $dates['d90']])
+            ->selectRaw('COUNT(CASE WHEN due_on < ? AND outstanding_cents > 0 THEN 1 END) AS overdue_documents', [$dates['today']])
+            ->selectRaw('COUNT(DISTINCT CASE WHEN due_on < ? AND outstanding_cents > 0 THEN sales_customer_id END) AS delinquent_customers', [$dates['today']])
+            ->first();
+        $collectedThisMonth = DB::table('sales_receipts as receipt')
+            ->join('sales_invoices as invoice', 'invoice.id', '=', 'receipt.sales_invoice_id')
+            ->where('invoice.company_id', $record->id)->whereNull('receipt.voided_at')
+            ->whereDate('receipt.received_on', '>=', $today->copy()->startOfMonth()->toDateString())
+            ->whereDate('receipt.received_on', '<=', $today->copy()->endOfMonth()->toDateString())
+            ->sum('receipt.amount_cents');
+
+        $topCustomers = DB::query()->fromSub(clone $portfolio, 'receivable')
+            ->where('outstanding_cents', '>', 0)->groupBy('sales_customer_id', 'customer_name')
+            ->select('sales_customer_id', 'customer_name')->selectRaw('SUM(outstanding_cents) AS outstanding_cents')
+            ->orderByDesc('outstanding_cents')->limit(5)->get();
+
+        $receivables = DB::query()->fromSub($portfolio, 'receivable')->where('outstanding_cents', '>', 0);
+        if ($search = trim((string) ($filters['search'] ?? ''))) {
+            $pattern = '%'.mb_strtolower($search).'%';
+            $receivables->where(function ($query) use ($pattern, $search): void {
+                $query->whereRaw('LOWER(customer_name) LIKE ?', [$pattern])
+                    ->orWhereRaw("LOWER(COALESCE(customer_tax_id, '')) LIKE ?", [$pattern]);
+                if (ctype_digit($search)) {
+                    $query->orWhere('number', (int) $search);
+                }
+            });
+        }
+        match ($filters['status'] ?? 'all') {
+            'pending' => $receivables->where('paid_cents', 0),
+            'partial' => $receivables->where('paid_cents', '>', 0),
+            'overdue' => $receivables->where('due_on', '<', $dates['today']),
+            default => null,
+        };
+        match ($filters['age'] ?? 'all') {
+            'current' => $receivables->where('due_on', '>=', $dates['today']),
+            '1_30' => $receivables->where('due_on', '<', $dates['today'])->where('due_on', '>=', $dates['d30']),
+            '31_60' => $receivables->where('due_on', '<', $dates['d30'])->where('due_on', '>=', $dates['d60']),
+            '61_90' => $receivables->where('due_on', '<', $dates['d60'])->where('due_on', '>=', $dates['d90']),
+            'over_90' => $receivables->where('due_on', '<', $dates['d90']),
+            default => null,
+        };
+        $receivables->when($filters['due_to'] ?? null, fn (Builder $query, string $date) => $query->where('due_on', '<=', $date));
+        $receivables = $receivables->orderBy('due_on')->orderBy('id')->paginate(12)->withQueryString();
+        $invoiceIds = $receivables->getCollection()->pluck('id');
+        $payments = DB::table('sales_receipts')->whereIn('sales_invoice_id', $invoiceIds)->whereNull('voided_at')
+            ->select('id', 'sales_invoice_id', 'amount_cents', 'received_on', 'reference')->orderByDesc('received_on')->orderByDesc('id')->get()->groupBy('sales_invoice_id');
+        $receivables->getCollection()->transform(function (object $invoice) use ($payments): array {
+            $row = (array) $invoice;
+            $row['payments'] = $payments->get((int) $row['id'], collect())->values();
+
+            return $row;
+        });
+
+        return Inertia::render('accounting/receivables', [
+            'company' => $record,
+            'receivables' => $receivables,
+            'filters' => ['search' => $search, 'status' => $filters['status'] ?? 'all', 'age' => $filters['age'] ?? 'all', 'due_to' => $filters['due_to'] ?? ''],
+            'summary' => [
+                'outstanding' => (int) ($summary->outstanding ?? 0),
+                'current' => (int) ($summary->current_amount ?? 0),
+                'overdue' => (int) ($summary->overdue ?? 0),
+                'over_90' => (int) ($summary->over_90 ?? 0),
+                'days_1_30' => (int) ($summary->days_1_30 ?? 0),
+                'days_31_60' => (int) ($summary->days_31_60 ?? 0),
+                'days_61_90' => (int) ($summary->days_61_90 ?? 0),
+                'overdue_documents' => (int) ($summary->overdue_documents ?? 0),
+                'delinquent_customers' => (int) ($summary->delinquent_customers ?? 0),
+                'collected_this_month' => (int) $collectedThisMonth,
+            ],
+            'topCustomers' => $topCustomers,
+            'today' => $dates['today'],
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()->id),
+        ]);
     }
 
     /** POST customer: writes sales_customers and audit_logs, never another company's customer. */
