@@ -235,20 +235,39 @@ export default function Banks({
 
         accountForm.post(`${baseUrl}/accounts`, {
             preserveScroll: true,
-            onSuccess: () => {
+            onSuccess: (page) => {
+                const refreshedAccounts = page.props.accounts as BankAccount[];
+                const refreshedLedgerAccounts = page.props
+                    .ledgerAccounts as LedgerAccount[];
+
                 accountForm.reset();
+
                 accountForm.setData(
                     'ledger_account_id',
-                    ledgerAccounts.length > 0
-                        ? String(ledgerAccounts[0].id)
+                    refreshedLedgerAccounts.length > 0
+                        ? String(refreshedLedgerAccounts[0].id)
                         : '',
                 );
+
                 accountForm.setData('account_type', 'checking');
                 accountForm.setData('bank_balance', '0.00');
+
+                const selectedAccountStillExists = refreshedAccounts.some(
+                    (account) =>
+                        String(account.id) === transactionForm.data.account_id,
+                );
+
+                if (!selectedAccountStillExists) {
+                    transactionForm.setData(
+                        'account_id',
+                        refreshedAccounts.length > 0
+                            ? String(refreshedAccounts[0].id)
+                            : '',
+                    );
+                }
             },
         });
     };
-
     const createTransaction = (event: FormEvent) => {
         event.preventDefault();
 
