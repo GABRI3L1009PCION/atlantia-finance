@@ -7,22 +7,28 @@ import {
     FilePenLine,
     History,
     LoaderCircle,
+    Paperclip,
     Plus,
     RefreshCw,
     Save,
+    Trash2,
     Workflow,
     X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     createOperationalRecord,
+    deleteOperationalFile,
     getOperationalModule,
     getOperationalRecord,
+    operationalFileUrl,
     transitionOperationalRecord,
     updateOperationalRecord,
+    uploadOperationalFile,
 } from '@/lib/operational-api';
 import type {
     OperationalEvent,
+    OperationalFile,
     OperationalRecord,
     OperationalWorkflow,
 } from '@/lib/operational-api';
@@ -407,6 +413,7 @@ export default function OperationalModuleCenter({
     const [workflow, setWorkflow] = useState<OperationalWorkflow | null>(null);
     const [selected, setSelected] = useState<OperationalRecord | null>(null);
     const [events, setEvents] = useState<OperationalEvent[]>([]);
+    const [files, setFiles] = useState<OperationalFile[]>([]);
     const [notice, setNotice] = useState('');
     const [error, setError] = useState('');
     const [titleValue, setTitleValue] = useState('');
@@ -417,6 +424,7 @@ export default function OperationalModuleCenter({
     const [notes, setNotes] = useState('');
     const [details, setDetails] = useState<Record<string, string>>({});
     const [reason, setReason] = useState('');
+    const fileInput = useRef<HTMLInputElement>(null);
 
     const load = useCallback(async () => {
         setBusy(true);
@@ -493,8 +501,14 @@ export default function OperationalModuleCenter({
         }
 
         void getOperationalRecord(company.public_id, module, selected.public_id)
-            .then((result) => setEvents(result.record.events ?? []))
-            .catch(() => setEvents([]));
+            .then((result) => {
+                setEvents(result.record.events ?? []);
+                setFiles(result.record.files ?? []);
+            })
+            .catch(() => {
+                setEvents([]);
+                setFiles([]);
+            });
     }, [company.public_id, module, selected]);
 
     const allowed = useMemo(
@@ -626,11 +640,74 @@ export default function OperationalModuleCenter({
                 record.public_id,
             );
             setEvents(detail.record.events ?? []);
+            setFiles(detail.record.files ?? []);
         } catch (caught) {
             setError(
                 caught instanceof Error
                     ? caught.message
                     : 'No fue posible cambiar el estado.',
+            );
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const uploadFile = async (file: File) => {
+        if (!selected) {
+            return;
+        }
+
+        setBusy(true);
+        setError('');
+
+        try {
+            const uploaded = await uploadOperationalFile(
+                company.public_id,
+                module,
+                selected.public_id,
+                file,
+            );
+            setFiles((items) => [uploaded, ...items]);
+            setNotice(`Archivo ${uploaded.original_name} adjuntado.`);
+        } catch (caught) {
+            setError(
+                caught instanceof Error
+                    ? caught.message
+                    : 'No fue posible adjuntar el archivo.',
+            );
+        } finally {
+            setBusy(false);
+
+            if (fileInput.current) {
+                fileInput.current.value = '';
+            }
+        }
+    };
+
+    const removeFile = async (file: OperationalFile) => {
+        if (!selected) {
+            return;
+        }
+
+        setBusy(true);
+        setError('');
+
+        try {
+            await deleteOperationalFile(
+                company.public_id,
+                module,
+                selected.public_id,
+                file.public_id,
+            );
+            setFiles((items) =>
+                items.filter((item) => item.public_id !== file.public_id),
+            );
+            setNotice(`Archivo ${file.original_name} eliminado.`);
+        } catch (caught) {
+            setError(
+                caught instanceof Error
+                    ? caught.message
+                    : 'No fue posible eliminar el archivo.',
             );
         } finally {
             setBusy(false);
@@ -1043,6 +1120,78 @@ export default function OperationalModuleCenter({
                                             </div>
                                         </div>
                                     )}
+                                    <div className="rounded-lg border p-3">
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                            <p className="flex items-center gap-2 text-xs font-semibold">
+                                                <Paperclip className="size-4" />
+                                                Archivos privados
+                                            </p>
+                                            {canWrite && (
+                                                <label className="cursor-pointer rounded-md border px-2 py-1 text-[11px] font-medium">
+                                                    Adjuntar archivo
+                                                    <input
+                                                        ref={fileInput}
+                                                        type="file"
+                                                        className="hidden"
+                                                        disabled={busy}
+                                                        accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.csv,.doc,.docx,.txt,.xml"
+                                                        onChange={(event) => {
+                                                            const file =
+                                                                event.target
+                                                                    .files?.[0];
+
+                                                            if (file) {
+                                                                void uploadFile(
+                                                                    file,
+                                                                );
+                                                            }
+                                                        }}
+                                                    />
+                                                </label>
+                                            )}
+                                        </div>
+                                        {files.length === 0 ? (
+                                            <p className="text-[11px] text-slate-500">
+                                                Sin archivos adjuntos.
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                {files.map((file) => (
+                                                    <div
+                                                        key={file.public_id}
+                                                        className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-[11px]"
+                                                    >
+                                                        <a
+                                                            className="min-w-0 truncate text-blue-700 hover:underline"
+                                                            href={operationalFileUrl(
+                                                                company.public_id,
+                                                                module,
+                                                                selected.public_id,
+                                                                file.public_id,
+                                                            )}
+                                                        >
+                                                            {file.original_name}
+                                                        </a>
+                                                        {canWrite && (
+                                                            <button
+                                                                type="button"
+                                                                aria-label={`Eliminar ${file.original_name}`}
+                                                                disabled={busy}
+                                                                onClick={() =>
+                                                                    void removeFile(
+                                                                        file,
+                                                                    )
+                                                                }
+                                                                className="text-red-700"
+                                                            >
+                                                                <Trash2 className="size-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="border-t pt-3">
                                         <p className="mb-2 flex items-center gap-2 text-xs font-semibold">
                                             <History className="size-4" />

@@ -1333,6 +1333,42 @@ function ModuleStatus({
         return null;
     }
 
+    if (!['fel', 'configuracion'].includes(moduleKey)) {
+        return (
+            <main className="min-h-full bg-[#f6f8fb] p-3 sm:p-5">
+                <Head title={module.title + ' · ' + company.name} />
+                <div className="mx-auto max-w-[1900px] space-y-4">
+                    <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                                <p className="text-xs text-slate-500">
+                                    Inicio <span className="px-2">›</span>{' '}
+                                    {module.title}
+                                </p>
+                                <h1 className="mt-2 text-3xl font-bold text-[#172033]">
+                                    {module.title}
+                                </h1>
+                                <p className="mt-1 text-sm text-slate-500">
+                                    {module.detail}
+                                </p>
+                            </div>
+                            <span className="rounded-lg bg-[#f2e7e7] px-3 py-2 text-xs font-semibold text-[#722f37]">
+                                Plan {planName}
+                            </span>
+                        </div>
+                    </header>
+                    <OperationalModuleCenter
+                        company={company}
+                        module={moduleKey}
+                        title={module.title}
+                        canWrite={canWrite}
+                        defaultOpen
+                    />
+                </div>
+            </main>
+        );
+    }
+
     const operational = (workspace: ReactNode): ReactNode => {
         if (moduleKey === 'fel' || moduleKey === 'configuracion') {
             return workspace;

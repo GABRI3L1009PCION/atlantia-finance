@@ -22,6 +22,16 @@ export type OperationalEvent = {
     user?: { name: string; email: string };
 };
 
+export type OperationalFile = {
+    public_id: string;
+    original_name: string;
+    mime_type: string;
+    size_bytes: number;
+    sha256: string;
+    created_at: string;
+    uploader?: { name: string; email: string };
+};
+
 export type OperationalWorkflow = {
     initial: string;
     transitions: Record<string, string[]>;
@@ -35,7 +45,10 @@ type IndexResponse = {
     workflow: OperationalWorkflow;
 };
 type ShowResponse = {
-    record: OperationalRecord & { events: OperationalEvent[] };
+    record: OperationalRecord & {
+        events: OperationalEvent[];
+        files: OperationalFile[];
+    };
     workflow: OperationalWorkflow;
 };
 
@@ -47,6 +60,63 @@ function csrfToken(): string {
     return cookie
         ? decodeURIComponent(cookie.split('=').slice(1).join('='))
         : '';
+}
+
+export function operationalFileUrl(
+    company: string,
+    module: string,
+    record: string,
+    file: string,
+): string {
+    return `${baseUrl(company, module)}/${record}/files/${file}`;
+}
+
+export async function uploadOperationalFile(
+    company: string,
+    module: string,
+    record: string,
+    file: File,
+): Promise<OperationalFile> {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await fetch(
+        `${baseUrl(company, module)}/${record}/files`,
+        {
+            method: 'POST',
+            body: form,
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': csrfToken(),
+            },
+        },
+    );
+    const body = (await response.json()) as {
+        file?: OperationalFile;
+        message?: string;
+        errors?: Record<string, string[]>;
+    };
+
+    if (!response.ok || !body.file) {
+        const detail = body.errors
+            ? Object.values(body.errors).flat()[0]
+            : body.message;
+
+        throw new Error(detail ?? 'No fue posible adjuntar el archivo.');
+    }
+
+    return body.file;
+}
+
+export async function deleteOperationalFile(
+    company: string,
+    module: string,
+    record: string,
+    file: string,
+): Promise<void> {
+    await request(operationalFileUrl(company, module, record, file), {
+        method: 'DELETE',
+    });
 }
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {

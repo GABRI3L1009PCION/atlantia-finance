@@ -336,7 +336,7 @@ export function AppSidebar() {
                   ? [
                         {
                             title: 'Reportes',
-                            href: accounting.reports(companyId),
+                            href: `${dashboardPath}?module=reportes`,
                             icon: FileChartColumn,
                         },
                         {
