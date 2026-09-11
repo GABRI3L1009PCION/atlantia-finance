@@ -13,5 +13,12 @@ class DatabaseSeeder extends Seeder
         $this->call([
             PlanCatalogSeeder::class,
         ]);
+
+        if (app()->environment(['local', 'testing'])) {
+            $this->call([
+                AtlantiaDemoSeeder::class,
+                AtlantiaOperationalSeeder::class,
+            ]);
+        }
     }
 }
