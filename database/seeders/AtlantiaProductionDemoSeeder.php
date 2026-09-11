@@ -62,7 +62,7 @@ class AtlantiaProductionDemoSeeder extends Seeder
             $this->operationalRecords(self::COMPANY_ID, $periodId, $userId);
         });
 
-        $this->command?->info('Datos demo cargados correctamente en Atlantia Systems.');
+        $this->command->info('Datos demo cargados correctamente en Atlantia Systems.');
     }
 
     private function periods(int $companyId): int
