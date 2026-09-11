@@ -21,6 +21,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 const panel = 'rounded-xl border border-slate-200 bg-white shadow-sm';
+
 const money = (value: number) =>
     new Intl.NumberFormat('es-GT', {
         style: 'currency',
@@ -147,11 +148,14 @@ function Metric({
             >
                 <Icon className="size-5" />
             </span>
+
             <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-slate-500">{label}</p>
+
                 <strong className="mt-1 block text-xl text-[#12213d]">
                     {value}
                 </strong>
+
                 {progress !== undefined && (
                     <div className="mt-2 flex items-center gap-2">
                         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
@@ -160,11 +164,13 @@ function Metric({
                                 style={{ width: `${progress}%` }}
                             />
                         </span>
+
                         <span className="text-[9px] text-slate-500">
                             {progress}%
                         </span>
                     </div>
                 )}
+
                 {detail && (
                     <p className="mt-1 text-[10px] text-emerald-700">
                         {detail}
@@ -183,27 +189,33 @@ function BudgetChart() {
                     <i className="mr-1 inline-block size-2 rounded-full bg-[#17395f]" />
                     Ingresos presupuestados
                 </span>
+
                 <span>
                     <i className="mr-1 inline-block size-2 rounded-full bg-blue-400" />
                     Ingresos reales
                 </span>
+
                 <span>
                     <i className="mr-1 inline-block size-2 rounded-full bg-amber-500" />
                     Gastos presupuestados
                 </span>
+
                 <span>
                     <i className="mr-1 inline-block size-2 rounded-full bg-amber-200" />
                     Gastos reales
                 </span>
             </div>
+
             <div className="mt-3 grid grid-cols-[48px_1fr] gap-2">
                 <div className="flex h-44 flex-col justify-between pb-5 text-[9px] text-slate-500">
                     <span>Q400k</span>
                     <span>Q200k</span>
                     <span>Q0</span>
                 </div>
+
                 <div className="relative flex h-44 items-end border-b border-l border-slate-200 px-1 pb-5">
                     <div className="absolute inset-x-0 top-1/2 h-px bg-slate-100" />
+
                     {months.map((item) => (
                         <div
                             key={item.month}
@@ -211,20 +223,32 @@ function BudgetChart() {
                         >
                             <span
                                 className="w-2 bg-[#17395f] lg:w-3"
-                                style={{ height: `${item.budgetIncome / 4}%` }}
+                                style={{
+                                    height: `${item.budgetIncome / 4}%`,
+                                }}
                             />
+
                             <span
                                 className="w-2 bg-blue-400 lg:w-3"
-                                style={{ height: `${item.realIncome / 4}%` }}
+                                style={{
+                                    height: `${item.realIncome / 4}%`,
+                                }}
                             />
+
                             <span
                                 className="w-2 bg-amber-500 lg:w-3"
-                                style={{ height: `${item.budgetExpense / 4}%` }}
+                                style={{
+                                    height: `${item.budgetExpense / 4}%`,
+                                }}
                             />
+
                             <span
                                 className="w-2 bg-amber-200 lg:w-3"
-                                style={{ height: `${item.realExpense / 4}%` }}
+                                style={{
+                                    height: `${item.realExpense / 4}%`,
+                                }}
                             />
+
                             <span className="absolute -bottom-5 text-[8px] text-slate-500">
                                 {item.month}
                             </span>
@@ -253,6 +277,7 @@ function DistributionDonut() {
                     </div>
                 </div>
             </div>
+
             <div className="w-full divide-y divide-slate-100 text-[10px]">
                 {categories.map(([name, percent, value, color]) => (
                     <div
@@ -266,7 +291,9 @@ function DistributionDonut() {
                             />
                             {name}
                         </span>
+
                         <span>{percent}</span>
+
                         <strong>{value}</strong>
                     </div>
                 ))}
@@ -297,24 +324,38 @@ function ProgressRows({ type }: { type: 'cost' | 'project' }) {
     return (
         <div className="mt-3 space-y-2">
             {rows.map((row, index) => {
-                const pct = Number(row[1].replace('%', ''));
+                const pct = Number(row[1].replace(/%/g, ''));
 
                 return (
                     <div
                         key={row[0]}
-                        className={`grid items-center gap-3 text-[10px] ${type === 'cost' ? 'grid-cols-[16px_95px_1fr_45px_75px_75px]' : 'grid-cols-[16px_140px_1fr_40px]'}`}
+                        className={`grid items-center gap-3 text-[10px] ${
+                            type === 'cost'
+                                ? 'grid-cols-[16px_95px_1fr_45px_75px_75px]'
+                                : 'grid-cols-[16px_140px_1fr_40px]'
+                        }`}
                     >
                         <span>{index + 1}</span>
+
                         <span>{row[0]}</span>
+
                         <span className="h-3 overflow-hidden rounded-full bg-slate-200">
                             <i
-                                className={`block h-full rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-400' : 'bg-blue-500'}`}
+                                className={`block h-full rounded-full ${
+                                    pct >= 90
+                                        ? 'bg-red-500'
+                                        : pct >= 75
+                                          ? 'bg-amber-400'
+                                          : 'bg-blue-500'
+                                }`}
                                 style={{ width: `${pct}%` }}
                             />
                         </span>
+
                         <strong className={pct >= 90 ? 'text-red-600' : ''}>
                             {row[1]}
                         </strong>
+
                         {type === 'cost' && (
                             <>
                                 <span>{row[2]}</span>
@@ -335,25 +376,30 @@ export default function BudgetsWorkspace({
 }) {
     const [tab, setTab] = useState('Vista general');
     const [notice, setNotice] = useState('');
+
     const action = (message: string) => setNotice(message);
 
     return (
         <main className="min-h-full bg-[#f3f7fb] p-3 text-[#12213d] sm:p-5">
             <Head title={`Presupuestos · ${company.name}`} />
+
             <div className="mx-auto max-w-[1800px] space-y-4">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                     <span>Presupuestos</span>
                     <span>›</span>
                     <strong>Vista general</strong>
                 </div>
+
                 <header className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <h1 className="text-3xl font-bold">Presupuestos</h1>
+
                         <p className="mt-1 text-sm text-slate-500">
                             Planifica, controla y analiza el desempeño
                             financiero de tu empresa.
                         </p>
                     </div>
+
                     <div className="flex gap-2">
                         <button
                             type="button"
@@ -362,9 +408,11 @@ export default function BudgetsWorkspace({
                             }
                             className="flex items-center gap-2 rounded-lg border border-blue-500 bg-white px-5 py-2.5 text-xs font-semibold text-blue-700"
                         >
-                            <Download className="size-4" /> Exportar{' '}
+                            <Download className="size-4" />
+                            Exportar
                             <ChevronDown className="size-3" />
                         </button>
+
                         <button
                             type="button"
                             onClick={() =>
@@ -374,16 +422,19 @@ export default function BudgetsWorkspace({
                             }
                             className="flex items-center gap-2 rounded-lg bg-[#0b3473] px-6 py-2.5 text-xs font-semibold text-white"
                         >
-                            <Plus className="size-4" /> Nuevo presupuesto
+                            <Plus className="size-4" />
+                            Nuevo presupuesto
                         </button>
                     </div>
                 </header>
+
                 {notice && (
                     <div className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-xs text-blue-800">
                         <span className="flex items-center gap-2">
                             <Check className="size-4" />
                             {notice}
                         </span>
+
                         <button
                             type="button"
                             aria-label="Cerrar aviso"
@@ -393,6 +444,7 @@ export default function BudgetsWorkspace({
                         </button>
                     </div>
                 )}
+
                 <nav className={`${panel} flex overflow-x-auto px-2`}>
                     {[
                         'Vista general',
@@ -407,12 +459,17 @@ export default function BudgetsWorkspace({
                             key={item}
                             type="button"
                             onClick={() => setTab(item)}
-                            className={`border-b-2 px-5 py-3 text-xs font-semibold whitespace-nowrap ${tab === item ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}
+                            className={`border-b-2 px-5 py-3 text-xs font-semibold whitespace-nowrap ${
+                                tab === item
+                                    ? 'border-blue-600 text-blue-700'
+                                    : 'border-transparent text-slate-500'
+                            }`}
                         >
                             {item}
                         </button>
                     ))}
                 </nav>
+
                 {tab === 'Vista general' ? (
                     <>
                         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
@@ -423,6 +480,7 @@ export default function BudgetsWorkspace({
                                 detail="↑ 12% vs. 2025"
                                 tone="bg-emerald-50 text-emerald-600"
                             />
+
                             <Metric
                                 icon={FileBarChart}
                                 label="Ejecutado"
@@ -430,6 +488,7 @@ export default function BudgetsWorkspace({
                                 progress={71.7}
                                 tone="bg-blue-50 text-blue-600"
                             />
+
                             <Metric
                                 icon={WalletCards}
                                 label="Comprometido"
@@ -437,6 +496,7 @@ export default function BudgetsWorkspace({
                                 progress={17}
                                 tone="bg-fuchsia-50 text-fuchsia-600"
                             />
+
                             <Metric
                                 icon={CircleCheck}
                                 label="Disponible"
@@ -444,6 +504,7 @@ export default function BudgetsWorkspace({
                                 progress={11.3}
                                 tone="bg-emerald-50 text-emerald-600"
                             />
+
                             <Metric
                                 icon={AlertTriangle}
                                 label="Partidas excedidas"
@@ -451,6 +512,7 @@ export default function BudgetsWorkspace({
                                 detail="de 58 partidas"
                                 tone="bg-rose-50 text-rose-600"
                             />
+
                             <Metric
                                 icon={TrendingUp}
                                 label="Desviación proyectada"
@@ -459,28 +521,33 @@ export default function BudgetsWorkspace({
                                 tone="bg-violet-50 text-violet-600"
                             />
                         </section>
+
                         <div className="grid gap-4 xl:grid-cols-[1.2fr_.85fr]">
                             <section className={`${panel} p-4`}>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold">
                                         Presupuesto vs. Real (Ingresos y Gastos)
                                     </h2>
+
                                     <button
                                         type="button"
                                         className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-[10px]"
                                     >
-                                        Año 2026{' '}
+                                        Año 2026
                                         <ChevronDown className="size-3" />
                                     </button>
                                 </div>
+
                                 <BudgetChart />
                             </section>
+
                             <section className={`${panel} p-4`}>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold">
                                         Distribución del presupuesto por
                                         categoría
                                     </h2>
+
                                     <button
                                         type="button"
                                         className="text-[10px] text-blue-600"
@@ -488,15 +555,18 @@ export default function BudgetsWorkspace({
                                         Ver detalle
                                     </button>
                                 </div>
+
                                 <DistributionDonut />
                             </section>
                         </div>
+
                         <div className="grid gap-4 xl:grid-cols-[1fr_.75fr_.78fr]">
                             <section className={`${panel} p-4`}>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold">
                                         Ejecución por centro de costos
                                     </h2>
+
                                     <button
                                         type="button"
                                         className="text-[10px] text-blue-600"
@@ -504,13 +574,16 @@ export default function BudgetsWorkspace({
                                         Ver todos
                                     </button>
                                 </div>
+
                                 <ProgressRows type="cost" />
                             </section>
+
                             <section className={`${panel} p-4`}>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold">
                                         Ejecución por proyecto
                                     </h2>
+
                                     <button
                                         type="button"
                                         className="text-[10px] text-blue-600"
@@ -518,13 +591,16 @@ export default function BudgetsWorkspace({
                                         Ver todos
                                     </button>
                                 </div>
+
                                 <ProgressRows type="project" />
                             </section>
+
                             <section className={`${panel} p-4`}>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold">
                                         Estado del presupuesto
                                     </h2>
+
                                     <button
                                         type="button"
                                         className="rounded border border-slate-200 px-3 py-1.5 text-[10px]"
@@ -532,6 +608,7 @@ export default function BudgetsWorkspace({
                                         Año 2026⌄
                                     </button>
                                 </div>
+
                                 <div className="mt-3 flex items-center gap-4">
                                     <div
                                         className="grid size-32 place-items-center rounded-full"
@@ -545,12 +622,14 @@ export default function BudgetsWorkspace({
                                                 <strong className="block text-xl">
                                                     71.7%
                                                 </strong>
+
                                                 <span className="text-[9px] text-slate-500">
                                                     Ejecutado
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
+
                                     <div className="flex-1 space-y-3 text-[10px]">
                                         {[
                                             [
@@ -576,16 +655,20 @@ export default function BudgetsWorkspace({
                                                 <i
                                                     className={`size-2 rounded-full ${color}`}
                                                 />
+
                                                 <span className="flex-1">
                                                     {name}
                                                 </span>
+
                                                 <strong>{value}</strong>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
+
                                 <div className="mt-3 flex gap-2 rounded-lg bg-blue-50 p-3 text-[9px] text-blue-800">
                                     <Info className="size-4 shrink-0" />
+
                                     <p>
                                         Si se mantiene la tendencia actual, se
                                         proyecta un cierre de Q2,478,500{' '}
@@ -596,6 +679,7 @@ export default function BudgetsWorkspace({
                                 </div>
                             </section>
                         </div>
+
                         <div className="grid gap-4 xl:grid-cols-[1.2fr_.58fr_.68fr]">
                             <section className={`${panel} overflow-hidden`}>
                                 <div className="flex items-center justify-between border-b border-slate-200 p-4">
@@ -603,13 +687,16 @@ export default function BudgetsWorkspace({
                                         <h2 className="text-sm font-bold">
                                             Principales partidas del presupuesto
                                         </h2>
+
                                         <span className="rounded border border-blue-400 px-3 py-1 text-[10px] text-blue-600">
                                             Gastos
                                         </span>
+
                                         <span className="text-[10px] text-slate-500">
                                             Ingresos
                                         </span>
                                     </div>
+
                                     <button
                                         type="button"
                                         className="text-[10px] text-blue-600"
@@ -617,6 +704,7 @@ export default function BudgetsWorkspace({
                                         Ver todas
                                     </button>
                                 </div>
+
                                 <div className="overflow-x-auto">
                                     <table className="w-full min-w-[720px] text-left text-[9px]">
                                         <thead className="bg-slate-50">
@@ -632,6 +720,7 @@ export default function BudgetsWorkspace({
                                                 <th>Estado</th>
                                             </tr>
                                         </thead>
+
                                         <tbody className="divide-y divide-slate-100">
                                             {[
                                                 [
@@ -689,11 +778,17 @@ export default function BudgetsWorkspace({
                                                     <td className="px-3 py-2">
                                                         {index + 1}
                                                     </td>
+
                                                     <td>{row[0]}</td>
+
                                                     <td>{row[1]}</td>
+
                                                     <td>{row[2]}</td>
+
                                                     <td>{row[3]}</td>
+
                                                     <td>{row[4]}</td>
+
                                                     <td
                                                         className={
                                                             row[5].startsWith(
@@ -705,11 +800,12 @@ export default function BudgetsWorkspace({
                                                     >
                                                         {row[5]}
                                                     </td>
+
                                                     <td
                                                         className={
                                                             Number(
                                                                 row[6].replace(
-                                                                    '%',
+                                                                    /%/g,
                                                                     '',
                                                                 ),
                                                             ) > 100
@@ -719,9 +815,15 @@ export default function BudgetsWorkspace({
                                                     >
                                                         {row[6]}
                                                     </td>
+
                                                     <td>
                                                         <span
-                                                            className={`rounded-full px-2 py-1 ${row[7] === 'Excedido' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}
+                                                            className={`rounded-full px-2 py-1 ${
+                                                                row[7] ===
+                                                                'Excedido'
+                                                                    ? 'bg-rose-100 text-rose-700'
+                                                                    : 'bg-amber-100 text-amber-700'
+                                                            }`}
                                                         >
                                                             ● {row[7]}
                                                         </span>
@@ -732,11 +834,13 @@ export default function BudgetsWorkspace({
                                     </table>
                                 </div>
                             </section>
+
                             <section className={`${panel} p-4`}>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold">
                                         Próximas acciones
                                     </h2>
+
                                     <button
                                         type="button"
                                         className="text-[10px] text-blue-600"
@@ -744,6 +848,7 @@ export default function BudgetsWorkspace({
                                         Ver todas
                                     </button>
                                 </div>
+
                                 <div className="mt-3 space-y-2">
                                     {[
                                         [
@@ -781,14 +886,17 @@ export default function BudgetsWorkspace({
                                         >
                                             <span className="grid size-10 shrink-0 place-items-center rounded bg-rose-50 text-[8px] font-bold text-rose-600">
                                                 {month}
+
                                                 <strong className="block text-sm text-slate-800">
                                                     {day}
                                                 </strong>
                                             </span>
+
                                             <span>
                                                 <strong className="block text-[10px]">
                                                     {title}
                                                 </strong>
+
                                                 <span className="text-[9px] text-slate-500">
                                                     {detail}
                                                 </span>
@@ -797,11 +905,13 @@ export default function BudgetsWorkspace({
                                     ))}
                                 </div>
                             </section>
+
                             <section className={`${panel} p-4`}>
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold">
                                         Alertas y recomendaciones
                                     </h2>
+
                                     <button
                                         type="button"
                                         className="text-[10px] text-blue-600"
@@ -809,6 +919,7 @@ export default function BudgetsWorkspace({
                                         Ver todas
                                     </button>
                                 </div>
+
                                 <div className="mt-2 divide-y divide-slate-100">
                                     {[
                                         [
@@ -842,6 +953,7 @@ export default function BudgetsWorkspace({
                                                 <AlertIcon
                                                     className={`size-4 shrink-0 ${tone}`}
                                                 />
+
                                                 <p className="text-[10px]">
                                                     {String(text)}
                                                 </p>
@@ -870,11 +982,14 @@ export default function BudgetsWorkspace({
                             ) : (
                                 <FileBarChart className="mx-auto size-12 text-blue-600" />
                             )}
+
                             <h2 className="mt-4 text-xl font-bold">{tab}</h2>
+
                             <p className="mt-2 text-sm text-slate-500">
                                 Consulta y administra este apartado del
                                 presupuesto anual.
                             </p>
+
                             <button
                                 type="button"
                                 onClick={() =>
@@ -887,6 +1002,7 @@ export default function BudgetsWorkspace({
                         </div>
                     </section>
                 )}
+
                 <footer className="flex items-center justify-between text-[10px] text-slate-400">
                     <span>{company.name} · Presupuesto 2026</span>
                     <span>Última actualización: 09/09/2026</span>
