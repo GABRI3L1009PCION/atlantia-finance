@@ -58,7 +58,7 @@ import { hasPlanFeature, hasPlanModule } from '@/lib/plan-capabilities';
 import type { PlanModule } from '@/lib/plan-capabilities';
 import { dashboard } from '@/routes';
 import * as accounting from '@/routes/accounting';
-import { edit as profileEdit } from '@/routes/profile';
+import * as fel from '@/routes/accounting/fel';
 import type { NavItem } from '@/types';
 
 const organizationNavItems: NavItem[] = [
@@ -222,6 +222,12 @@ export function AppSidebar() {
         ? [
               ...(hasInvoicing
                   ? [
+                        {
+                            title: 'Facturación electrónica',
+                            href: fel.index(companyId),
+                            icon: ShoppingCart,
+                            isActive: currentPath.includes('/fel'),
+                        },
                         {
                             title: 'Ventas',
                             href: accounting.sales(companyId),
@@ -395,13 +401,20 @@ export function AppSidebar() {
                   ? [
                         {
                             title: 'Usuarios y Roles',
-                            href: '/dashboard?organization=1#equipo',
+                            href: `${dashboardPath}?module=usuarios-roles`,
                             icon: UsersRound,
-                            isActive: false,
+                            isActive: page.url.includes(
+                                'module=usuarios-roles',
+                            ),
                         },
                     ]
                   : []),
-              { title: 'Configuración', href: profileEdit(), icon: Settings2 },
+              {
+                  title: 'Configuración',
+                  href: `${dashboardPath}?module=configuracion`,
+                  icon: Settings2,
+                  isActive: page.url.includes('module=configuracion'),
+              },
           ]
         : [];
 

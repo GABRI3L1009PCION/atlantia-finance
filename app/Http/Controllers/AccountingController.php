@@ -110,6 +110,10 @@ class AccountingController extends Controller
             ->where('p.company_id', $record->id)->when($periodId, fn (Builder $q) => $q->where('p.id', $periodId));
         $journal = (clone $entries)->join('users as creator', 'creator.id', '=', 'e.created_by')->leftJoin('users as approver', 'approver.id', '=', 'e.posted_by')
             ->select('e.*', 'p.name as period_name', 'creator.name as author', 'approver.name as approver')
+            ->selectSub(DB::table('accounting_source_entries as source')->join('fel_documents as fel', 'fel.id', '=', 'source.source_id')
+                ->where('source.source_type', 'fel_document')->where('source.company_id', $record->id)
+                ->where('fel.company_id', $record->id)->whereColumn('source.journal_entry_id', 'e.id')
+                ->select('fel.public_id')->limit(1), 'fel_document_id')
             ->selectSub(DB::table('journal_entries as r')->select('r.public_id')->whereColumn('r.reversal_of', 'e.id')->limit(1), 'reversed_by')
             ->orderByDesc('e.entry_date')->orderByDesc('e.id')->paginate(15, ['*'], 'journal_page')->withQueryString();
         $lines = DB::table('journal_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')

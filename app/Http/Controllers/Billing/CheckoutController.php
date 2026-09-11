@@ -49,6 +49,10 @@ class CheckoutController extends Controller
             return redirect()->route('dashboard');
         }
 
+        if (! DB::table('organization_billing_profiles')->where('organization_id', $organization->id)->exists()) {
+            return to_route('billing.details.edit');
+        }
+
         if ($organization->status === 'pending_email_verification') {
             $organization->update(['status' => 'pending_payment']);
         }

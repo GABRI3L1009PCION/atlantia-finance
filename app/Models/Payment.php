@@ -2,11 +2,17 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
+/**
+ * @property numeric-string $amount
+ * @property CarbonInterface|null $paid_at
+ * @property array{name: string, nit: string, address: string, email: string, plan_name?: string, billing_period?: string}|null $billing_snapshot
+ */
 class Payment extends Model
 {
     protected $fillable = [
@@ -19,6 +25,7 @@ class Payment extends Model
         'status',
         'paid_at',
         'failed_at',
+        'billing_snapshot',
     ];
 
     protected static function booted(): void
@@ -34,6 +41,7 @@ class Payment extends Model
             'amount' => 'decimal:2',
             'paid_at' => 'datetime',
             'failed_at' => 'datetime',
+            'billing_snapshot' => 'array',
         ];
     }
 

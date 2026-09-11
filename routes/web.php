@@ -3,17 +3,22 @@
 use App\Http\Controllers\AccountingController;
 use App\Http\Controllers\AccountingDocumentController;
 use App\Http\Controllers\AccountingReportController;
+use App\Http\Controllers\AtlantiaAiConnectionController;
 use App\Http\Controllers\BankController;
+use App\Http\Controllers\Billing\BillingDetailsController;
 use App\Http\Controllers\Billing\CheckoutController;
 use App\Http\Controllers\Billing\CreateCheckoutController;
 use App\Http\Controllers\CompanyDashboardController;
+use App\Http\Controllers\FelDocumentController;
+use App\Http\Controllers\FelSettingsController;
 use App\Http\Controllers\FiscalSettingsController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\OperationalRecordController;
+use App\Http\Controllers\OperationalRecordFileController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\Webhooks\RecurrenteWebhookController;
 use App\Http\Controllers\WorkspaceController;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -30,6 +35,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}', [AccountingController::class, 'show'])->name('show');
         Route::get('companies/{company}/reports', [AccountingReportController::class, 'index'])->name('reports');
         Route::get('companies/{company}/export', [AccountingReportController::class, 'export'])->middleware('throttle:10,1')->name('export');
+        Route::get('companies/{company}/fel/settings', [FelSettingsController::class, 'edit'])->name('fel.settings.edit');
+        Route::post('companies/{company}/fel/settings', [FelSettingsController::class, 'update'])->middleware('throttle:20,1')->name('fel.settings.update');
+        Route::prefix('companies/{company}/fel')->name('fel.')->controller(FelDocumentController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('create', 'create')->name('create');
+            Route::post('/', 'store')->middleware('throttle:30,1')->name('store');
+            Route::post('quote', 'quote')->middleware('throttle:60,1')->name('quote');
+            Route::get('{document}', 'show')->name('show');
+            Route::get('{document}/edit', 'edit')->name('edit');
+            Route::patch('{document}', 'update')->middleware('throttle:30,1')->name('update');
+            Route::post('{document}/certify', 'certify')->middleware('throttle:10,1')->name('certify');
+            Route::get('{document}/pdf', 'pdf')->name('pdf');
+            Route::post('{document}/pdf', 'regeneratePdf')->middleware('throttle:10,1')->name('regeneratePdf');
+            Route::post('{document}/email', 'email')->middleware('throttle:5,1')->name('email');
+            Route::post('{document}/cancel', 'cancel')->middleware('throttle:10,1')->name('cancel');
+            Route::post('{document}/accounting', 'accounting')->middleware('throttle:10,1')->name('accounting');
+        });
         Route::get('companies/{company}/sales', [SalesController::class, 'index'])->name('sales');
         Route::get('companies/{company}/customers', [SalesController::class, 'customers'])->name('salesCustomers');
         Route::get('companies/{company}/receivables', [SalesController::class, 'receivables'])->name('receivables');
@@ -78,7 +100,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/entries/{entry}/documents', [AccountingDocumentController::class, 'store'])->middleware('throttle:20,1')->name('entryDocumentStore');
         Route::get('companies/{company}/entries/{entry}/documents/{document}', [AccountingDocumentController::class, 'download'])->middleware('throttle:30,1')->name('entryDocumentDownload');
         Route::delete('companies/{company}/entries/{entry}/documents/{document}', [AccountingDocumentController::class, 'destroy'])->middleware('throttle:20,1')->name('entryDocumentDestroy');
+        Route::prefix('companies/{company}/operations/{module}')->name('operations.')->controller(OperationalRecordController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::post('/', 'store')->middleware('throttle:30,1')->name('store');
+            Route::get('{record}', 'show')->name('show');
+            Route::patch('{record}', 'update')->middleware('throttle:30,1')->name('update');
+            Route::post('{record}/transition', 'transition')->middleware('throttle:30,1')->name('transition');
+        });
+        Route::post('companies/{company}/operations/{module}/{record}/files', [OperationalRecordFileController::class, 'store'])
+            ->middleware('throttle:20,1')->name('operations.files.store');
+        Route::get('companies/{company}/operations/{module}/{record}/files/{file}', [OperationalRecordFileController::class, 'download'])
+            ->middleware('throttle:30,1')->name('operations.files.download');
+        Route::delete('companies/{company}/operations/{module}/{record}/files/{file}', [OperationalRecordFileController::class, 'destroy'])
+            ->middleware('throttle:20,1')->name('operations.files.destroy');
+        Route::get('companies/{company}/configuration/ai/health', AtlantiaAiConnectionController::class)
+            ->middleware('throttle:20,1')->name('configuration.ai.health');
     });
+    Route::get('billing/details', [BillingDetailsController::class, 'edit'])->name('billing.details.edit');
+    Route::patch('billing/details', [BillingDetailsController::class, 'update'])->middleware('throttle:20,1')->name('billing.details.update');
     Route::get('billing/checkout/status', [CheckoutController::class, 'status'])
         ->middleware('throttle:60,1')->name('billing.checkout.status');
     Route::get('billing/checkout', [CheckoutController::class, 'show'])
@@ -98,34 +137,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('workspace/setup', [WorkspaceController::class, 'update'])->middleware(['subscription.active', 'throttle:10,1'])->name('workspace.setup');
     Route::post('workspace/invitations', [InvitationController::class, 'store'])->middleware(['subscription.active', 'throttle:5,1'])->name('workspace.invite');
     Route::delete('workspace/invitations/{invitation}', [InvitationController::class, 'destroy'])->middleware('subscription.active')->name('workspace.revoke');
-});
-
-Route::get('/test-atlantia-ai', function () {
-    try {
-        $response = Http::timeout(5)
-            ->get(config('services.atlantia_ai.url').'/health');
-
-        if ($response->successful()) {
-            return response()->json([
-                'status' => 'ok',
-                'message' => 'Laravel está conectado correctamente con Atlantia AI',
-                'atlantia_ai' => $response->json(),
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Atlantia AI respondió con un error',
-            'http_status' => $response->status(),
-        ], 500);
-
-    } catch (Throwable $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'No se pudo conectar con Atlantia AI',
-            'error' => $e->getMessage(),
-        ], 500);
-    }
 });
 
 require __DIR__.'/settings.php';

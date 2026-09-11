@@ -12,7 +12,9 @@ use App\Services\Payments\RecurrenteClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class CreateCheckoutController extends Controller
@@ -24,6 +26,11 @@ class CreateCheckoutController extends Controller
         $organization = $request->user()->organizations()->wherePivot('role', 'owner')
             ->latest('organizations.created_at')->first();
         abort_if($organization === null, 403);
+
+        $billing = DB::table('organization_billing_profiles')->where('organization_id', $organization->id)->first();
+        if ($billing === null) {
+            throw ValidationException::withMessages(['billing' => 'Completa tus datos fiscales antes de iniciar el pago.']);
+        }
 
         /** @var Subscription $subscription */
         $subscription = $organization->subscriptions()->whereIn('status', ['incomplete', 'past_due'])
@@ -58,6 +65,8 @@ class CreateCheckoutController extends Controller
             'currency_code' => $price->currency_code,
             'amount' => $price->amount,
             'status' => 'pending',
+            'billing_snapshot' => ['name' => $billing->name, 'nit' => $billing->nit, 'address' => $billing->address,
+                'email' => $request->user()->email, 'plan_name' => $price->plan->name, 'billing_period' => $price->billing_period],
         ]);
 
         try {

@@ -1,0 +1,224 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers;
+
+use App\Jobs\GenerateInvoicePdfJob;
+use App\Jobs\SendInvoiceEmailJob;
+use App\Models\FelDocument;
+use App\Models\Organization;
+use App\Services\AccountingService;
+use App\Services\Fel\FelAccountingService;
+use App\Services\Fel\FelCalculator;
+use App\Services\Fel\FelCancellationService;
+use App\Services\Fel\FelDocumentService;
+use App\Services\Fel\FelDocumentStatus;
+use App\Services\Fel\FelPdfService;
+use App\Services\WorkspaceContext;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
+use Inertia\Response;
+use stdClass;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+class FelDocumentController extends Controller
+{
+    public function __construct(private WorkspaceContext $context, private AccountingService $accounting, private FelDocumentService $documents) {}
+
+    public function index(Request $request, string $company): Response
+    {
+        [$organization, $record] = $this->scope($request, $company);
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:draft,pending,processing,certified,failed,cancelled'],
+            'from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'customer' => ['nullable', 'integer'], 'min' => ['nullable', 'regex:/^\d{1,10}(?:\.\d{1,2})?$/D'],
+            'max' => ['nullable', 'regex:/^\d{1,10}(?:\.\d{1,2})?$/D'],
+        ]);
+        $query = FelDocument::forCompany($record->id);
+        foreach (['status' => 'status', 'customer' => 'customer_id'] as $filter => $column) {
+            if (isset($filters[$filter])) {
+                $query->where($column, $filters[$filter]);
+            }
+        }
+        if (! empty($filters['search'])) {
+            $query->where('number', ctype_digit($filters['search']) ? (int) $filters['search'] : -1);
+        }
+        if (isset($filters['from'])) {
+            $query->whereDate('issued_on', '>=', $filters['from']);
+        }
+        if (isset($filters['to'])) {
+            $query->whereDate('issued_on', '<=', $filters['to']);
+        }
+        if (isset($filters['min'])) {
+            $query->where('total_cents', '>=', $this->accounting->cents($filters['min']));
+        }
+        if (isset($filters['max'])) {
+            $query->where('total_cents', '<=', $this->accounting->cents($filters['max']));
+        }
+        $month = FelDocument::forCompany($record->id)->whereBetween('issued_on', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()]);
+        $stats = [
+            'documents' => (clone $month)->count(), 'total' => (int) (clone $month)->where('status', 'certified')->sum('total_cents'),
+            'pending' => (clone $month)->whereIn('status', ['pending', 'processing'])->count(),
+            'certified' => (clone $month)->where('status', 'certified')->count(),
+            'failed' => (clone $month)->where('status', 'failed')->count(), 'cancelled' => (clone $month)->where('status', 'cancelled')->count(),
+        ];
+
+        return Inertia::render('accounting/fel/index', [
+            'company' => $record, 'companies' => $this->accounting->companies($organization, $request->user())->get(),
+            'documents' => $query->latest('id')->paginate(15)->withQueryString(), 'stats' => $stats, 'filters' => $filters,
+            'customers' => DB::table('sales_customers')->where('company_id', $record->id)->orderBy('name')->get(),
+            'canWrite' => $this->canWrite($organization, $record->id, $request->user()->id), 'notice' => config('fel.notice'),
+            'canManage' => $organization->pivot->role === 'owner',
+        ]);
+    }
+
+    public function quote(Request $request, string $company, FelCalculator $calculator): JsonResponse
+    {
+        [, $record] = $this->scope($request, $company, true);
+        $data = $request->validate(FelDocumentService::rules());
+        DB::table('sales_customers')->where('company_id', $record->id)->where('id', $data['customer_id'])->firstOrFail();
+        $result = $calculator->calculate($record->id, $data['issued_on'], $data['lines']);
+        unset($result['fiscal_profile']);
+
+        return response()->json($result);
+    }
+
+    public function create(Request $request, string $company): Response
+    {
+        [, $record] = $this->scope($request, $company, true);
+
+        return $this->form($record);
+    }
+
+    public function edit(Request $request, string $company, string $document): Response
+    {
+        [, $record] = $this->scope($request, $company, true);
+        $doc = $this->document($record, $document);
+        abort_unless($doc->status === FelDocumentStatus::Draft, 422);
+
+        return $this->form($record, $doc->load('lines'));
+    }
+
+    public function store(Request $request, string $company): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, true);
+        $doc = $this->documents->save($organization, $request->user(), $record, $request->validate(FelDocumentService::rules()));
+
+        return to_route('accounting.fel.show', [$company, $doc->public_id]);
+    }
+
+    public function update(Request $request, string $company, string $document): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, true);
+        $doc = $this->documents->save($organization, $request->user(), $record, $request->validate(FelDocumentService::rules()), $document);
+
+        return to_route('accounting.fel.show', [$company, $doc->public_id]);
+    }
+
+    public function show(Request $request, string $company, string $document): Response
+    {
+        [$organization, $record] = $this->scope($request, $company);
+        $doc = $this->document($record, $document)->load('lines');
+
+        return Inertia::render('accounting/fel/show', [
+            'company' => $record, 'document' => $doc, 'notice' => config('fel.notice'),
+            'canWrite' => $this->canWrite($organization, $record->id, $request->user()->id),
+            'history' => DB::table('audit_logs')->where('organization_id', $organization->id)
+                ->where('auditable_type', 'fel_documents')->where('auditable_id', $doc->id)->orderByDesc('id')
+                ->get(['action', 'user_id', 'occurred_at']),
+            'entry' => DB::table('accounting_source_entries')->where('company_id', $record->id)->where('source_type', 'fel_document')
+                ->where('source_id', $doc->id)->where('event', 'origin')->value('journal_entry_id'),
+        ]);
+    }
+
+    public function certify(Request $request, string $company, string $document): RedirectResponse
+    {
+        [, $record] = $this->scope($request, $company, true);
+        $this->documents->requestCertification($this->document($record, $document), $request->user()->id);
+
+        return back();
+    }
+
+    public function pdf(Request $request, string $company, string $document, FelPdfService $pdf): StreamedResponse
+    {
+        [, $record] = $this->scope($request, $company);
+        $doc = $this->document($record, $document);
+        $path = $pdf->path($doc);
+        abort_unless(in_array($doc->status, [FelDocumentStatus::Certified, FelDocumentStatus::Cancelled], true)
+            && $doc->pdf_path === $path && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->download($path, 'FEL-PRUEBA-'.$doc->number.'.pdf', [
+            'Cache-Control' => 'private, no-store', 'Content-Type' => 'application/pdf',
+        ]);
+    }
+
+    public function email(Request $request, string $company, string $document): RedirectResponse
+    {
+        [, $record] = $this->scope($request, $company, true);
+        $doc = $this->document($record, $document);
+        abort_unless($doc->status === FelDocumentStatus::Certified && $doc->pdf_path && ! $doc->email_sent_at, 422);
+        SendInvoiceEmailJob::dispatch($record->id, $document)->afterCommit();
+
+        return back();
+    }
+
+    public function regeneratePdf(Request $request, string $company, string $document): RedirectResponse
+    {
+        [, $record] = $this->scope($request, $company, true);
+        $doc = $this->document($record, $document);
+        abort_unless(in_array($doc->status, [FelDocumentStatus::Certified, FelDocumentStatus::Cancelled], true), 422);
+        GenerateInvoicePdfJob::dispatch($record->id, $document)->afterCommit();
+
+        return back();
+    }
+
+    public function cancel(Request $request, string $company, string $document, FelCancellationService $service): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, true);
+        $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:500']]);
+        $service->cancel($this->document($record, $document), $organization, $request->user(), $data['reason']);
+
+        return back();
+    }
+
+    public function accounting(Request $request, string $company, string $document, FelAccountingService $service): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, true);
+        $this->context->requireFeature($organization, 'basic_accounting');
+        $service->draft($this->document($record, $document), $organization, $request->user());
+
+        return back();
+    }
+
+    private function document(stdClass $company, string $uuid): FelDocument
+    {
+        return FelDocument::forCompany($company->id)->where('public_id', $uuid)->firstOrFail();
+    }
+
+    private function form(stdClass $company, ?FelDocument $document = null): Response
+    {
+        return Inertia::render('accounting/fel/create', ['company' => $company, 'document' => $document,
+            'customers' => DB::table('sales_customers')->where('company_id', $company->id)->orderBy('name')->get(),
+            'today' => now()->toDateString(), 'notice' => config('fel.notice')]);
+    }
+
+    /** @return array{Organization, stdClass} */
+    private function scope(Request $request, string $company, bool $write = false): array
+    {
+        $organization = $this->context->organization($request->user());
+        $this->context->requireFeature($organization, 'basic_invoicing');
+
+        return [$organization, $this->accounting->company($organization, $request->user(), $company, $write)];
+    }
+
+    private function canWrite(Organization $organization, int $companyId, int $userId): bool
+    {
+        return $organization->pivot->role === 'owner' || DB::table('company_user')->where('company_id', $companyId)
+            ->where('user_id', $userId)->where('permission', 'editor')->exists();
+    }
+}
