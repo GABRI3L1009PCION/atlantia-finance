@@ -18,6 +18,7 @@ export type PlanModule =
     | 'caja'
     | 'cierre-periodo'
     | 'conciliacion'
+    | 'configuracion'
     | 'cotizaciones'
     | 'documentos'
     | 'estados-cuenta'
@@ -35,6 +36,7 @@ export type PlanModule =
     | 'presupuestos'
     | 'proyectos'
     | 'recordatorios'
+    | 'usuarios-roles'
     | 'reglas';
 
 const moduleFeatures: Record<PlanModule, PlanFeature> = {
@@ -61,6 +63,8 @@ const moduleFeatures: Record<PlanModule, PlanFeature> = {
     'estados-cuenta': 'obligation_management',
     recordatorios: 'task_management',
     auditoria: 'audit_log',
+    'usuarios-roles': 'roles_and_permissions',
+    configuracion: 'basic_accounting',
 };
 
 export function hasPlanFeature(

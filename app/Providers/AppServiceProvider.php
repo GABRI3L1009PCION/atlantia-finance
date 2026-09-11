@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Http\Responses\RegisterResponse;
 use App\Http\Responses\VerifyEmailResponse;
+use App\Services\Fel\FelProviderInterface;
+use App\Services\Fel\FelProviderResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(FelProviderInterface::class, fn ($app) => $app->make(FelProviderResolver::class)->resolve());
         $this->app->singleton(RegisterResponseContract::class, RegisterResponse::class);
         $this->app->singleton(VerifyEmailResponseContract::class, VerifyEmailResponse::class);
     }

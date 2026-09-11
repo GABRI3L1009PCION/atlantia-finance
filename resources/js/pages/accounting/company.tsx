@@ -52,6 +52,7 @@ import {
 import { hasPlanFeature } from '@/lib/plan-capabilities';
 import type { PlanFeature } from '@/lib/plan-capabilities';
 import * as routes from '@/routes/accounting';
+import * as fel from '@/routes/accounting/fel';
 
 type AccountingModule = {
     title: string;
@@ -97,6 +98,7 @@ type Entry = {
     entry_date: string;
     description: string;
     reference: string | null;
+    fel_document_id: string | null;
     kind: string;
     author: string;
     approver: string | null;
@@ -3311,6 +3313,18 @@ export default function CompanyAccounting(props: Props) {
                                                 Concepto
                                                 <strong className="mt-0.5 block text-[#25334b]">
                                                     {selectedEntry.description}
+                                                    {selectedEntry.fel_document_id && (
+                                                        <Link
+                                                            className="mt-2 block text-sm text-[#640000]"
+                                                            href={fel.show([
+                                                                company.public_id,
+                                                                selectedEntry.fel_document_id,
+                                                            ])}
+                                                        >
+                                                            Ver documento FEL de
+                                                            origen
+                                                        </Link>
+                                                    )}
                                                 </strong>
                                             </p>
                                         </div>

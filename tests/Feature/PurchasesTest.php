@@ -64,6 +64,7 @@ function projectDatabaseTables(): array
         'company_accounting_mappings', 'purchase_suppliers', 'purchase_documents',
         'purchase_document_lines', 'purchase_payments', 'purchase_document_files',
         'accounting_source_entries', 'bank_accounts', 'bank_transactions',
+        'operational_records', 'operational_record_events', 'operational_record_files',
     ];
 }
 
@@ -110,7 +111,7 @@ test('every project table has one dedicated create migration', function () {
     $expectedTables = projectDatabaseTables();
     sort($expectedTables);
 
-    expect($files)->toHaveCount(48)
+    expect($files)->toHaveCount(count($expectedTables))
         ->and($migrationTables)->toBe($expectedTables);
 });
 

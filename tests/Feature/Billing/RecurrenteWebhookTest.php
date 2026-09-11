@@ -1,11 +1,13 @@
 <?php
 
+use App\Jobs\GenerateSubscriptionFelInvoiceJob;
 use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Models\User;
 use Database\Seeders\PlanCatalogSeeder;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     $this->seed(PlanCatalogSeeder::class);
@@ -119,3 +121,31 @@ function recurrentePendingPayment(): array
 
     return [$organization, $subscription, $payment];
 }
+
+test('different webhook events for same payment do not extend subscription or duplicate invoice request', function () {
+    Queue::fake();
+    [$organization, $subscription, $payment] = recurrentePendingPayment();
+    $payment->attempts()->create(['provider_attempt_id' => 'ch_duplicate_events', 'status' => 'created', 'attempted_at' => now()]);
+    $payload = ['event_type' => 'intent.succeeded', 'id' => 'paid-once', 'amount_in_cents' => 39900,
+        'currency' => 'GTQ', 'checkout' => ['id' => 'ch_duplicate_events']];
+    recurrenteWebhookRequest($this, $payload, 'message-first')->assertOk();
+    $end = $subscription->fresh()->current_period_ends_at;
+    $this->travel(2)->days();
+    recurrenteWebhookRequest($this, $payload, 'message-second')->assertOk();
+    expect($subscription->fresh()->current_period_ends_at->equalTo($end))->toBeTrue();
+    $this->assertDatabaseCount('fel_subscription_requests', 1);
+    Queue::assertPushed(GenerateSubscriptionFelInvoiceJob::class, 1);
+    $this->assertDatabaseCount('fel_documents', 0);
+});
+
+test('failed webhook can be retried after missing payment attempt is reconciled', function () {
+    Queue::fake();
+    [$organization, $subscription, $payment] = recurrentePendingPayment();
+    $payload = ['event_type' => 'intent.succeeded', 'id' => 'paid-retry', 'amount_in_cents' => 39900,
+        'currency' => 'GTQ', 'checkout' => ['id' => 'ch-late-attempt']];
+    recurrenteWebhookRequest($this, $payload, 'message-retry')->assertUnprocessable();
+    $payment->attempts()->create(['provider_attempt_id' => 'ch-late-attempt', 'status' => 'created', 'attempted_at' => now()]);
+    recurrenteWebhookRequest($this, $payload, 'message-retry')->assertOk();
+    expect($payment->fresh()->status)->toBe('succeeded');
+    $this->assertDatabaseCount('fel_subscription_requests', 1);
+});

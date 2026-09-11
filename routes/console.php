@@ -8,6 +8,8 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Schedule::command('fel:recover')->everyFiveMinutes()->withoutOverlapping();
+
 Schedule::command('backup:create')
     ->dailyAt('02:30')
     ->withoutOverlapping()

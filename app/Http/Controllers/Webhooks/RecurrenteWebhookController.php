@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateSubscriptionFelInvoiceJob;
+use App\Models\Payment;
 use App\Models\PaymentAttempt;
 use App\Models\WebhookEvent;
 use App\Services\Payments\RecurrenteWebhookVerifier;
@@ -30,12 +32,16 @@ class RecurrenteWebhookController extends Controller
             ['provider' => 'recurrente', 'provider_event_id' => $messageId],
             ['event_type' => $eventType, 'payload' => $payload, 'status' => 'pending', 'received_at' => now()],
         );
-        if (! $event->wasRecentlyCreated || $event->status === 'processed') {
+        if ($event->status === 'processed') {
             return response()->json(['received' => true]);
         }
 
         try {
             DB::transaction(function () use ($event, $eventType, $payload): void {
+                $event = WebhookEvent::query()->whereKey($event->id)->lockForUpdate()->firstOrFail();
+                if ($event->status === 'processed') {
+                    return;
+                }
                 if (in_array($eventType, ['intent.succeeded', 'payment_intent.succeeded'], true)) {
                     $this->activatePaidSubscription($payload);
                 }
@@ -43,7 +49,7 @@ class RecurrenteWebhookController extends Controller
             });
         } catch (Throwable $exception) {
             $event->update(['status' => 'failed', 'failed_at' => now(), 'error_message' => 'No fue posible reconciliar el evento.']);
-            report($exception);
+            // Provider payloads and credentials must not be included in exception logs.
 
             return response()->json(['received' => false], 422);
         }
@@ -59,7 +65,7 @@ class RecurrenteWebhookController extends Controller
 
         $attempt = PaymentAttempt::query()->where('provider_attempt_id', $checkoutId)
             ->with(['payment.subscription.organization'])->lockForUpdate()->firstOrFail();
-        $payment = $attempt->payment;
+        $payment = Payment::query()->whereKey($attempt->payment_id)->with('subscription.organization')->lockForUpdate()->firstOrFail();
         $amountInCents = (int) (data_get($payload, 'amount_in_cents') ?? data_get($payload, 'data.amount_in_cents'));
         $currency = (string) (data_get($payload, 'currency') ?? data_get($payload, 'data.currency'));
         $expectedCents = (int) bcmul((string) $payment->amount, '100', 0);
@@ -67,6 +73,10 @@ class RecurrenteWebhookController extends Controller
 
         $providerPaymentId = (string) ($payload['id'] ?? data_get($payload, 'data.id'));
         abort_if($providerPaymentId === '', 422);
+
+        if ($payment->status === 'succeeded') {
+            return;
+        }
 
         $payment->update(['provider_payment_id' => $providerPaymentId, 'status' => 'succeeded', 'paid_at' => now()]);
         $attempt->update(['status' => 'succeeded']);
@@ -80,5 +90,9 @@ class RecurrenteWebhookController extends Controller
             'current_period_ends_at' => $billingPeriod === 'annual' ? now()->addYear() : now()->addMonth(),
         ]);
         $subscription->organization->update(['status' => 'active']);
+        DB::table('fel_subscription_requests')->insertOrIgnore([
+            'payment_id' => $payment->id, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        GenerateSubscriptionFelInvoiceJob::dispatch($payment->id)->afterCommit();
     }
 }

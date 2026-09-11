@@ -1,10 +1,12 @@
 <?php
 
 use App\Models\Organization;
+use App\Models\Payment;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Models\User;
 use Database\Seeders\PlanCatalogSeeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -44,6 +46,10 @@ test('checkout is created server side using the stored recurring price', functio
         && $request['items'][0]['charge_type'] === 'recurring'
         && $request['items'][0]['billing_interval'] === 'month');
     $this->assertDatabaseHas('payment_attempts', ['provider_attempt_id' => 'ch_test_123', 'status' => 'created']);
+    $snapshot = Payment::firstOrFail()->billing_snapshot;
+    expect($snapshot['name'])->toBe('Comprador de prueba')
+        ->and($snapshot['email'])->toBe($user->email)
+        ->and($snapshot['plan_name'])->toBe('Esencial');
 });
 
 test('a recent pending checkout is reused instead of creating a duplicate', function () {
@@ -245,5 +251,36 @@ function createPendingOrganizationFor(User $user): Organization
         'updated_at' => now(),
     ]);
 
+    DB::table('organization_billing_profiles')->insert([
+        'organization_id' => $organization->id, 'name' => 'Comprador de prueba', 'nit' => 'CF',
+        'address' => 'Guatemala', 'email' => $user->email, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
     return $organization;
 }
+
+test('buyers must provide billing details before a checkout can charge them', function () {
+    Http::fake();
+    $user = User::factory()->create();
+    $organization = createPendingOrganizationFor($user);
+    DB::table('organization_billing_profiles')->where('organization_id', $organization->id)->delete();
+    $this->actingAs($user)->get(route('billing.checkout.show'))->assertRedirect(route('billing.details.edit'));
+    $this->postJson(route('billing.checkout.store'))->assertUnprocessable()->assertJsonValidationErrors('billing');
+    Http::assertNothingSent();
+    $this->assertDatabaseCount('payments', 0);
+    $this->get(route('billing.details.edit'))->assertInertia(fn (Assert $page) => $page->component('billing/details')
+        ->where('issuer.name', 'Atlantia Systems')->where('issuer.nit', '97655988')->where('email', $user->email));
+});
+
+test('billing details use the authenticated organization and verified account email', function () {
+    $owner = User::factory()->create();
+    $organization = createPendingOrganizationFor($owner);
+    $other = createPendingOrganizationFor(User::factory()->create());
+    $this->actingAs($owner)->patch(route('billing.details.update'), [
+        'name' => 'Comprador Uno', 'nit' => '12345678', 'address' => 'Dirección del comprador',
+        'organization_id' => $other->id, 'email' => 'attacker@example.test',
+    ])->assertRedirect(route('billing.checkout.show'));
+    $this->assertDatabaseHas('organization_billing_profiles', ['organization_id' => $organization->id, 'name' => 'Comprador Uno', 'email' => $owner->email]);
+    $this->assertDatabaseHas('organization_billing_profiles', ['organization_id' => $other->id, 'name' => 'Comprador de prueba']);
+    expect($organization->fresh()->tax_identifier)->toBeNull();
+});
