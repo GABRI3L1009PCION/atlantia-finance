@@ -84,10 +84,7 @@ const RISK: Record<Risk, { label: string; style: string }> = {
 };
 
 function normalize(value: string): string {
-    return value
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '');
+    return value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
 function formatDate(value: string | null): string {
@@ -125,23 +122,21 @@ function Kpi({
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-[#8a0b0b]">{label}</p>
+                <p className="truncate text-sm font-bold text-[#8a0b0b]">
+                    {label}
+                </p>
                 <p className="text-3xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
-                <p className="truncate text-xs font-semibold text-slate-500">{hint}</p>
+                <p className="truncate text-xs font-semibold text-slate-500">
+                    {hint}
+                </p>
             </div>
         </div>
     );
 }
 
-function Field({
-    label,
-    children,
-}: {
-    label: string;
-    children: ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
     return (
         <label className="block min-w-0">
             <span className="mb-1.5 block text-sm font-bold text-[#2b2f3a]">
@@ -160,7 +155,10 @@ function ProgressBar({ value }: { value: number }) {
             <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
                 <div
                     className="h-full rounded-full"
-                    style={{ width: `${Math.min(100, value)}%`, background: color }}
+                    style={{
+                        width: `${Math.min(100, value)}%`,
+                        background: color,
+                    }}
                 />
             </div>
             <span className="text-xs font-bold">{value}%</span>
@@ -206,7 +204,9 @@ function CompanyDetail({
                             ? ` · Cliente desde ${formatDate(company.client_since)}`
                             : ''}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">{company.office}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                        {company.office}
+                    </p>
                 </div>
                 <button
                     type="button"
@@ -235,11 +235,14 @@ function CompanyDetail({
             {tab === 'Resumen' && (
                 <div className="space-y-4">
                     <section>
-                        <h3 className="mb-2 text-sm font-black">Datos de contacto</h3>
+                        <h3 className="mb-2 text-sm font-black">
+                            Datos de contacto
+                        </h3>
                         <ul className="space-y-1.5 text-sm text-slate-700">
                             <li className="flex items-center gap-2">
                                 <UserRound className="size-4 text-[#8a0b0b]" />
-                                {company.contact.name ?? 'Sin contacto registrado'}
+                                {company.contact.name ??
+                                    'Sin contacto registrado'}
                             </li>
                             {company.contact.phone && (
                                 <li className="flex items-center gap-2">
@@ -306,7 +309,9 @@ function CompanyDetail({
                     </section>
 
                     <section className="rounded-xl bg-slate-50 p-3">
-                        <h3 className="text-sm font-black">Cumplimiento del período</h3>
+                        <h3 className="text-sm font-black">
+                            Cumplimiento del período
+                        </h3>
                         <div className="mt-1 flex items-center gap-3">
                             <span className="text-3xl font-black text-emerald-600">
                                 {company.progress}%
@@ -314,8 +319,8 @@ function CompanyDetail({
                             <div className="flex-1">
                                 <ProgressBar value={company.progress} />
                                 <p className="mt-1 text-xs text-slate-500">
-                                    {done} de {company.obligations.length} obligaciones
-                                    completadas
+                                    {done} de {company.obligations.length}{' '}
+                                    obligaciones completadas
                                 </p>
                             </div>
                         </div>
@@ -339,7 +344,9 @@ function CompanyDetail({
                             key={`${task.title}-${task.due_at}`}
                             className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
                         >
-                            <span className="truncate font-bold">{task.title}</span>
+                            <span className="truncate font-bold">
+                                {task.title}
+                            </span>
                             <span className="shrink-0 text-xs text-slate-500">
                                 {formatDate(task.due_at)}
                             </span>
@@ -412,7 +419,9 @@ export default function DirectorCompanies({
         return companies.filter(
             (company) =>
                 (term === '' ||
-                    normalize(`${company.name} ${company.tax_id}`).includes(term)) &&
+                    normalize(`${company.name} ${company.tax_id}`).includes(
+                        term,
+                    )) &&
                 (office === '' || company.office === office) &&
                 (accountant === '' ||
                     (accountant === '__none'
@@ -424,8 +433,12 @@ export default function DirectorCompanies({
     }, [companies, search, office, accountant, compliance, risk]);
     const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const current = Math.min(page, pages);
-    const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-    const selected = companies.find((company) => company.id === selectedId) ?? null;
+    const visible = filtered.slice(
+        (current - 1) * PAGE_SIZE,
+        current * PAGE_SIZE,
+    );
+    const selected =
+        companies.find((company) => company.id === selectedId) ?? null;
     const pct = (value: number) =>
         summary.total ? Math.round((value / summary.total) * 100) : 0;
     const clear = () => {
@@ -514,7 +527,9 @@ export default function DirectorCompanies({
                                                 value={search}
                                                 onChange={(event) =>
                                                     onFilter(() =>
-                                                        setSearch(event.target.value),
+                                                        setSearch(
+                                                            event.target.value,
+                                                        ),
                                                     )
                                                 }
                                             />
@@ -526,11 +541,15 @@ export default function DirectorCompanies({
                                             value={office}
                                             onChange={(event) =>
                                                 onFilter(() =>
-                                                    setOffice(event.target.value),
+                                                    setOffice(
+                                                        event.target.value,
+                                                    ),
                                                 )
                                             }
                                         >
-                                            <option value="">Todas las oficinas</option>
+                                            <option value="">
+                                                Todas las oficinas
+                                            </option>
                                             {offices.map((name) => (
                                                 <option key={name} value={name}>
                                                     {name}
@@ -544,14 +563,18 @@ export default function DirectorCompanies({
                                             value={accountant}
                                             onChange={(event) =>
                                                 onFilter(() =>
-                                                    setAccountant(event.target.value),
+                                                    setAccountant(
+                                                        event.target.value,
+                                                    ),
                                                 )
                                             }
                                         >
                                             <option value="">
                                                 Todos los responsables
                                             </option>
-                                            <option value="__none">Sin asignar</option>
+                                            <option value="__none">
+                                                Sin asignar
+                                            </option>
                                             {accountants.map((name) => (
                                                 <option key={name} value={name}>
                                                     {name}
@@ -565,7 +588,9 @@ export default function DirectorCompanies({
                                             value={compliance}
                                             onChange={(event) =>
                                                 onFilter(() =>
-                                                    setCompliance(event.target.value),
+                                                    setCompliance(
+                                                        event.target.value,
+                                                    ),
                                                 )
                                             }
                                         >
@@ -594,7 +619,10 @@ export default function DirectorCompanies({
                                             <option value="">Todos</option>
                                             {(Object.keys(RISK) as Risk[]).map(
                                                 (key) => (
-                                                    <option key={key} value={key}>
+                                                    <option
+                                                        key={key}
+                                                        value={key}
+                                                    >
                                                         {RISK[key].label}
                                                     </option>
                                                 ),
@@ -608,7 +636,8 @@ export default function DirectorCompanies({
                                         onClick={clear}
                                         className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-[#8a0b0b] hover:bg-red-50"
                                     >
-                                        <FilterX className="size-4" /> Limpiar filtros
+                                        <FilterX className="size-4" /> Limpiar
+                                        filtros
                                     </button>
                                 </div>
                             </div>
@@ -630,17 +659,27 @@ export default function DirectorCompanies({
                                     <table className="w-full min-w-[900px] text-sm">
                                         <thead>
                                             <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                                                <th className="px-3 py-2">Empresa</th>
-                                                <th className="px-3 py-2">NIT</th>
-                                                <th className="px-3 py-2">Oficina</th>
+                                                <th className="px-3 py-2">
+                                                    Empresa
+                                                </th>
+                                                <th className="px-3 py-2">
+                                                    NIT
+                                                </th>
+                                                <th className="px-3 py-2">
+                                                    Oficina
+                                                </th>
                                                 <th className="px-3 py-2">
                                                     Responsable contable
                                                 </th>
-                                                <th className="px-3 py-2">Cumplimiento</th>
+                                                <th className="px-3 py-2">
+                                                    Cumplimiento
+                                                </th>
                                                 <th className="px-3 py-2">
                                                     Avance período
                                                 </th>
-                                                <th className="px-3 py-2">Riesgo</th>
+                                                <th className="px-3 py-2">
+                                                    Riesgo
+                                                </th>
                                                 <th className="px-3 py-2">
                                                     Próxima obligación
                                                 </th>
@@ -652,7 +691,9 @@ export default function DirectorCompanies({
                                                 <tr
                                                     key={company.id}
                                                     onClick={() =>
-                                                        setSelectedId(company.id)
+                                                        setSelectedId(
+                                                            company.id,
+                                                        )
                                                     }
                                                     className={`cursor-pointer transition hover:bg-[#fbf5f4] ${selectedId === company.id ? 'bg-red-50/70' : ''}`}
                                                 >
@@ -686,21 +727,28 @@ export default function DirectorCompanies({
                                                             />
                                                             {
                                                                 COMPLIANCE[
-                                                                    company.compliance
+                                                                    company
+                                                                        .compliance
                                                                 ].label
                                                             }
                                                         </span>
                                                     </td>
                                                     <td className="px-3 py-3">
                                                         <ProgressBar
-                                                            value={company.progress}
+                                                            value={
+                                                                company.progress
+                                                            }
                                                         />
                                                     </td>
                                                     <td className="px-3 py-3">
                                                         <span
                                                             className={`rounded-full px-3 py-1 text-xs font-bold ${RISK[company.risk].style}`}
                                                         >
-                                                            {RISK[company.risk].label}
+                                                            {
+                                                                RISK[
+                                                                    company.risk
+                                                                ].label
+                                                            }
                                                         </span>
                                                     </td>
                                                     <td
@@ -734,7 +782,8 @@ export default function DirectorCompanies({
                                         Mostrando{' '}
                                         {filtered.length === 0
                                             ? 0
-                                            : (current - 1) * PAGE_SIZE + 1}{' '}
+                                            : (current - 1) * PAGE_SIZE +
+                                              1}{' '}
                                         a{' '}
                                         {Math.min(
                                             current * PAGE_SIZE,
@@ -743,16 +792,21 @@ export default function DirectorCompanies({
                                         de {filtered.length} empresas
                                     </span>
                                     <div className="flex items-center gap-1">
-                                        {Array.from({ length: pages }, (_, index) => (
-                                            <button
-                                                key={index}
-                                                type="button"
-                                                onClick={() => setPage(index + 1)}
-                                                className={`size-8 rounded-lg text-sm font-bold ${current === index + 1 ? 'bg-[#8a0b0b] text-white' : 'border border-[#e4dbd6] text-slate-600'}`}
-                                            >
-                                                {index + 1}
-                                            </button>
-                                        ))}
+                                        {Array.from(
+                                            { length: pages },
+                                            (_, index) => (
+                                                <button
+                                                    key={index}
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setPage(index + 1)
+                                                    }
+                                                    className={`size-8 rounded-lg text-sm font-bold ${current === index + 1 ? 'bg-[#8a0b0b] text-white' : 'border border-[#e4dbd6] text-slate-600'}`}
+                                                >
+                                                    {index + 1}
+                                                </button>
+                                            ),
+                                        )}
                                     </div>
                                 </div>
                             </div>

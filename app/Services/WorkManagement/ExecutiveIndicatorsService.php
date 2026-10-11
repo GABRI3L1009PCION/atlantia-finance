@@ -6,6 +6,7 @@ namespace App\Services\WorkManagement;
 
 use App\Models\Organization;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 /** Operational indicators of the firm for the director: compliance, workload, growth and productivity. Counts and rates only. */
@@ -23,11 +24,11 @@ class ExecutiveIndicatorsService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $offices = collect($executive['offices']);
         $companies = collect($executive['companies']);
         $workload = collect($executive['workload']);
-        $productivity = collect($executive['productivity'] ?? [])->filter(fn (array $row): bool => $row['completed'] > 0);
+        $productivity = collect($executive['productivity'])->filter(fn (array $row): bool => $row['completed'] > 0);
         $months = collect(range(5, 0))->map(fn (int $back) => now()->startOfMonth()->subMonths($back));
         $officeIds = $offices->pluck('id')->map(fn ($id): int => (int) $id)->all();
 
@@ -60,14 +61,14 @@ class ExecutiveIndicatorsService
             ])->values()->all(),
             'office_mix' => $offices->map(fn (array $office): array => ['name' => $office['name'], 'value' => (int) $office['companies']])->values()->all(),
             'task_columns' => array_values(self::TASK_COLUMNS),
-            'task_heatmap' => $this->taskHeatmap($offices->all()),
+            'task_heatmap' => $this->taskHeatmap(array_values($offices->all())),
             'office_table' => $offices->map(fn (array $office): array => [
                 'name' => $office['name'],
                 'companies' => (int) $office['companies'],
                 'closed' => (int) ($office['completed_companies'] ?? 0),
                 'progress' => (int) $office['progress'],
                 'overdue' => (int) $office['overdue'],
-                'load' => $this->officeLoad((int) $office['id'], $workload->all()),
+                'load' => $this->officeLoad((int) $office['id'], array_values($workload->all())),
                 'users' => (int) ($office['users'] ?? 0),
             ])->values()->all(),
             'team' => $productivity->sortByDesc('on_time_rate')->take(6)->map(fn (array $row): array => [
@@ -75,11 +76,11 @@ class ExecutiveIndicatorsService
                 'completed' => (int) $row['completed'],
                 'on_time_rate' => (int) $row['on_time_rate'],
             ])->values()->all(),
-            'insights' => $this->insights($offices->all(), $companies->all(), $workload->all(), $growth, $totalCompanies - $quarterAgo),
+            'insights' => $this->insights(array_values($offices->all()), array_values($companies->all()), array_values($workload->all()), $growth, $totalCompanies - $quarterAgo),
         ];
     }
 
-    private function closedShare(int $officeId, $month): int
+    private function closedShare(int $officeId, CarbonInterface $month): int
     {
         $total = (int) DB::table('companies')->where('office_id', $officeId)->count();
 

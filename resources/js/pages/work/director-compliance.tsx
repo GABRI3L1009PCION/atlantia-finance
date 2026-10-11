@@ -53,7 +53,14 @@ type Props = {
 
 const card =
     'rounded-2xl border border-[#ebe3df] bg-white p-5 shadow-[0_10px_28px_-22px_rgba(49,11,8,.55)]';
-const PALETTE = ['#16a34a', '#f0a93b', '#2563eb', '#7c3aed', '#ee6c3a', '#94a3b8'];
+const PALETTE = [
+    '#16a34a',
+    '#f0a93b',
+    '#2563eb',
+    '#7c3aed',
+    '#ee6c3a',
+    '#94a3b8',
+];
 const DOT: Record<State, string> = {
     done: '#16a34a',
     pending: '#16a34a',
@@ -114,14 +121,18 @@ function Kpi({
                 {icon}
             </span>
             <div className="min-w-0 flex-1">
-                <p className={`truncate text-sm font-bold ${bad ? 'text-red-600' : 'text-emerald-700'}`}>
+                <p
+                    className={`truncate text-sm font-bold ${bad ? 'text-red-600' : 'text-emerald-700'}`}
+                >
                     {label}
                 </p>
                 <div className="flex items-end justify-between gap-2">
                     <p className="text-3xl leading-tight font-black text-[#061633]">
                         {value}
                     </p>
-                    <p className={`text-lg font-black ${bad ? 'text-red-600' : 'text-emerald-600'}`}>
+                    <p
+                        className={`text-lg font-black ${bad ? 'text-red-600' : 'text-emerald-600'}`}
+                    >
                         {rate}
                     </p>
                 </div>
@@ -152,7 +163,11 @@ function CalendarCard({ calendar }: { calendar: Props['calendar'] }) {
         ...Array.from({ length: first }, () => null),
         ...Array.from({ length: days }, (_, index) => index + 1),
     ];
-    const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayKey = dateKey(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+    );
     const counts = { ok: 0, soon: 0, late: 0 };
 
     calendar.forEach((item) => {
@@ -179,7 +194,9 @@ function CalendarCard({ calendar }: { calendar: Props['calendar'] }) {
     return (
         <div className={card}>
             <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-black">Calendario de obligaciones</h2>
+                <h2 className="text-lg font-black">
+                    Calendario de obligaciones
+                </h2>
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
@@ -216,14 +233,21 @@ function CalendarCard({ calendar }: { calendar: Props['calendar'] }) {
             </div>
             <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-slate-100 text-center text-sm">
                 {WEEKDAYS.map((day) => (
-                    <div key={day} className="bg-slate-50 py-2 text-xs font-bold text-slate-600">
+                    <div
+                        key={day}
+                        className="bg-slate-50 py-2 text-xs font-bold text-slate-600"
+                    >
                         {day}
                     </div>
                 ))}
                 {cells.map((day, index) => {
-                    const key = day ? dateKey(cursor.year, cursor.month, day) : '';
+                    const key = day
+                        ? dateKey(cursor.year, cursor.month, day)
+                        : '';
                     const states = day ? (byDay.get(key) ?? []) : [];
-                    const unique = Array.from(new Set(states.map((s) => DOT[s])));
+                    const unique = Array.from(
+                        new Set(states.map((s) => DOT[s])),
+                    );
 
                     return (
                         <div
@@ -232,7 +256,9 @@ function CalendarCard({ calendar }: { calendar: Props['calendar'] }) {
                         >
                             {day && (
                                 <>
-                                    <p className={`font-semibold ${key === todayKey ? 'text-[#8a0b0b]' : 'text-slate-700'}`}>
+                                    <p
+                                        className={`font-semibold ${key === todayKey ? 'text-[#8a0b0b]' : 'text-slate-700'}`}
+                                    >
                                         {day}
                                     </p>
                                     <div className="mt-1 flex justify-center gap-1">
@@ -252,13 +278,16 @@ function CalendarCard({ calendar }: { calendar: Props['calendar'] }) {
             </div>
             <div className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-slate-600">
                 <span className="flex items-center gap-1.5">
-                    <i className="size-2.5 rounded-full bg-emerald-600" /> Al día ({counts.ok})
+                    <i className="size-2.5 rounded-full bg-emerald-600" /> Al
+                    día ({counts.ok})
                 </span>
                 <span className="flex items-center gap-1.5">
-                    <i className="size-2.5 rounded-full bg-amber-400" /> Por vencer ({counts.soon})
+                    <i className="size-2.5 rounded-full bg-amber-400" /> Por
+                    vencer ({counts.soon})
                 </span>
                 <span className="flex items-center gap-1.5">
-                    <i className="size-2.5 rounded-full bg-red-600" /> Vencida ({counts.late})
+                    <i className="size-2.5 rounded-full bg-red-600" /> Vencida (
+                    {counts.late})
                 </span>
             </div>
         </div>
@@ -276,7 +305,14 @@ function TypesDonut({ items }: { items: Props['types'] }) {
     return (
         <div className="flex items-center gap-4">
             <svg viewBox="0 0 130 130" className="size-36 shrink-0">
-                <circle cx="65" cy="65" r={radius} fill="none" stroke="#eef1f3" strokeWidth="16" />
+                <circle
+                    cx="65"
+                    cy="65"
+                    r={radius}
+                    fill="none"
+                    stroke="#eef1f3"
+                    strokeWidth="16"
+                />
                 {items.map((item, i) => (
                     <circle
                         key={item.label}
@@ -287,14 +323,26 @@ function TypesDonut({ items }: { items: Props['types'] }) {
                         stroke={PALETTE[i % PALETTE.length]}
                         strokeWidth="16"
                         strokeDasharray={`${lengths[i]} ${circumference - lengths[i]}`}
-                        strokeDashoffset={-lengths.slice(0, i).reduce((s, v) => s + v, 0)}
+                        strokeDashoffset={
+                            -lengths.slice(0, i).reduce((s, v) => s + v, 0)
+                        }
                         transform="rotate(-90 65 65)"
                     />
                 ))}
-                <text x="65" y="64" textAnchor="middle" className="fill-[#061633] text-[22px] font-black">
+                <text
+                    x="65"
+                    y="64"
+                    textAnchor="middle"
+                    className="fill-[#061633] text-[22px] font-black"
+                >
                     {total}
                 </text>
-                <text x="65" y="80" textAnchor="middle" className="fill-slate-500 text-[10px]">
+                <text
+                    x="65"
+                    y="80"
+                    textAnchor="middle"
+                    className="fill-slate-500 text-[10px]"
+                >
                     en total
                 </text>
             </svg>
@@ -307,7 +355,8 @@ function TypesDonut({ items }: { items: Props['types'] }) {
                         />
                         <span className="flex-1 truncate">{item.label}</span>
                         <span className="text-slate-500">
-                            {total ? Math.round((item.value / total) * 100) : 0}% ({item.value})
+                            {total ? Math.round((item.value / total) * 100) : 0}
+                            % ({item.value})
                         </span>
                     </li>
                 ))}
@@ -348,11 +397,27 @@ function priority(item: Obligation): { text: string; style: string } {
 
 function exportCsv(rows: Obligation[]) {
     const lines = rows.map((item) =>
-        [item.company, item.office, item.type_label, item.due_on, item.responsible ?? 'Sin asignar', stateLabel(item).text, priority(item).text]
+        [
+            item.company,
+            item.office,
+            item.type_label,
+            item.due_on,
+            item.responsible ?? 'Sin asignar',
+            stateLabel(item).text,
+            priority(item).text,
+        ]
             .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
             .join(','),
     );
-    const header = ['Empresa', 'Oficina', 'Obligación', 'Vencimiento', 'Responsable', 'Estado', 'Prioridad'].join(',');
+    const header = [
+        'Empresa',
+        'Oficina',
+        'Obligación',
+        'Vencimiento',
+        'Responsable',
+        'Estado',
+        'Prioridad',
+    ].join(',');
     const blob = new Blob(['﻿' + [header, ...lines].join('\n')], {
         type: 'text/csv;charset=utf-8',
     });
@@ -376,7 +441,10 @@ export default function DirectorCompliance({
     const [page, setPage] = useState(1);
     const pages = Math.max(1, Math.ceil(obligations.length / PAGE_SIZE));
     const current = Math.min(page, pages);
-    const visible = obligations.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+    const visible = obligations.slice(
+        (current - 1) * PAGE_SIZE,
+        current * PAGE_SIZE,
+    );
 
     return (
         <>
@@ -403,7 +471,8 @@ export default function DirectorCompliance({
                             onClick={() => exportCsv(obligations)}
                             className="inline-flex items-center gap-2 rounded-xl border border-[#e4dbd6] bg-white px-4 py-2 text-sm font-bold text-[#8a0b0b]"
                         >
-                            <Download className="size-4" /> Generar reporte de cumplimiento
+                            <Download className="size-4" /> Generar reporte de
+                            cumplimiento
                         </button>
                     </header>
 
@@ -474,9 +543,11 @@ export default function DirectorCompliance({
                                                         style={{
                                                             width: `${office.value}%`,
                                                             background:
-                                                                office.value >= 85
+                                                                office.value >=
+                                                                85
                                                                     ? '#16a34a'
-                                                                    : office.value >= 60
+                                                                    : office.value >=
+                                                                        60
                                                                       ? '#f0a93b'
                                                                       : '#dc2626',
                                                         }}
@@ -516,14 +587,19 @@ export default function DirectorCompliance({
                                                 className={`mt-0.5 size-5 shrink-0 ${alert.tone === 'red' ? 'text-red-600' : 'text-amber-500'}`}
                                             />
                                             <div>
-                                                <p className="text-sm font-black">{alert.title}</p>
-                                                <p className="text-xs text-slate-600">{alert.detail}</p>
+                                                <p className="text-sm font-black">
+                                                    {alert.title}
+                                                </p>
+                                                <p className="text-xs text-slate-600">
+                                                    {alert.detail}
+                                                </p>
                                             </div>
                                         </li>
                                     ))}
                                     {alerts.length === 0 && (
                                         <li className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-                                            <CheckCircle2 className="size-5" /> Sin alertas de cumplimiento.
+                                            <CheckCircle2 className="size-5" />{' '}
+                                            Sin alertas de cumplimiento.
                                         </li>
                                     )}
                                 </ul>
@@ -535,13 +611,20 @@ export default function DirectorCompliance({
                                 </h2>
                                 <ul className="space-y-3">
                                     {suggestions.map((item) => (
-                                        <li key={item.title} className="flex items-start gap-3">
+                                        <li
+                                            key={item.title}
+                                            className="flex items-start gap-3"
+                                        >
                                             <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-500">
                                                 <Lightbulb className="size-5" />
                                             </span>
                                             <div>
-                                                <p className="text-sm font-black">{item.title}</p>
-                                                <p className="text-xs text-slate-600">{item.detail}</p>
+                                                <p className="text-sm font-black">
+                                                    {item.title}
+                                                </p>
+                                                <p className="text-xs text-slate-600">
+                                                    {item.detail}
+                                                </p>
                                             </div>
                                         </li>
                                     ))}
@@ -556,14 +639,20 @@ export default function DirectorCompliance({
                     </section>
 
                     <section className={`${card} overflow-x-auto`}>
-                        <h2 className="mb-3 text-lg font-black">Obligaciones pendientes</h2>
+                        <h2 className="mb-3 text-lg font-black">
+                            Obligaciones pendientes
+                        </h2>
                         <table className="w-full min-w-[820px] text-sm">
                             <thead>
                                 <tr className="bg-slate-50 text-left text-xs text-slate-600">
                                     <th className="px-3 py-2">Empresa</th>
                                     <th className="px-3 py-2">Oficina</th>
-                                    <th className="px-3 py-2">Tipo de obligación</th>
-                                    <th className="px-3 py-2">Fecha de vencimiento</th>
+                                    <th className="px-3 py-2">
+                                        Tipo de obligación
+                                    </th>
+                                    <th className="px-3 py-2">
+                                        Fecha de vencimiento
+                                    </th>
                                     <th className="px-3 py-2">Responsable</th>
                                     <th className="px-3 py-2">Estado</th>
                                     <th className="px-3 py-2">Prioridad</th>
@@ -576,22 +665,36 @@ export default function DirectorCompliance({
 
                                     return (
                                         <tr key={item.id}>
-                                            <td className="px-3 py-3 font-black">{item.company}</td>
-                                            <td className="px-3 py-3 text-slate-600">{item.office}</td>
-                                            <td className="px-3 py-3">{item.name}</td>
-                                            <td className="px-3 py-3">{formatDate(item.due_on)}</td>
+                                            <td className="px-3 py-3 font-black">
+                                                {item.company}
+                                            </td>
+                                            <td className="px-3 py-3 text-slate-600">
+                                                {item.office}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                {item.name}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                {formatDate(item.due_on)}
+                                            </td>
                                             <td className="px-3 py-3">
                                                 {item.responsible ?? (
-                                                    <span className="text-slate-400">Sin asignar</span>
+                                                    <span className="text-slate-400">
+                                                        Sin asignar
+                                                    </span>
                                                 )}
                                             </td>
                                             <td className="px-3 py-3">
-                                                <span className={`rounded-full px-3 py-1 text-xs font-bold ${state.style}`}>
+                                                <span
+                                                    className={`rounded-full px-3 py-1 text-xs font-bold ${state.style}`}
+                                                >
                                                     {state.text}
                                                 </span>
                                             </td>
                                             <td className="px-3 py-3">
-                                                <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${level.style}`}>
+                                                <span
+                                                    className={`rounded-md px-2.5 py-1 text-xs font-bold ${level.style}`}
+                                                >
                                                     {level.text}
                                                 </span>
                                             </td>
@@ -600,7 +703,10 @@ export default function DirectorCompliance({
                                 })}
                                 {visible.length === 0 && (
                                     <tr>
-                                        <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                                        <td
+                                            colSpan={7}
+                                            className="px-3 py-10 text-center text-slate-500"
+                                        >
                                             No hay obligaciones pendientes.
                                         </td>
                                     </tr>
@@ -608,7 +714,9 @@ export default function DirectorCompliance({
                             </tbody>
                         </table>
                         <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                            <span>{obligations.length} obligaciones pendientes</span>
+                            <span>
+                                {obligations.length} obligaciones pendientes
+                            </span>
                             <div className="flex gap-1">
                                 {Array.from({ length: pages }, (_, index) => (
                                     <button

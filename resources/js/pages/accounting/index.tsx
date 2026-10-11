@@ -222,7 +222,11 @@ export default function AccountingIndex({
                         {companies.data.map((company) => (
                             <CompanyCard
                                 key={company.public_id}
-                                href={readOnly ? null : show.url(company.public_id)}
+                                href={
+                                    readOnly
+                                        ? null
+                                        : show.url(company.public_id)
+                                }
                             >
                                 <div className="flex justify-between">
                                     <span className="rounded-xl bg-[#f5e7e7] p-3 text-[#640000]">

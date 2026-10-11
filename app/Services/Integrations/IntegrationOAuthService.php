@@ -90,6 +90,7 @@ class IntegrationOAuthService
             'gmail' => 'Conectado a Gmail de '.$this->check(Http::withToken($token)->get('https://gmail.googleapis.com/gmail/v1/users/me/profile'), 'emailAddress'),
             'outlook' => 'Conectado a Outlook de '.$this->check(Http::withToken($token)->get('https://graph.microsoft.com/v1.0/me'), 'mail', 'userPrincipalName'),
             'dropbox' => 'Conectado a Dropbox de '.$this->check(Http::withToken($token)->withBody('null', 'application/json')->post('https://api.dropboxapi.com/2/users/get_current_account'), 'email'),
+            default => abort(404),
         };
     }
 
@@ -163,7 +164,16 @@ class IntegrationOAuthService
             throw ValidationException::withMessages(['oauth' => 'El proveedor rechazó la autorización ('.($response->json('error_description') ?? $response->json('error') ?? $response->status()).').']);
         }
 
-        return array_filter(['access_token' => $response->json('access_token'), 'refresh_token' => $response->json('refresh_token'), 'expires_at' => now()->addSeconds((int) ($response->json('expires_in') ?? 3600))->timestamp]);
+        $tokens = [
+            'access_token' => (string) $response->json('access_token'),
+            'expires_at' => now()->addSeconds((int) ($response->json('expires_in') ?? 3600))->getTimestamp(),
+        ];
+
+        if ($response->json('refresh_token')) {
+            $tokens['refresh_token'] = (string) $response->json('refresh_token');
+        }
+
+        return $tokens;
     }
 
     private function check(Response $response, string ...$keys): string

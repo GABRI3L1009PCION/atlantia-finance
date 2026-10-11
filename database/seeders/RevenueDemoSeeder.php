@@ -41,7 +41,7 @@ class RevenueDemoSeeder extends Seeder
                     'company_id' => $contract->company_id,
                     'crm_contract_id' => $contract->id,
                     'number' => 'COB-'.str_pad((string) $number++, 4, '0', STR_PAD_LEFT),
-                    'concept' => $contract->services.' – '.ucfirst($month->locale('es')->translatedFormat('F Y')),
+                    'concept' => $contract->services.' – '.ucfirst($month->settings(['locale' => 'es'])->translatedFormat('F Y')),
                     'amount_cents' => $contract->monthly_fee_cents,
                     'issued_on' => $month->toDateString(),
                     'due_on' => $due->toDateString(),

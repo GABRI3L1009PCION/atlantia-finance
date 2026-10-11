@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use stdClass;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FirmProfileController extends Controller
@@ -146,7 +147,7 @@ class FirmProfileController extends Controller
     }
 
     /** The profile row, created from the organization's own data the first time it is needed. */
-    private function profile(Organization $organization): object
+    private function profile(Organization $organization): stdClass
     {
         $existing = DB::table('firm_profiles')->where('organization_id', $organization->id)->first();
 

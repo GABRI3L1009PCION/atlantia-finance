@@ -56,7 +56,7 @@ class AccountingController extends Controller
 
         return Inertia::render('accounting/index', [
             'organizationName' => $org->name,
-            'canManage' => $org->pivot->role === 'owner' && ! app(WorkAuthorizationService::class)->isExecutiveReadOnly($org, $request->user()),
+            'canManage' => $org->pivot->role === 'owner',
             'companies' => $companies->orderBy('companies.name')->paginate(12)->withQueryString(),
             'offices' => $org->pivot->role === 'owner' ? $org->offices()->where('status', 'active')->get(['id', 'name']) : [],
             'search' => $search,

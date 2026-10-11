@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 /** Delivery performance of the team for the director, from completed tasks: volume, punctuality, cycle time and where help is needed. */
 class ProductivityOverviewService
@@ -23,7 +24,7 @@ class ProductivityOverviewService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $officeNames = collect($executive['offices'])->pluck('name', 'id');
         $people = collect($executive['workload'])->keyBy('user_id');
         $since = now()->subWeeks(self::WEEKS)->startOfWeek();
@@ -32,14 +33,14 @@ class ProductivityOverviewService
             ->where(fn ($query) => $query->whereNotNull('completed_at')->orWhereIn('status', ['pending', 'in_progress', 'ready_for_review', 'in_review', 'changes_requested', 'blocked']))
             ->get(['assigned_to', 'office_id', 'module', 'status', 'due_at', 'created_at', 'completed_at']);
 
-        $done = $tasks->filter(fn (object $task): bool => $task->completed_at !== null && Carbon::parse($task->completed_at)->gte($since));
-        $open = $tasks->filter(fn (object $task): bool => $task->completed_at === null);
-        $onTime = fn (Collection $set): int => $set->isEmpty() ? 0 : (int) round($set->filter(fn (object $task): bool => $task->due_at === null || $task->completed_at <= $task->due_at)->count() / $set->count() * 100);
-        $cycle = fn (Collection $set): float => $set->isEmpty() ? 0.0 : round((float) $set->avg(fn (object $task): float => max(0, Carbon::parse($task->created_at)->diffInHours(Carbon::parse($task->completed_at)) / 24)), 1);
+        $done = $tasks->filter(fn (stdClass $task): bool => $task->completed_at !== null && Carbon::parse($task->completed_at)->gte($since));
+        $open = $tasks->filter(fn (stdClass $task): bool => $task->completed_at === null);
+        $onTime = fn (Collection $set): int => $set->isEmpty() ? 0 : (int) round($set->filter(fn (stdClass $task): bool => $task->due_at === null || $task->completed_at <= $task->due_at)->count() / $set->count() * 100);
+        $cycle = fn (Collection $set): float => $set->isEmpty() ? 0.0 : round((float) $set->avg(fn (stdClass $task): float => max(0, Carbon::parse($task->created_at)->diffInHours(Carbon::parse($task->completed_at)) / 24)), 1);
 
         $weeks = collect(range(self::WEEKS - 1, 0))->map(function (int $back) use ($done, $onTime): array {
             $start = now()->subWeeks($back)->startOfWeek();
-            $slice = $done->filter(fn (object $task): bool => Carbon::parse($task->completed_at)->between($start, $start->copy()->endOfWeek()));
+            $slice = $done->filter(fn (stdClass $task): bool => Carbon::parse($task->completed_at)->between($start, $start->copy()->endOfWeek()));
 
             return ['label' => $start->format('d/m'), 'completed' => $slice->count(), 'on_time' => $onTime($slice)];
         })->values();
@@ -85,7 +86,7 @@ class ProductivityOverviewService
             'weeks' => $weeks->all(),
             'by_person' => $perPerson->take(6)->all(),
             'by_office' => $done->groupBy('office_id')->map(fn (Collection $set, $officeId): array => ['name' => $officeNames[$officeId] ?? 'Sin oficina', 'value' => $set->count()])->sortByDesc('value')->values()->all(),
-            'by_role' => $done->groupBy(fn (object $task): string => (string) ($people->get((int) $task->assigned_to)['role_label'] ?? 'Sin asignar'))->map(fn (Collection $set, string $role): array => ['name' => $role, 'value' => $set->count()])->sortByDesc('value')->values()->all(),
+            'by_role' => $done->groupBy(fn (stdClass $task): string => (string) ($people->get((int) $task->assigned_to)['role_label'] ?? 'Sin asignar'))->map(fn (Collection $set, string $role): array => ['name' => $role, 'value' => $set->count()])->sortByDesc('value')->values()->all(),
             'by_module' => $done->groupBy('module')->map(fn (Collection $set, $module): array => ['name' => ucfirst(str_replace('_', ' ', (string) $module)), 'value' => $set->count(), 'on_time' => $onTime($set)])->sortByDesc('value')->values()->all(),
             'top' => $perPerson->take(5)->all(),
             'support' => $support->all(),
@@ -94,8 +95,8 @@ class ProductivityOverviewService
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $perPerson
-     * @param  Collection<int, array<string, mixed>>  $support
+     * @param  Collection<int, covariant array<string, mixed>>  $perPerson
+     * @param  Collection<int, covariant array<string, mixed>>  $support
      * @return list<array{tone: string, title: string, detail: string}>
      */
     private function recommendations(Collection $perPerson, Collection $support, int $onTime, int $completed): array

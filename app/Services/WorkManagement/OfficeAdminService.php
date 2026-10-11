@@ -337,7 +337,7 @@ class OfficeAdminService
                 ...$member,
                 'utilization_percentage' => $load['utilization_percentage'] ?? null,
                 'load_status' => $load['status'] ?? null,
-                'open_tasks' => $load === null ? null : (int) collect($load['tasks'])->except(['overdue', 'completed_month'])->sum(),
+                'open_tasks' => $load === null ? null : (int) array_sum(array_diff_key($load['tasks'], ['overdue' => 0, 'completed_month' => 0])),
                 'overdue_tasks' => $load === null ? null : (int) ($load['tasks']['overdue'] ?? 0),
             ];
         })->values()->all();

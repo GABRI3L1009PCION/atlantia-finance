@@ -28,6 +28,33 @@ class WorkDashboardService
     ) {}
 
     /**
+     * The executive dashboard reduced to the sections the director screens read, each one guaranteed to be a plain
+     * list or map, so those screens can process it without checking types again.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{companies: list<array<string, mixed>>, offices: list<array<string, mixed>>, workload: list<array<string, mixed>>, productivity: list<array<string, mixed>>, receivables: list<array<string, mixed>>, payables: list<array<string, mixed>>, summary: array<string, mixed>, filters: array<string, mixed>, firm: array<string, mixed>, selectorOptions: array<string, mixed>}
+     */
+    public function executiveSnapshot(Organization $organization, User $user, array $filters = []): array
+    {
+        $data = $this->dashboard($organization, $user, 'executive', $filters);
+        $rows = static fn (mixed $value): array => is_array($value) ? array_values(array_filter($value, 'is_array')) : [];
+        $map = static fn (mixed $value): array => is_array($value) ? $value : [];
+
+        return [
+            'companies' => $rows($data['companies'] ?? []),
+            'offices' => $rows($data['offices'] ?? []),
+            'workload' => $rows($data['workload'] ?? []),
+            'productivity' => $rows($data['productivity'] ?? []),
+            'receivables' => $rows($data['receivables'] ?? []),
+            'payables' => $rows($data['payables'] ?? []),
+            'summary' => $map($data['summary'] ?? []),
+            'filters' => $map($data['filters'] ?? []),
+            'firm' => $map($data['firm'] ?? []),
+            'selectorOptions' => $map($data['selectorOptions'] ?? []),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
@@ -213,11 +240,13 @@ class WorkDashboardService
 
             return ['label' => $labels[$month->month - 1], 'value' => $total > 0 ? (int) round($closed / $total * 100) : 0];
         })->values()->all();
+        $trend = array_values($trend);
 
         $growth = $months->map(fn ($month): array => [
             'label' => $labels[$month->month - 1],
             'total' => $ids === [] ? 0 : (int) DB::table('companies')->whereIn('id', $ids)->where('created_at', '<=', $month->copy()->endOfMonth())->count(),
         ])->values()->all();
+        $growth = array_values($growth);
 
         $limit = app(WorkspaceContext::class)->limit($organization, 'companies');
         $limit = $limit > 0 && $limit !== PHP_INT_MAX ? $limit : null;

@@ -60,7 +60,9 @@ export default function TwoFactorRecoveryCodes({
                     Códigos de recuperación 2FA
                 </CardTitle>
                 <CardDescription>
-                    Los códigos de recuperación te permiten recuperar el acceso si pierdes tu dispositivo 2FA. Guárdalos en un administrador de contraseñas seguro.
+                    Los códigos de recuperación te permiten recuperar el acceso
+                    si pierdes tu dispositivo 2FA. Guárdalos en un administrador
+                    de contraseñas seguro.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -75,7 +77,8 @@ export default function TwoFactorRecoveryCodes({
                             className="size-4"
                             aria-hidden="true"
                         />
-                        {codesAreVisible ? 'Ocultar' : 'Ver'} códigos de recuperación
+                        {codesAreVisible ? 'Ocultar' : 'Ver'} códigos de
+                        recuperación
                     </Button>
 
                     {canRegenerateCodes && (
@@ -144,7 +147,9 @@ export default function TwoFactorRecoveryCodes({
 
                                 <div className="text-xs text-muted-foreground select-none">
                                     <p id="regenerate-warning">
-                                        Cada código de recuperación se usa una sola vez y se elimina después. Si necesitas más, pulsa{' '}
+                                        Cada código de recuperación se usa una
+                                        sola vez y se elimina después. Si
+                                        necesitas más, pulsa{' '}
                                         <span className="font-bold">
                                             Regenerar códigos
                                         </span>{' '}

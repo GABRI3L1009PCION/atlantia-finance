@@ -39,11 +39,11 @@ class RiskMapService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $companies = collect($executive['companies']);
         $today = now()->startOfDay();
-        $receivables = collect($executive['receivables'] ?? [])->keyBy('id');
-        $payables = collect($executive['payables'] ?? [])->keyBy('id');
+        $receivables = collect($executive['receivables'])->keyBy('id');
+        $payables = collect($executive['payables'])->keyBy('id');
         $loads = collect($executive['workload'])->keyBy('name');
         $obligations = DB::table('fiscal_obligations')->whereIn('company_id', $companies->pluck('id')->all())
             ->whereNull('filed_on')->whereNull('completed_at')

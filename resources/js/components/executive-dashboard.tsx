@@ -1,9 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import {
-    Download,
-    FileSpreadsheet,
-    FileText,
-} from 'lucide-react';
+import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DirectorOverview } from '@/components/director-overview';
@@ -312,63 +308,65 @@ export function ExecutiveDashboard({
                         scopeLabel={scopeLabel}
                         periodName={periodName}
                         filters={
-                        <div className="flex flex-wrap items-center gap-2 xl:hidden">
-                            <label
-                                className="sr-only"
-                                htmlFor="executive-office"
-                            >
-                                Oficina
-                            </label>
-                            <select
-                                id="executive-office"
-                                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#395277] shadow-sm"
-                                value={selectedOffice}
-                                onChange={(event) =>
-                                    updateFilters({
-                                        office_id: event.target.value,
-                                    })
-                                }
-                            >
-                                <option value="">Toda la organización</option>
-                                {dashboard.selectorOptions?.offices.map(
-                                    (office) => (
-                                        <option
-                                            key={office.id}
-                                            value={office.id}
-                                        >
-                                            {office.name}
-                                        </option>
-                                    ),
-                                )}
-                            </select>
-                            <label
-                                className="sr-only"
-                                htmlFor="executive-period"
-                            >
-                                Período
-                            </label>
-                            <select
-                                id="executive-period"
-                                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#395277] shadow-sm"
-                                value={selectedPeriod}
-                                onChange={(event) =>
-                                    updateFilters({
-                                        period: event.target.value,
-                                    })
-                                }
-                            >
-                                {dashboard.selectorOptions?.periods.map(
-                                    (period) => (
-                                        <option
-                                            key={period.key}
-                                            value={period.key}
-                                        >
-                                            {period.name}
-                                        </option>
-                                    ),
-                                )}
-                            </select>
-                        </div>
+                            <div className="flex flex-wrap items-center gap-2 xl:hidden">
+                                <label
+                                    className="sr-only"
+                                    htmlFor="executive-office"
+                                >
+                                    Oficina
+                                </label>
+                                <select
+                                    id="executive-office"
+                                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#395277] shadow-sm"
+                                    value={selectedOffice}
+                                    onChange={(event) =>
+                                        updateFilters({
+                                            office_id: event.target.value,
+                                        })
+                                    }
+                                >
+                                    <option value="">
+                                        Toda la organización
+                                    </option>
+                                    {dashboard.selectorOptions?.offices.map(
+                                        (office) => (
+                                            <option
+                                                key={office.id}
+                                                value={office.id}
+                                            >
+                                                {office.name}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                                <label
+                                    className="sr-only"
+                                    htmlFor="executive-period"
+                                >
+                                    Período
+                                </label>
+                                <select
+                                    id="executive-period"
+                                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-[#395277] shadow-sm"
+                                    value={selectedPeriod}
+                                    onChange={(event) =>
+                                        updateFilters({
+                                            period: event.target.value,
+                                        })
+                                    }
+                                >
+                                    {dashboard.selectorOptions?.periods.map(
+                                        (period) => (
+                                            <option
+                                                key={period.key}
+                                                value={period.key}
+                                            >
+                                                {period.name}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                            </div>
                         }
                     />
 
@@ -876,7 +874,6 @@ export function ExecutiveDashboard({
                                 </table>
                             </div>
                         </div>
-
                     </section>
 
                     <section

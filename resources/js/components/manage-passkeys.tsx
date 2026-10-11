@@ -1,9 +1,9 @@
 import { router } from '@inertiajs/react';
 import { KeyRound } from 'lucide-react';
 import { destroy } from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyRegistrationController';
-import { SettingsCard } from '@/components/settings-card';
 import PasskeyItem from '@/components/passkey-item';
 import PasskeyRegistration from '@/components/passkey-register';
+import { SettingsCard } from '@/components/settings-card';
 import type { Passkey } from '@/types/auth';
 
 export type Props = {
@@ -44,7 +44,11 @@ export default function ManagePasskeys(props: Props) {
     }
 
     return (
-        <SettingsCard icon={KeyRound} title="Llaves de acceso" description="Administra tus llaves de acceso para ingresar sin contraseña">
+        <SettingsCard
+            icon={KeyRound}
+            title="Llaves de acceso"
+            description="Administra tus llaves de acceso para ingresar sin contraseña"
+        >
             <div className="mb-5 overflow-hidden rounded-lg border border-border">
                 {passkeys.length > 0 ? (
                     passkeys.map((passkey) => (
@@ -57,7 +61,8 @@ export default function ManagePasskeys(props: Props) {
                 ) : (
                     <EmptyState />
                 )}
-            </div>            <PasskeyRegistration onSuccess={handleRegisterSuccess} />
+            </div>{' '}
+            <PasskeyRegistration onSuccess={handleRegisterSuccess} />
         </SettingsCard>
     );
 }

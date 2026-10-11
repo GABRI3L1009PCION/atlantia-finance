@@ -9,6 +9,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 /**
  * Twelve-month work plan of the firm and whether its goal is being met. For each month the plan is the work that falls
@@ -29,7 +30,7 @@ class ProjectionService
     public function payload(Organization $organization, User $user, int $year, string $view): array
     {
         $view = array_key_exists($view, self::VIEWS) ? $view : 'all';
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive');
+        $executive = $this->dashboard->executiveSnapshot($organization, $user);
         $companyIds = collect($executive['companies'])->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $officeIds = collect($executive['offices'])->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $now = CarbonImmutable::now();
@@ -48,9 +49,9 @@ class ProjectionService
         for ($month = 1; $month <= 12; $month++) {
             $key = sprintf('%d-%02d', $year, $month);
             $slices = [
-                'tasks' => [$tasks->filter(fn (object $row): bool => substr((string) $row->due_at, 0, 7) === $key), fn (object $row): bool => $row->completed_at !== null],
-                'obligations' => [$obligations->filter(fn (object $row): bool => substr((string) $row->due_on, 0, 7) === $key), fn (object $row): bool => $row->filed_on !== null || $row->completed_at !== null],
-                'closings' => [$periods->filter(fn (object $row): bool => substr((string) $row->ends_on, 0, 7) === $key), fn (object $row): bool => $row->closed_at !== null],
+                'tasks' => [$tasks->filter(fn (stdClass $row): bool => substr((string) $row->due_at, 0, 7) === $key), fn (stdClass $row): bool => $row->completed_at !== null],
+                'obligations' => [$obligations->filter(fn (stdClass $row): bool => substr((string) $row->due_on, 0, 7) === $key), fn (stdClass $row): bool => $row->filed_on !== null || $row->completed_at !== null],
+                'closings' => [$periods->filter(fn (stdClass $row): bool => substr((string) $row->ends_on, 0, 7) === $key), fn (stdClass $row): bool => $row->closed_at !== null],
             ];
             $chosen = $view === 'all' ? $slices : [$view => $slices[$view]];
             $planned = array_sum(array_map(fn (array $slice): int => $slice[0]->count(), $chosen));

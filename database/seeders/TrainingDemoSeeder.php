@@ -26,7 +26,7 @@ class TrainingDemoSeeder extends Seeder
 
         $staff = DB::table('organization_user')->where('organization_id', $organizationId)->where('status', 'active')->orderBy('user_id')->pluck('user_id')->all();
         $now = now();
-        $courses = [
+        $courses = $this->courseCatalog([
             ['Conciliación bancaria avanzada', 'Contabilidad', 'virtual', -9, 'completed'],
             ['Obligaciones fiscales 2026', 'Fiscal', 'virtual', -14, 'completed'],
             ['Gestión de equipos y liderazgo', 'Habilidades blandas', 'presencial', -20, 'completed'],
@@ -35,7 +35,7 @@ class TrainingDemoSeeder extends Seeder
             ['Nómina en Guatemala', 'Nómina', 'virtual', 29, 'scheduled'],
             ['Excel avanzado para contadores', 'Sistemas', 'virtual', 36, 'scheduled'],
             ['Gestión de riesgos contables', 'Auditoría', 'presencial', 49, 'scheduled'],
-        ];
+        ]);
 
         foreach ($courses as [$title, $area, $modality, $offset, $status]) {
             $courseId = DB::table('training_courses')->insertGetId([
@@ -97,5 +97,16 @@ class TrainingDemoSeeder extends Seeder
                 'updated_at' => $now,
             ]);
         }
+    }
+
+    /**
+     * Course rows as title, area, modality, days from today and status.
+     *
+     * @param  list<array{0: string, 1: string, 2: string, 3: int, 4: string}>  $rows
+     * @return list<array{0: string, 1: string, 2: string, 3: int, 4: string}>
+     */
+    private function courseCatalog(array $rows): array
+    {
+        return $rows;
     }
 }

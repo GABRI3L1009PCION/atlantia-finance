@@ -209,7 +209,9 @@ function TwoFactorVerificationStep({
                                 className="flex-1"
                                 onClick={onBack}
                                 disabled={processing}
-                            >                                Atrás
+                            >
+                                {' '}
+                                Atrás
                             </Button>
                             <Button
                                 type="submit"
@@ -217,7 +219,9 @@ function TwoFactorVerificationStep({
                                 disabled={
                                     processing || code.length < OTP_MAX_LENGTH
                                 }
-                            >                                Confirmar
+                            >
+                                {' '}
+                                Confirmar
                             </Button>
                         </div>
                     </div>

@@ -27,7 +27,7 @@ class ClosingsOverviewService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $rows = collect($executive['companies']);
         $periodIds = $rows->pluck('period_id')->filter()->all();
 
@@ -60,7 +60,7 @@ class ClosingsOverviewService
             $steps = [];
 
             foreach (self::STEPS as $key => $label) {
-                $state = $done[$key] ? 'done' : ($key === $firstOpen && $started ? ($changes || ($work?->blocked_tasks ?? 0) > 0 ? 'blocked' : 'active') : 'pending');
+                $state = $done[$key] ? 'done' : ($key === $firstOpen && $started ? ($changes || ($work->blocked_tasks ?? 0) > 0 ? 'blocked' : 'active') : 'pending');
                 $steps[] = ['key' => $key, 'label' => $label, 'state' => $state];
             }
 
@@ -71,7 +71,7 @@ class ClosingsOverviewService
                 $blockers[] = ['title' => 'Cambios solicitados en la revisión', 'detail' => 'El revisor pidió correcciones antes de continuar.'];
             }
 
-            if (($work?->blocked_tasks ?? 0) > 0) {
+            if (($work->blocked_tasks ?? 0) > 0) {
                 $blockers[] = ['title' => $work->blocked_tasks.' tarea(s) bloqueada(s)', 'detail' => 'Hay trabajo detenido que impide avanzar el cierre.'];
             }
 
@@ -91,10 +91,10 @@ class ClosingsOverviewService
                 'state' => $period === null ? 'pending' : ($closed ? 'closed' : ($blockers !== [] ? 'blocked' : ($completed > 0 || $started ? 'progress' : 'pending'))),
                 'blockers' => $blockers,
                 'history' => collect([
-                    ['label' => 'Enviado a revisión', 'at' => $review?->submitted_at, 'by' => $names[$review?->submitted_by ?? 0] ?? null],
-                    ['label' => 'Revisión contable aprobada', 'at' => $review?->first_level_approved_at, 'by' => $names[$review?->first_level_approved_by ?? 0] ?? null],
-                    ['label' => 'Aprobación superior', 'at' => $review?->approved_at, 'by' => $names[$review?->approved_by ?? 0] ?? null],
-                    ['label' => 'Revisión fiscal aprobada', 'at' => $review?->fiscal_reviewed_at, 'by' => $names[$review?->fiscal_reviewed_by ?? 0] ?? null],
+                    ['label' => 'Enviado a revisión', 'at' => $review?->submitted_at, 'by' => $names[$review->submitted_by ?? 0] ?? null],
+                    ['label' => 'Revisión contable aprobada', 'at' => $review?->first_level_approved_at, 'by' => $names[$review->first_level_approved_by ?? 0] ?? null],
+                    ['label' => 'Aprobación superior', 'at' => $review?->approved_at, 'by' => $names[$review->approved_by ?? 0] ?? null],
+                    ['label' => 'Revisión fiscal aprobada', 'at' => $review?->fiscal_reviewed_at, 'by' => $names[$review->fiscal_reviewed_by ?? 0] ?? null],
                     ['label' => 'Cierre final', 'at' => $period?->closed_at, 'by' => null],
                 ])->all(),
             ];

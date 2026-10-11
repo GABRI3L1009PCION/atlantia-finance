@@ -136,10 +136,7 @@ const project = ([lon, lat]: [number, number]): [number, number] => [
 ];
 
 function normalize(value: string): string {
-    return value
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '');
+    return value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
 function locate(office: DirectorOffice): [number, number] | null {
@@ -182,7 +179,10 @@ function Meter({ value, invert }: { value: number; invert?: boolean }) {
             <div className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
                 <div
                     className="h-full rounded-full"
-                    style={{ width: `${Math.min(100, value)}%`, background: color }}
+                    style={{
+                        width: `${Math.min(100, value)}%`,
+                        background: color,
+                    }}
                 />
             </div>
         </div>
@@ -210,11 +210,15 @@ function Kpi({
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-[#8a0b0b]">{label}</p>
+                <p className="truncate text-sm font-bold text-[#8a0b0b]">
+                    {label}
+                </p>
                 <p className="text-3xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
-                <p className="truncate text-xs font-semibold text-slate-500">{hint}</p>
+                <p className="truncate text-xs font-semibold text-slate-500">
+                    {hint}
+                </p>
             </div>
         </div>
     );
@@ -241,14 +245,21 @@ function OfficeMap({
 
             // Offices in the same city would overlap; fan them out a little.
             const crowded = taken.filter(
-                ([x, y]) => Math.abs(x - point[0]) < 10 && Math.abs(y - point[1]) < 10,
+                ([x, y]) =>
+                    Math.abs(x - point[0]) < 10 && Math.abs(y - point[1]) < 10,
             ).length;
             taken.push(point);
 
-            return { office, point: [point[0], point[1] + crowded * 13] as [number, number] };
+            return {
+                office,
+                point: [point[0], point[1] + crowded * 13] as [number, number],
+            };
         })
-        .filter((item): item is { office: DirectorOffice; point: [number, number] } =>
-            item.point !== null,
+        .filter(
+            (
+                item,
+            ): item is { office: DirectorOffice; point: [number, number] } =>
+                item.point !== null,
         );
     const unplaced = offices.length - placed.length;
     const counts = (status: OfficeStatus) =>
@@ -256,7 +267,10 @@ function OfficeMap({
 
     return (
         <div>
-            <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} className="w-full rounded-xl bg-[#f3f6f9]">
+            <svg
+                viewBox={`0 0 ${MAP_W} ${MAP_H}`}
+                className="w-full rounded-xl bg-[#f3f6f9]"
+            >
                 <polygon
                     points={outline}
                     fill="#dfe6ee"
@@ -296,15 +310,20 @@ function OfficeMap({
                 ))}
             </svg>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                {(['operational', 'attention', 'inactive'] as const).map((status) => (
-                    <span key={status} className="flex items-center gap-1.5">
+                {(['operational', 'attention', 'inactive'] as const).map(
+                    (status) => (
                         <span
-                            className="size-2.5 rounded-full"
-                            style={{ background: STATUS_COLOR[status] }}
-                        />
-                        {STATUS_LABEL[status]} ({counts(status)})
-                    </span>
-                ))}
+                            key={status}
+                            className="flex items-center gap-1.5"
+                        >
+                            <span
+                                className="size-2.5 rounded-full"
+                                style={{ background: STATUS_COLOR[status] }}
+                            />
+                            {STATUS_LABEL[status]} ({counts(status)})
+                        </span>
+                    ),
+                )}
             </div>
             {unplaced > 0 && (
                 <p className="mt-1 text-xs text-slate-400">
@@ -395,16 +414,28 @@ function OfficeDetail({ office }: { office: DirectorOffice }) {
                     </div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                         <div>
-                            <dd className="text-xl font-black">{office.companies}</dd>
-                            <dt className="text-xs text-slate-500">Empresas cliente</dt>
+                            <dd className="text-xl font-black">
+                                {office.companies}
+                            </dd>
+                            <dt className="text-xs text-slate-500">
+                                Empresas cliente
+                            </dt>
                         </div>
                         <div>
-                            <dd className="text-xl font-black">{office.team.length}</dd>
-                            <dt className="text-xs text-slate-500">Miembros de equipo</dt>
+                            <dd className="text-xl font-black">
+                                {office.team.length}
+                            </dd>
+                            <dt className="text-xs text-slate-500">
+                                Miembros de equipo
+                            </dt>
                         </div>
                         <div>
-                            <dd className="text-xl font-black">{office.workload}%</dd>
-                            <dt className="text-xs text-slate-500">Carga de trabajo</dt>
+                            <dd className="text-xl font-black">
+                                {office.workload}%
+                            </dd>
+                            <dt className="text-xs text-slate-500">
+                                Carga de trabajo
+                            </dt>
                         </div>
                         <div>
                             <dd
@@ -412,7 +443,9 @@ function OfficeDetail({ office }: { office: DirectorOffice }) {
                             >
                                 {office.overdue}
                             </dd>
-                            <dt className="text-xs text-slate-500">Empresas atrasadas</dt>
+                            <dt className="text-xs text-slate-500">
+                                Empresas atrasadas
+                            </dt>
                         </div>
                     </dl>
                 </div>
@@ -425,7 +458,9 @@ function OfficeDetail({ office }: { office: DirectorOffice }) {
                             key={company.name}
                             className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
                         >
-                            <span className="truncate font-bold">{company.name}</span>
+                            <span className="truncate font-bold">
+                                {company.name}
+                            </span>
                             <span
                                 className={`text-xs font-bold ${company.overdue_tasks > 0 ? 'text-red-600' : 'text-slate-500'}`}
                             >
@@ -436,7 +471,9 @@ function OfficeDetail({ office }: { office: DirectorOffice }) {
                         </li>
                     ))}
                     {office.company_list.length === 0 && (
-                        <li className="text-slate-500">Sin empresas asignadas.</li>
+                        <li className="text-slate-500">
+                            Sin empresas asignadas.
+                        </li>
                     )}
                 </ul>
             )}
@@ -449,7 +486,9 @@ function OfficeDetail({ office }: { office: DirectorOffice }) {
                             className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2"
                         >
                             <span className="font-bold">{member.name}</span>
-                            <span className="text-xs text-slate-500">{member.role}</span>
+                            <span className="text-xs text-slate-500">
+                                {member.role}
+                            </span>
                         </li>
                     ))}
                     {office.team.length === 0 && (
@@ -494,7 +533,9 @@ export default function DirectorOffices({ summary, offices }: Props) {
             });
     }, [offices, search, status, sort, descending]);
     const selected =
-        offices.find((office) => office.id === selectedId) ?? offices[0] ?? null;
+        offices.find((office) => office.id === selectedId) ??
+        offices[0] ??
+        null;
 
     return (
         <>
@@ -580,13 +621,20 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                     value={status}
                                     onChange={(event) =>
                                         setStatus(
-                                            event.target.value as 'all' | OfficeStatus,
+                                            event.target.value as
+                                                'all' | OfficeStatus,
                                         )
                                     }
                                 >
-                                    <option value="all">Todos los estados</option>
-                                    <option value="operational">Operativa</option>
-                                    <option value="attention">Requiere atención</option>
+                                    <option value="all">
+                                        Todos los estados
+                                    </option>
+                                    <option value="operational">
+                                        Operativa
+                                    </option>
+                                    <option value="attention">
+                                        Requiere atención
+                                    </option>
                                     <option value="inactive">Inactiva</option>
                                 </select>
                                 <select
@@ -601,14 +649,18 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                         )
                                     }
                                 >
-                                    <option value="progress">Cumplimiento</option>
+                                    <option value="progress">
+                                        Cumplimiento
+                                    </option>
                                     <option value="companies">Empresas</option>
                                     <option value="name">Nombre</option>
                                 </select>
                                 <button
                                     type="button"
                                     aria-label="Invertir orden"
-                                    onClick={() => setDescending((value) => !value)}
+                                    onClick={() =>
+                                        setDescending((value) => !value)
+                                    }
                                     className={`${control} grid place-items-center`}
                                 >
                                     <ArrowDownUp className="size-4" />
@@ -619,21 +671,37 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                 <table className="w-full min-w-[820px] text-sm">
                                     <thead>
                                         <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                                            <th className="px-3 py-2">Oficina</th>
-                                            <th className="px-3 py-2">Ciudad</th>
-                                            <th className="px-3 py-2">Responsable</th>
-                                            <th className="px-3 py-2 text-center">Empresas</th>
-                                            <th className="px-3 py-2 text-center">Equipo</th>
-                                            <th className="px-3 py-2">Cumplimiento</th>
+                                            <th className="px-3 py-2">
+                                                Oficina
+                                            </th>
+                                            <th className="px-3 py-2">
+                                                Ciudad
+                                            </th>
+                                            <th className="px-3 py-2">
+                                                Responsable
+                                            </th>
+                                            <th className="px-3 py-2 text-center">
+                                                Empresas
+                                            </th>
+                                            <th className="px-3 py-2 text-center">
+                                                Equipo
+                                            </th>
+                                            <th className="px-3 py-2">
+                                                Cumplimiento
+                                            </th>
                                             <th className="px-3 py-2">Carga</th>
-                                            <th className="px-3 py-2">Estado</th>
+                                            <th className="px-3 py-2">
+                                                Estado
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {visible.map((office) => (
                                             <tr
                                                 key={office.id}
-                                                onClick={() => setSelectedId(office.id)}
+                                                onClick={() =>
+                                                    setSelectedId(office.id)
+                                                }
                                                 className={`cursor-pointer transition hover:bg-[#fbf5f4] ${selected?.id === office.id ? 'bg-red-50/60' : ''}`}
                                             >
                                                 <td className="px-3 py-3">
@@ -656,7 +724,9 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                                             'Sin responsable'}
                                                     </p>
                                                     <p className="text-xs text-slate-500">
-                                                        {office.responsible_role}
+                                                        {
+                                                            office.responsible_role
+                                                        }
                                                     </p>
                                                 </td>
                                                 <td className="px-3 py-3 text-center font-bold">
@@ -666,13 +736,20 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                                     {office.team.length}
                                                 </td>
                                                 <td className="px-3 py-3">
-                                                    <Meter value={office.progress} />
+                                                    <Meter
+                                                        value={office.progress}
+                                                    />
                                                 </td>
                                                 <td className="px-3 py-3">
-                                                    <Meter value={office.workload} invert />
+                                                    <Meter
+                                                        value={office.workload}
+                                                        invert
+                                                    />
                                                 </td>
                                                 <td className="px-3 py-3">
-                                                    <StatusBadge status={office.status} />
+                                                    <StatusBadge
+                                                        status={office.status}
+                                                    />
                                                 </td>
                                             </tr>
                                         ))}
@@ -682,7 +759,8 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                                     colSpan={8}
                                                     className="px-3 py-10 text-center text-slate-500"
                                                 >
-                                                    No hay oficinas con esos criterios.
+                                                    No hay oficinas con esos
+                                                    criterios.
                                                 </td>
                                             </tr>
                                         )}
@@ -690,7 +768,8 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                 </table>
                             </div>
                             <p className="mt-3 text-xs text-slate-500">
-                                Mostrando {visible.length} de {offices.length} oficinas
+                                Mostrando {visible.length} de {offices.length}{' '}
+                                oficinas
                             </p>
                         </div>
 
@@ -710,7 +789,10 @@ export default function DirectorOffices({ summary, offices }: Props) {
                                     <h2 className="mb-3 text-lg font-black">
                                         Detalle de la oficina
                                     </h2>
-                                    <OfficeDetail key={selected.id} office={selected} />
+                                    <OfficeDetail
+                                        key={selected.id}
+                                        office={selected}
+                                    />
                                 </div>
                             )}
                         </div>

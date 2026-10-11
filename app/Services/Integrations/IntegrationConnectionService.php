@@ -135,7 +135,7 @@ class IntegrationConnectionService
                 'oauth' => (bool) ($definition['oauth'] ?? false),
                 'authorized' => ! empty($config['access_token']),
                 'redirect_uri' => ($definition['oauth'] ?? false) ? route('integrations.oauth.callback', $provider) : null,
-                'console' => ($definition['oauth'] ?? false) ? IntegrationOAuthService::PROVIDERS[$provider]['console'] : null,
+                'console' => ($definition['oauth'] ?? false) ? (IntegrationOAuthService::PROVIDERS[$provider]['console'] ?? null) : null,
             ];
         }
 
@@ -165,7 +165,7 @@ class IntegrationConnectionService
         $this->assertValid($provider, $config);
         $oauth = (bool) ($definition['oauth'] ?? false);
 
-        if ($oauth && ($previous['client_id'] ?? null) === $config['client_id']) {
+        if ($oauth && ($previous['client_id'] ?? null) === ($config['client_id'] ?? null)) {
             $config = [...$config, ...array_intersect_key($previous, array_flip(['access_token', 'refresh_token', 'expires_at', 'authorized_at']))];
         }
 
@@ -326,7 +326,7 @@ class IntegrationConnectionService
     public function backup(Organization $organization, User $actor, string $provider): string
     {
         abort_unless(in_array($provider, ['google_drive', 'dropbox'], true), 404);
-        $executive = app(WorkDashboardService::class)->dashboard($organization, $actor, 'executive');
+        $executive = app(WorkDashboardService::class)->executiveSnapshot($organization, $actor);
         $rows = [['Empresa', 'NIT', 'Oficina', 'Período', 'Avance %', 'Tareas pendientes', 'Tareas vencidas']];
 
         foreach ($executive['companies'] as $company) {
@@ -352,8 +352,8 @@ class IntegrationConnectionService
     /** @return list<array{provider: string, event: string, ok: bool, message: string|null, at: string}> */
     public function recentEvents(Organization $organization): array
     {
-        return DB::table('integration_events')->where('organization_id', $organization->id)->orderByDesc('id')->limit(12)->get()
-            ->map(fn (object $row): array => ['provider' => $row->provider, 'event' => $row->event, 'ok' => (bool) $row->ok, 'message' => $row->message, 'at' => $row->created_at])->all();
+        return array_values(DB::table('integration_events')->where('organization_id', $organization->id)->orderByDesc('id')->limit(12)->get()
+            ->map(fn (object $row): array => ['provider' => $row->provider, 'event' => $row->event, 'ok' => (bool) $row->ok, 'message' => $row->message, 'at' => $row->created_at])->all());
     }
 
     /** @return array<string, mixed>|null */

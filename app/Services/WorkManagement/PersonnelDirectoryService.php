@@ -19,9 +19,9 @@ class PersonnelDirectoryService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $workload = collect($executive['workload'])->keyBy('user_id');
-        $productivity = collect($executive['productivity'] ?? [])->keyBy('user_id');
+        $productivity = collect($executive['productivity'])->keyBy('user_id');
 
         $members = DB::table('organization_user')
             ->join('users', 'users.id', '=', 'organization_user.user_id')

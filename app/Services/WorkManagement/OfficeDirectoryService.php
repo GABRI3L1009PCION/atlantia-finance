@@ -24,7 +24,7 @@ class OfficeDirectoryService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $stats = collect($executive['offices'])->keyBy('id');
         $companiesByOffice = collect($executive['companies'])->groupBy('office_name');
 
@@ -91,7 +91,7 @@ class OfficeDirectoryService
                 'compliance' => $activeOffices->isEmpty() ? 0 : (int) round($activeOffices->avg('progress')),
                 'companies' => (int) $offices->sum('companies'),
             ],
-            'offices' => $offices->all(),
+            'offices' => array_values($offices->all()),
             'period' => $executive['filters']['period'] ?? null,
         ];
     }

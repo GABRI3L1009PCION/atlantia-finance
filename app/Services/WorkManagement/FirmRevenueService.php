@@ -23,7 +23,7 @@ class FirmRevenueService
         $now = CarbonImmutable::now();
         $selected = $month !== null && preg_match('/^\d{4}-\d{2}$/', $month) ? CarbonImmutable::createFromFormat('Y-m-d', $month.'-01')->startOfMonth() : $now->startOfMonth();
         $today = $now->toDateString();
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive');
+        $executive = $this->dashboard->executiveSnapshot($organization, $user);
         $companies = collect($executive['companies'])->keyBy('id');
 
         $contracts = DB::table('crm_contracts')->where('organization_id', $organization->id)->whereIn('company_id', $companies->keys()->all())->get();
@@ -66,8 +66,8 @@ class FirmRevenueService
 
         return [
             'month' => $selected->format('Y-m'),
-            'month_label' => ucfirst($selected->locale('es')->translatedFormat('F Y')),
-            'month_options' => collect(range(0, 11))->map(fn (int $back): array => ['value' => $now->startOfMonth()->subMonths($back)->format('Y-m'), 'label' => ucfirst($now->startOfMonth()->subMonths($back)->locale('es')->translatedFormat('F Y'))])->all(),
+            'month_label' => ucfirst($selected->settings(['locale' => 'es'])->translatedFormat('F Y')),
+            'month_options' => collect(range(0, 11))->map(fn (int $back): array => ['value' => $now->startOfMonth()->subMonths($back)->format('Y-m'), 'label' => ucfirst($now->startOfMonth()->subMonths($back)->settings(['locale' => 'es'])->translatedFormat('F Y'))])->all(),
             'kpis' => [
                 'mrr_cents' => $mrr,
                 'mrr_change' => $previousMrr > 0 ? round(($mrr - $previousMrr) / $previousMrr * 100, 1) : null,
@@ -123,19 +123,19 @@ class FirmRevenueService
      */
     public function exportRows(Organization $organization, User $user): array
     {
-        $companies = collect($this->dashboard->dashboard($organization, $user, 'executive')['companies'])->keyBy('id');
+        $companies = collect($this->dashboard->executiveSnapshot($organization, $user)['companies'])->keyBy('id');
         $today = now()->toDateString();
 
-        return DB::table('crm_invoices')->where('organization_id', $organization->id)->whereIn('company_id', $companies->keys()->all())->orderByDesc('issued_on')->orderByDesc('id')->get()
+        return array_values(DB::table('crm_invoices')->where('organization_id', $organization->id)->whereIn('company_id', $companies->keys()->all())->orderByDesc('issued_on')->orderByDesc('id')->get()
             ->map(fn (object $invoice): array => [
-                $invoice->number,
-                $companies[$invoice->company_id]['name'] ?? 'Empresa',
-                $invoice->concept,
+                (string) $invoice->number,
+                (string) ($companies[$invoice->company_id]['name'] ?? 'Empresa'),
+                (string) $invoice->concept,
                 (int) $invoice->amount_cents,
                 $invoice->status === 'paid' ? 'Pagada' : ($invoice->status === 'pending' && $invoice->due_on < $today ? 'Vencida' : ($invoice->status === 'pending' ? 'Pendiente' : 'Anulada')),
-                $invoice->due_on,
-                $invoice->issued_on,
-            ])->all();
+                (string) $invoice->due_on,
+                (string) $invoice->issued_on,
+            ])->all());
     }
 
     /** Creates one charge per live contract for the month, skipping contracts already charged that month. */
@@ -154,7 +154,7 @@ class FirmRevenueService
             $created += $this->insertInvoice($organization, $actor, [
                 'company_id' => $contract->company_id,
                 'crm_contract_id' => $contract->id,
-                'concept' => $contract->services.' – '.ucfirst($start->locale('es')->translatedFormat('F Y')),
+                'concept' => $contract->services.' – '.ucfirst($start->settings(['locale' => 'es'])->translatedFormat('F Y')),
                 'amount_cents' => $contract->monthly_fee_cents,
                 'issued_on' => $start->toDateString(),
                 'due_on' => $start->addDays(14)->toDateString(),

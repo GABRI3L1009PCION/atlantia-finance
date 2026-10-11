@@ -23,7 +23,7 @@ class GrowthOverviewService
     /** @return array<string, mixed> */
     public function payload(Organization $organization, User $user): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive');
+        $executive = $this->dashboard->executiveSnapshot($organization, $user);
         $offices = collect($executive['offices']);
         $officeIds = $offices->pluck('id')->all();
         $months = collect(range(11, 0))->map(fn (int $back) => now()->startOfMonth()->subMonths($back));

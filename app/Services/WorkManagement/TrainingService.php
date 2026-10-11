@@ -10,6 +10,7 @@ use App\Services\AccountingService;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 /** Staff training: reads the overview shown to management and records courses, enrollments, certifications and needs. */
 class TrainingService
@@ -35,15 +36,15 @@ class TrainingService
         $byCourse = $enrollments->groupBy('training_course_id');
         $finished = $enrollments->where('status', 'completed');
         $rated = $finished->whereNotNull('satisfaction');
-        $state = fn (object $cert): string => $cert->expires_on === null || $cert->expires_on > $today->copy()->addDays(90)->toDateString()
+        $state = fn (stdClass $cert): string => $cert->expires_on === null || $cert->expires_on > $today->copy()->addDays(90)->toDateString()
             ? 'valid'
             : ($cert->expires_on >= $today->toDateString() ? 'expiring' : 'expired');
 
         $months = collect(range(5, 0))->map(fn (int $back) => now()->startOfMonth()->subMonths($back));
         $trend = $months->map(function (CarbonInterface $month) use ($enrollments): array {
             $end = $month->copy()->endOfMonth();
-            $existing = $enrollments->filter(fn (object $row): bool => Carbon::parse($row->created_at)->lte($end));
-            $done = $existing->filter(fn (object $row): bool => $row->completed_on !== null && $row->completed_on <= $end->toDateString());
+            $existing = $enrollments->filter(fn (stdClass $row): bool => Carbon::parse($row->created_at)->lte($end));
+            $done = $existing->filter(fn (stdClass $row): bool => $row->completed_on !== null && $row->completed_on <= $end->toDateString());
 
             return ['label' => self::MONTHS[$month->month - 1], 'value' => $existing->isEmpty() ? 0 : (int) round($done->count() / $existing->count() * 100)];
         })->values();
@@ -52,18 +53,18 @@ class TrainingService
             'summary' => [
                 'staff' => $staff->count(),
                 'courses_completed' => $courses->where('status', 'completed')->count(),
-                'certifications' => $certifications->filter(fn (object $cert): bool => $state($cert) !== 'expired')->count(),
+                'certifications' => $certifications->filter(fn (stdClass $cert): bool => $state($cert) !== 'expired')->count(),
                 'progress' => $enrollments->isEmpty() ? 0 : (int) round($enrollments->avg('progress')),
                 'satisfaction' => $rated->isEmpty() ? null : (int) round($rated->avg('satisfaction')),
             ],
             'trend' => $trend->all(),
             'areas' => $courses->groupBy('area')->map(fn ($group, string $area): array => ['name' => $area, 'value' => $group->count()])->sortByDesc('value')->values()->all(),
             'certification_status' => [
-                'valid' => $certifications->filter(fn (object $cert): bool => $state($cert) === 'valid')->count(),
-                'expiring' => $certifications->filter(fn (object $cert): bool => $state($cert) === 'expiring')->count(),
-                'expired' => $certifications->filter(fn (object $cert): bool => $state($cert) === 'expired')->count(),
+                'valid' => $certifications->filter(fn (stdClass $cert): bool => $state($cert) === 'valid')->count(),
+                'expiring' => $certifications->filter(fn (stdClass $cert): bool => $state($cert) === 'expiring')->count(),
+                'expired' => $certifications->filter(fn (stdClass $cert): bool => $state($cert) === 'expired')->count(),
             ],
-            'courses' => $courses->map(fn (object $course): array => [
+            'courses' => $courses->map(fn (stdClass $course): array => [
                 'id' => (int) $course->id,
                 'title' => $course->title,
                 'area' => $course->area,
@@ -76,7 +77,7 @@ class TrainingService
                 'satisfaction' => ($rate = ($byCourse->get($course->id) ?? collect())->whereNotNull('satisfaction'))->isEmpty() ? null : (int) round($rate->avg('satisfaction')),
                 'last_completion' => ($byCourse->get($course->id) ?? collect())->max('completed_on'),
             ])->values()->all(),
-            'certifications' => $certifications->map(fn (object $cert): array => [
+            'certifications' => $certifications->map(fn (stdClass $cert): array => [
                 'id' => (int) $cert->id,
                 'name' => $cert->name,
                 'issuer' => $cert->issuer,
@@ -85,7 +86,7 @@ class TrainingService
                 'expires_on' => $cert->expires_on,
                 'state' => $state($cert),
             ])->values()->all(),
-            'employees' => $staff->map(function (object $member) use ($enrollments): array {
+            'employees' => $staff->map(function (stdClass $member) use ($enrollments): array {
                 $mine = $enrollments->where('user_id', $member->id);
 
                 return [
@@ -96,7 +97,7 @@ class TrainingService
                     'progress' => $mine->isEmpty() ? 0 : (int) round($mine->avg('progress')),
                 ];
             })->filter(fn (array $row): bool => $row['assigned'] > 0)->values()->all(),
-            'needs' => $needs->map(fn (object $need): array => [
+            'needs' => $needs->map(fn (stdClass $need): array => [
                 'id' => (int) $need->id,
                 'area' => $need->area,
                 'topic' => $need->topic,
@@ -104,7 +105,7 @@ class TrainingService
                 'employees' => (int) $need->employees,
                 'status' => $need->status,
             ])->all(),
-            'staff' => $staff->map(fn (object $member): array => ['id' => (int) $member->id, 'name' => $member->name])->all(),
+            'staff' => $staff->map(fn (stdClass $member): array => ['id' => (int) $member->id, 'name' => $member->name])->all(),
         ];
     }
 

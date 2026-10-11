@@ -42,13 +42,25 @@ type Props = {
     task_heatmap: { name: string; values: number[] }[];
     office_table: OfficeRow[];
     team: { name: string; completed: number; on_time_rate: number }[];
-    insights: { tone: 'red' | 'amber' | 'green'; title: string; detail: string }[];
+    insights: {
+        tone: 'red' | 'amber' | 'green';
+        title: string;
+        detail: string;
+    }[];
 };
 
 const card =
     'rounded-2xl border border-[#ebe3df] bg-white p-5 shadow-[0_10px_28px_-22px_rgba(49,11,8,.55)]';
 const BRAND = '#8a0b0b';
-const PALETTE = ['#8a0b0b', '#2563eb', '#f0a93b', '#16a34a', '#7c3aed', '#0ea5e9', '#ee6c3a'];
+const PALETTE = [
+    '#8a0b0b',
+    '#2563eb',
+    '#f0a93b',
+    '#16a34a',
+    '#7c3aed',
+    '#0ea5e9',
+    '#ee6c3a',
+];
 
 function Kpi({
     icon,
@@ -73,7 +85,9 @@ function Kpi({
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-[#8a0b0b]">{label}</p>
+                <p className="truncate text-xs font-bold text-[#8a0b0b]">
+                    {label}
+                </p>
                 <p className="text-3xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
@@ -112,7 +126,13 @@ function TrendBars({ points }: { points: { label: string; value: number }[] }) {
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full">
             {[0, 25, 50, 75, 100].map((tick) => (
                 <g key={tick}>
-                    <line x1={left} x2={width} y1={y(tick)} y2={y(tick)} stroke="#eee7e3" />
+                    <line
+                        x1={left}
+                        x2={width}
+                        y1={y(tick)}
+                        y2={y(tick)}
+                        stroke="#eee7e3"
+                    />
                     <text
                         x={left - 6}
                         y={y(tick)}
@@ -133,7 +153,10 @@ function TrendBars({ points }: { points: { label: string; value: number }[] }) {
                             x={x - slot * 0.3}
                             y={y(point.value)}
                             width={slot * 0.6}
-                            height={Math.max(0, height - bottom - y(point.value))}
+                            height={Math.max(
+                                0,
+                                height - bottom - y(point.value),
+                            )}
                             rx="6"
                             fill={BRAND}
                             opacity="0.14"
@@ -157,7 +180,12 @@ function TrendBars({ points }: { points: { label: string; value: number }[] }) {
                     </g>
                 );
             })}
-            <polyline points={line} fill="none" stroke={BRAND} strokeWidth="2.5" />
+            <polyline
+                points={line}
+                fill="none"
+                stroke={BRAND}
+                strokeWidth="2.5"
+            />
             {points.map((point, i) => (
                 <circle
                     key={point.label + i}
@@ -193,7 +221,13 @@ function MultiLine({
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full">
                 {[0, 25, 50, 75, 100].map((tick) => (
                     <g key={tick}>
-                        <line x1={left} x2={width} y1={y(tick)} y2={y(tick)} stroke="#eee7e3" />
+                        <line
+                            x1={left}
+                            x2={width}
+                            y1={y(tick)}
+                            y2={y(tick)}
+                            stroke="#eee7e3"
+                        />
                         <text
                             x={left - 6}
                             y={y(tick)}
@@ -220,7 +254,10 @@ function MultiLine({
                     <g key={item.name}>
                         <polyline
                             points={item.values
-                                .map((value, i) => `${left + slot * i + slot / 2},${y(value)}`)
+                                .map(
+                                    (value, i) =>
+                                        `${left + slot * i + slot / 2},${y(value)}`,
+                                )
                                 .join(' ')}
                             fill="none"
                             stroke={PALETTE[index % PALETTE.length]}
@@ -243,7 +280,9 @@ function MultiLine({
                     <span key={item.name} className="flex items-center gap-1.5">
                         <span
                             className="size-2.5 rounded-full"
-                            style={{ background: PALETTE[index % PALETTE.length] }}
+                            style={{
+                                background: PALETTE[index % PALETTE.length],
+                            }}
                         />
                         {item.name}
                     </span>
@@ -264,7 +303,14 @@ function Mix({ items }: { items: { name: string; value: number }[] }) {
     return (
         <div className="flex items-center gap-4">
             <svg viewBox="0 0 140 140" className="size-36 shrink-0">
-                <circle cx="70" cy="70" r={radius} fill="none" stroke="#eef1f3" strokeWidth="18" />
+                <circle
+                    cx="70"
+                    cy="70"
+                    r={radius}
+                    fill="none"
+                    stroke="#eef1f3"
+                    strokeWidth="18"
+                />
                 {items.map((item, i) => (
                     <circle
                         key={item.name}
@@ -275,14 +321,26 @@ function Mix({ items }: { items: { name: string; value: number }[] }) {
                         stroke={PALETTE[i % PALETTE.length]}
                         strokeWidth="18"
                         strokeDasharray={`${lengths[i]} ${circumference - lengths[i]}`}
-                        strokeDashoffset={-lengths.slice(0, i).reduce((s, v) => s + v, 0)}
+                        strokeDashoffset={
+                            -lengths.slice(0, i).reduce((s, v) => s + v, 0)
+                        }
                         transform="rotate(-90 70 70)"
                     />
                 ))}
-                <text x="70" y="68" textAnchor="middle" className="fill-[#061633] text-[24px] font-black">
+                <text
+                    x="70"
+                    y="68"
+                    textAnchor="middle"
+                    className="fill-[#061633] text-[24px] font-black"
+                >
                     {total}
                 </text>
-                <text x="70" y="84" textAnchor="middle" className="fill-slate-500 text-[10px]">
+                <text
+                    x="70"
+                    y="84"
+                    textAnchor="middle"
+                    className="fill-slate-500 text-[10px]"
+                >
                     empresas
                 </text>
             </svg>
@@ -294,7 +352,10 @@ function Mix({ items }: { items: { name: string; value: number }[] }) {
                             style={{ background: PALETTE[i % PALETTE.length] }}
                         />
                         <span className="flex-1 truncate">{item.name}</span>
-                        <b>{total ? Math.round((item.value / total) * 100) : 0}%</b>
+                        <b>
+                            {total ? Math.round((item.value / total) * 100) : 0}
+                            %
+                        </b>
                     </li>
                 ))}
             </ul>
@@ -318,7 +379,10 @@ function Heatmap({
                     <tr>
                         <th />
                         {columns.map((column) => (
-                            <th key={column} className="px-1 pb-2 font-semibold text-slate-500">
+                            <th
+                                key={column}
+                                className="px-1 pb-2 font-semibold text-slate-500"
+                            >
                                 {column}
                             </th>
                         ))}
@@ -327,14 +391,19 @@ function Heatmap({
                 <tbody>
                     {rows.map((row) => (
                         <tr key={row.name}>
-                            <td className="max-w-32 truncate pr-2 text-slate-600">{row.name}</td>
+                            <td className="max-w-32 truncate pr-2 text-slate-600">
+                                {row.name}
+                            </td>
                             {row.values.map((value, i) => (
                                 <td key={i} className="p-0.5">
                                     <div
                                         className="grid h-9 place-items-center rounded-md font-bold"
                                         style={{
                                             background: `rgba(138, 11, 11, ${0.06 + (value / max) * 0.8})`,
-                                            color: value / max > 0.45 ? '#fff' : '#6b1d1d',
+                                            color:
+                                                value / max > 0.45
+                                                    ? '#fff'
+                                                    : '#6b1d1d',
                                         }}
                                     >
                                         {value}
@@ -369,17 +438,25 @@ function OfficeBars({ rows }: { rows: OfficeRow[] }) {
                         />
                         <div
                             className="absolute inset-y-0 left-0 rounded-full"
-                            style={{ width: `${(row.closed / max) * 100}%`, background: BRAND }}
+                            style={{
+                                width: `${(row.closed / max) * 100}%`,
+                                background: BRAND,
+                            }}
                         />
                     </div>
                 </div>
             ))}
             <div className="flex gap-4 text-xs text-slate-500">
                 <span className="flex items-center gap-1.5">
-                    <i className="size-2.5 rounded-full bg-slate-300" /> Empresas
+                    <i className="size-2.5 rounded-full bg-slate-300" />{' '}
+                    Empresas
                 </span>
                 <span className="flex items-center gap-1.5">
-                    <i className="size-2.5 rounded-full" style={{ background: BRAND }} /> Cerradas
+                    <i
+                        className="size-2.5 rounded-full"
+                        style={{ background: BRAND }}
+                    />{' '}
+                    Cerradas
                 </span>
             </div>
         </div>
@@ -427,7 +504,8 @@ export default function DirectorIndicators({
                             href="/office/executive-dashboard/export/offices?format=pdf"
                             className="inline-flex items-center gap-2 rounded-xl border border-[#e4dbd6] bg-white px-4 py-2 text-sm font-bold text-[#8a0b0b]"
                         >
-                            <Download className="size-4" /> Generar reporte ejecutivo
+                            <Download className="size-4" /> Generar reporte
+                            ejecutivo
                         </a>
                     </header>
 
@@ -452,7 +530,11 @@ export default function DirectorIndicators({
                             tone="bg-orange-50 text-orange-500"
                             label="Carga promedio del equipo"
                             value={`${kpis.average_load}%`}
-                            hint={kpis.average_load >= 85 ? 'Carga alta' : 'Carga saludable'}
+                            hint={
+                                kpis.average_load >= 85
+                                    ? 'Carga alta'
+                                    : 'Carga saludable'
+                            }
                             bad={kpis.average_load >= 85}
                         />
                         <Kpi
@@ -460,7 +542,11 @@ export default function DirectorIndicators({
                             tone="bg-red-50 text-red-600"
                             label="Tareas vencidas"
                             value={String(kpis.overdue_tasks)}
-                            hint={kpis.overdue_tasks > 0 ? 'Requieren seguimiento' : 'Sin vencidas'}
+                            hint={
+                                kpis.overdue_tasks > 0
+                                    ? 'Requieren seguimiento'
+                                    : 'Sin vencidas'
+                            }
                             bad={kpis.overdue_tasks > 0}
                         />
                         <Kpi
@@ -509,7 +595,10 @@ export default function DirectorIndicators({
                             <Title note="Tareas abiertas y completadas por oficina.">
                                 Carga de trabajo por estado de tarea
                             </Title>
-                            <Heatmap columns={task_columns} rows={task_heatmap} />
+                            <Heatmap
+                                columns={task_columns}
+                                rows={task_heatmap}
+                            />
                         </div>
                         <div className={card}>
                             <Title note="Empresas de cada oficina y cuántas ya cerraron.">
@@ -525,7 +614,9 @@ export default function DirectorIndicators({
                                 {team.map((member) => (
                                     <li key={member.name}>
                                         <div className="mb-1 flex justify-between text-sm">
-                                            <span className="font-bold">{member.name}</span>
+                                            <span className="font-bold">
+                                                {member.name}
+                                            </span>
                                             <span className="text-slate-500">
                                                 {member.completed} terminadas ·{' '}
                                                 <b className="text-[#061633]">
@@ -536,14 +627,17 @@ export default function DirectorIndicators({
                                         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                                             <div
                                                 className="h-full rounded-full bg-emerald-500"
-                                                style={{ width: `${member.on_time_rate}%` }}
+                                                style={{
+                                                    width: `${member.on_time_rate}%`,
+                                                }}
                                             />
                                         </div>
                                     </li>
                                 ))}
                                 {team.length === 0 && (
                                     <li className="text-sm text-slate-500">
-                                        Aún no hay tareas terminadas en el período.
+                                        Aún no hay tareas terminadas en el
+                                        período.
                                     </li>
                                 )}
                             </ul>
@@ -557,19 +651,35 @@ export default function DirectorIndicators({
                                 <thead>
                                     <tr className="bg-slate-50 text-left text-xs text-slate-600">
                                         <th className="px-3 py-2">Oficina</th>
-                                        <th className="px-3 py-2 text-center">Empresas</th>
-                                        <th className="px-3 py-2 text-center">Cerradas</th>
-                                        <th className="px-3 py-2 text-center">Cumplimiento</th>
-                                        <th className="px-3 py-2 text-center">Atrasadas</th>
-                                        <th className="px-3 py-2 text-center">Carga equipo</th>
+                                        <th className="px-3 py-2 text-center">
+                                            Empresas
+                                        </th>
+                                        <th className="px-3 py-2 text-center">
+                                            Cerradas
+                                        </th>
+                                        <th className="px-3 py-2 text-center">
+                                            Cumplimiento
+                                        </th>
+                                        <th className="px-3 py-2 text-center">
+                                            Atrasadas
+                                        </th>
+                                        <th className="px-3 py-2 text-center">
+                                            Carga equipo
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {office_table.map((row) => (
                                         <tr key={row.name}>
-                                            <td className="px-3 py-3 font-bold">{row.name}</td>
-                                            <td className="px-3 py-3 text-center">{row.companies}</td>
-                                            <td className="px-3 py-3 text-center">{row.closed}</td>
+                                            <td className="px-3 py-3 font-bold">
+                                                {row.name}
+                                            </td>
+                                            <td className="px-3 py-3 text-center">
+                                                {row.companies}
+                                            </td>
+                                            <td className="px-3 py-3 text-center">
+                                                {row.closed}
+                                            </td>
                                             <td className="px-3 py-3 text-center font-bold text-emerald-600">
                                                 {row.progress}%
                                             </td>
@@ -617,7 +727,9 @@ export default function DirectorIndicators({
                                                 <Icon className="size-5" />
                                             </span>
                                             <div>
-                                                <p className="text-sm font-black">{item.title}</p>
+                                                <p className="text-sm font-black">
+                                                    {item.title}
+                                                </p>
                                                 <p className="text-xs leading-5 text-slate-600">
                                                     {item.detail}
                                                 </p>

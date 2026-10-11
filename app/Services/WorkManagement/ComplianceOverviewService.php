@@ -29,7 +29,7 @@ class ComplianceOverviewService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $companies = collect($executive['companies'])->keyBy('id');
         $today = now()->startOfDay();
 
@@ -100,7 +100,7 @@ class ComplianceOverviewService
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $obligations
+     * @param  Collection<int, covariant array<string, mixed>>  $obligations
      * @return list<array{tone: string, title: string, detail: string}>
      */
     private function alerts($obligations, int $companyCount): array
@@ -127,8 +127,8 @@ class ComplianceOverviewService
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $obligations
-     * @param  Collection<int, array<string, mixed>>  $open
+     * @param  Collection<int, covariant array<string, mixed>>  $obligations
+     * @param  Collection<int, covariant array<string, mixed>>  $open
      * @return list<array{title: string, detail: string}>
      */
     private function suggestions($obligations, $open): array

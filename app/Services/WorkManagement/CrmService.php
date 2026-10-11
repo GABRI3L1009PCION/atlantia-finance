@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AccountingService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 /** The firm's commercial view of its clients: pipeline, contracts, renewals and interactions. Money is in cents of quetzales. */
 class CrmService
@@ -20,7 +21,7 @@ class CrmService
     /** @return array<string, mixed> */
     public function overview(Organization $organization, User $user): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive');
+        $executive = $this->dashboard->executiveSnapshot($organization, $user);
         $companies = collect($executive['companies'])->keyBy('id');
         $today = now()->toDateString();
 
@@ -54,7 +55,7 @@ class CrmService
             ];
         })->values();
 
-        $leads = $prospects->whereNotIn('stage', ['won', 'lost'])->map(fn (object $prospect): array => [
+        $leads = $prospects->whereNotIn('stage', ['won', 'lost'])->map(fn (stdClass $prospect): array => [
             'kind' => 'prospect',
             'id' => (int) $prospect->id,
             'name' => $prospect->name,
@@ -91,12 +92,12 @@ class CrmService
             'rows' => $clients->concat($leads)->values()->all(),
             'offices' => $clients->pluck('office')->unique()->sort()->values()->all(),
             'alerts' => $this->alerts($clients, $contracts),
-            'renewals' => $contracts->flatten()->filter(fn (object $contract): bool => $contract->status !== 'cancelled' && $contract->renews_on !== null && $contract->renews_on >= $today)->sortBy('renews_on')->take(6)->map(fn (object $contract): array => [
+            'renewals' => $contracts->flatten()->filter(fn (stdClass $contract): bool => $contract->status !== 'cancelled' && $contract->renews_on !== null && $contract->renews_on >= $today)->sortBy('renews_on')->take(6)->map(fn (stdClass $contract): array => [
                 'company' => $companies[$contract->company_id]['name'] ?? '—',
                 'services' => $contract->services,
                 'renews_on' => $contract->renews_on,
             ])->values()->all(),
-            'interactions' => $interactions->take(6)->map(fn (object $item): array => [
+            'interactions' => $interactions->take(6)->map(fn (stdClass $item): array => [
                 'user' => $item->user_name ?? 'Sistema',
                 'about' => $item->company_name ?? $item->prospect_name,
                 'summary' => $item->summary,
@@ -104,19 +105,19 @@ class CrmService
                 'at' => $item->occurred_at,
             ])->values()->all(),
             'companies' => $companies->map(fn (array $company): array => ['id' => (int) $company['id'], 'name' => $company['name']])->values()->all(),
-            'prospect_options' => $prospects->whereNotIn('stage', ['won', 'lost'])->map(fn (object $prospect): array => ['id' => (int) $prospect->id, 'name' => $prospect->name, 'stage' => $prospect->stage])->values()->all(),
-            'staff' => DB::table('organization_user')->join('users', 'users.id', '=', 'organization_user.user_id')->where('organization_user.organization_id', $organization->id)->where('organization_user.status', 'active')->orderBy('users.name')->get(['users.id', 'users.name'])->map(fn (object $row): array => ['id' => (int) $row->id, 'name' => $row->name])->all(),
+            'prospect_options' => $prospects->whereNotIn('stage', ['won', 'lost'])->map(fn (stdClass $prospect): array => ['id' => (int) $prospect->id, 'name' => $prospect->name, 'stage' => $prospect->stage])->values()->all(),
+            'staff' => DB::table('organization_user')->join('users', 'users.id', '=', 'organization_user.user_id')->where('organization_user.organization_id', $organization->id)->where('organization_user.status', 'active')->orderBy('users.name')->get(['users.id', 'users.name'])->map(fn (stdClass $row): array => ['id' => (int) $row->id, 'name' => $row->name])->all(),
         ];
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $clients
-     * @param  Collection<int, Collection<int, object>>  $contracts
+     * @param  Collection<int, covariant array<string, mixed>>  $clients
+     * @param  Collection<int|string, covariant Collection<int, covariant stdClass>>  $contracts
      * @return list<array{tone: string, title: string, detail: string, count: int}>
      */
     private function alerts($clients, $contracts): array
     {
-        $soon = $contracts->flatten()->filter(fn (object $contract): bool => $contract->status !== 'cancelled' && $contract->renews_on !== null && $contract->renews_on >= now()->toDateString() && $contract->renews_on <= now()->addDays(30)->toDateString())->count();
+        $soon = $contracts->flatten()->filter(fn (stdClass $contract): bool => $contract->status !== 'cancelled' && $contract->renews_on !== null && $contract->renews_on >= now()->toDateString() && $contract->renews_on <= now()->addDays(30)->toDateString())->count();
         $withoutContract = $clients->where('status', 'no_contract')->count();
         $risk = $clients->where('status', 'at_risk')->count();
         $onboarding = $clients->where('status', 'onboarding')->count();

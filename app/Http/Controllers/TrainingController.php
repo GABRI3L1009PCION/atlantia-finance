@@ -58,7 +58,7 @@ class TrainingController extends Controller
     {
         $organization = $this->manage($request);
         $data = $request->validate(['user_ids' => 'required|array|min:1', 'user_ids.*' => 'integer']);
-        $added = $this->training->enroll($organization, $request->user(), $course, array_map('intval', $data['user_ids']));
+        $added = $this->training->enroll($organization, $request->user(), $course, array_values(array_map('intval', $data['user_ids'])));
 
         return back()->with('workspace_notice', $added.' participante(s) inscrito(s) correctamente.');
     }

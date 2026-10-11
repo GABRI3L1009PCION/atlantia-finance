@@ -16,7 +16,11 @@ export type DirectorFirm = {
     trend: { label: string; value: number }[];
     growth: { label: string; total: number }[];
     new_companies: number;
-    capacity: { limit: number | null; active: number; available: number | null };
+    capacity: {
+        limit: number | null;
+        active: number;
+        available: number | null;
+    };
 };
 
 const card =
@@ -134,7 +138,13 @@ function Bar({ value, tone }: { value: number; tone?: 'ok' | 'warn' | 'bad' }) {
     );
 }
 
-function CardTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+function CardTitle({
+    children,
+    aside,
+}: {
+    children: ReactNode;
+    aside?: ReactNode;
+}) {
     return (
         <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="text-base font-black text-[#061633]">{children}</h2>
@@ -195,7 +205,10 @@ function TrendChart({ points }: { points: DirectorFirm['trend'] }) {
     const y = (value: number) =>
         8 + (height - bottom - 16) * (1 - Math.min(100, value) / 100);
     const line = points
-        .map((point, index) => `${left + slot * index + slot / 2},${y(point.value)}`)
+        .map(
+            (point, index) =>
+                `${left + slot * index + slot / 2},${y(point.value)}`,
+        )
         .join(' ');
 
     return (
@@ -230,7 +243,10 @@ function TrendChart({ points }: { points: DirectorFirm['trend'] }) {
                             x={x - slot * 0.28}
                             y={y(point.value)}
                             width={slot * 0.56}
-                            height={Math.max(0, height - bottom - y(point.value))}
+                            height={Math.max(
+                                0,
+                                height - bottom - y(point.value),
+                            )}
                             rx="6"
                             fill={BRAND}
                             opacity={last ? 0.28 : 0.12}
@@ -309,9 +325,11 @@ function Donut({
                     stroke={group.color}
                     strokeWidth="16"
                     strokeDasharray={`${lengths[index]} ${circumference - lengths[index]}`}
-                    strokeDashoffset={-lengths
-                        .slice(0, index)
-                        .reduce((sum, length) => sum + length, 0)}
+                    strokeDashoffset={
+                        -lengths
+                            .slice(0, index)
+                            .reduce((sum, length) => sum + length, 0)
+                    }
                     transform="rotate(-90 70 70)"
                 />
             ))}
@@ -497,7 +515,8 @@ export function DirectorOverview({
         : 0;
     const growthFirst = firm.growth[0]?.total ?? 0;
     const growthLast = firm.growth[firm.growth.length - 1]?.total ?? 0;
-    const growthPct = growthFirst > 0 ? pct(growthLast - growthFirst, growthFirst) : 0;
+    const growthPct =
+        growthFirst > 0 ? pct(growthLast - growthFirst, growthFirst) : 0;
 
     return (
         <div className="space-y-4">
@@ -642,7 +661,9 @@ export function DirectorOverview({
                                 {growthPct >= 0 ? '+' : ''}
                                 {growthPct}%
                             </p>
-                            <p className="text-xs text-slate-500">Crecimiento</p>
+                            <p className="text-xs text-slate-500">
+                                Crecimiento
+                            </p>
                         </div>
                         <div>
                             <p className="text-lg font-black text-[#8a0b0b]">
@@ -656,7 +677,9 @@ export function DirectorOverview({
                             <p className="text-lg font-black text-slate-700">
                                 {total}
                             </p>
-                            <p className="text-xs text-slate-500">Activos hoy</p>
+                            <p className="text-xs text-slate-500">
+                                Activos hoy
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -901,7 +924,10 @@ export function DirectorOverview({
                                 'bad',
                             ],
                         ].map(([label, count, tone]) => (
-                            <div key={String(label)} className="flex items-center gap-3">
+                            <div
+                                key={String(label)}
+                                className="flex items-center gap-3"
+                            >
                                 <span className="w-40 shrink-0 text-sm text-slate-700">
                                     {label}
                                 </span>

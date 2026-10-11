@@ -2,9 +2,9 @@ import { Form } from '@inertiajs/react';
 import { TriangleAlert } from 'lucide-react';
 import { useRef } from 'react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
-import { SettingsCard } from '@/components/settings-card';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
+import { SettingsCard } from '@/components/settings-card';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,

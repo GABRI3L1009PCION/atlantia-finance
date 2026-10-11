@@ -33,7 +33,7 @@ class OfficeStaffingAlertService
             return 0;
         }
 
-        $label = CompanyAssignmentService::LABELS[$role] ?? $role;
+        $label = CompanyAssignmentService::LABELS[$role];
         $notified = 0;
 
         foreach ($this->administrators($organization, (int) $company->office_id) as $adminId) {
@@ -81,7 +81,7 @@ class OfficeStaffingAlertService
      */
     private function administrators(Organization $organization, int $officeId): array
     {
-        return DB::table('user_role_assignments as ura')
+        return array_values(DB::table('user_role_assignments as ura')
             ->join('workspace_roles as role', 'role.id', '=', 'ura.workspace_role_id')
             ->join('workspace_role_permissions as rp', 'rp.workspace_role_id', '=', 'role.id')
             ->join('workspace_permissions as permission', 'permission.id', '=', 'rp.workspace_permission_id')
@@ -94,6 +94,6 @@ class OfficeStaffingAlertService
             ->distinct()
             ->pluck('ura.user_id')
             ->map(fn ($id): int => (int) $id)
-            ->all();
+            ->all());
     }
 }

@@ -20,7 +20,7 @@ class CompanyPortfolioService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $rows = collect($executive['companies']);
         $ids = $rows->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $today = now()->toDateString();
@@ -80,7 +80,7 @@ class CompanyPortfolioService
                 ])->values()->all(),
                 'client_since' => $detail?->created_at,
                 'contact' => [
-                    'name' => $detail?->contact_name ?? $detail?->legal_representative,
+                    'name' => $detail->contact_name ?? $detail?->legal_representative,
                     'phone' => $detail?->phone,
                     'email' => $detail?->email,
                     'address' => $detail?->address,
@@ -96,15 +96,18 @@ class CompanyPortfolioService
                 'overdue_obligations' => $companies->where('overdue_obligations', '>', 0)->count(),
                 'onboarding' => $companies->where('compliance', 'onboarding')->count(),
             ],
-            'companies' => $companies->all(),
+            'companies' => array_values($companies->all()),
             'offices' => $this->distinct($companies, 'office'),
             'accountants' => $this->distinct($companies, 'accountant'),
         ];
     }
 
-    /** @return list<string> */
+    /**
+     * @param  Collection<int, covariant array<string, mixed>>  $companies
+     * @return list<string>
+     */
     private function distinct(Collection $companies, string $key): array
     {
-        return $companies->pluck($key)->filter()->unique()->sort()->values()->all();
+        return array_values(array_map('strval', $companies->pluck($key)->filter()->unique()->sort()->all()));
     }
 }

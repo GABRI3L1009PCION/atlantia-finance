@@ -9,6 +9,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use stdClass;
 
 /** Traceability and control of the firm for the director: audit findings, controls, sensitive changes and access. Read only. */
 class AuditOverviewService
@@ -25,7 +26,7 @@ class AuditOverviewService
     /** @return array<string, mixed> */
     public function payload(Organization $organization, User $user): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive');
+        $executive = $this->dashboard->executiveSnapshot($organization, $user);
         $offices = collect($executive['offices'])->keyBy('id');
         $companyOffice = DB::table('companies')->whereIn('office_id', $offices->keys()->all())->pluck('office_id', 'id');
         $now = CarbonImmutable::now();
@@ -49,20 +50,20 @@ class AuditOverviewService
 
         $months = collect(range(5, 0))->map(fn (int $back) => $monthStart->subMonths($back));
         $stacked = $months->map(function (CarbonImmutable $month) use ($findings): array {
-            $slice = $findings->filter(fn (object $row): bool => substr((string) $row->opened_at, 0, 7) === $month->format('Y-m'));
+            $slice = $findings->filter(fn (stdClass $row): bool => substr((string) $row->opened_at, 0, 7) === $month->format('Y-m'));
 
             return ['label' => self::MONTHS[$month->month - 1], 'critical' => $slice->where('severity', 'critical')->count(), 'high' => $slice->where('severity', 'high')->count(), 'medium' => $slice->where('severity', 'medium')->count(), 'low' => $slice->where('severity', 'low')->count()];
         })->values();
 
         $score = function (Collection $rows, ?CarbonImmutable $asOf = null): int {
-            $rows = $asOf === null ? $rows->whereNull('closed_at') : $rows->filter(fn (object $row): bool => $row->opened_at <= $asOf->toDateTimeString() && ($row->closed_at === null || $row->closed_at > $asOf->toDateTimeString()));
+            $rows = $asOf === null ? $rows->whereNull('closed_at') : $rows->filter(fn (stdClass $row): bool => $row->opened_at <= $asOf->toDateTimeString() && ($row->closed_at === null || $row->closed_at > $asOf->toDateTimeString()));
 
-            return max(0, 100 - (int) $rows->sum(fn (object $row): int => self::SEVERITY_WEIGHT[$row->severity] ?? 1));
+            return max(0, 100 - (int) $rows->sum(fn (stdClass $row): int => self::SEVERITY_WEIGHT[$row->severity] ?? 1));
         };
 
         $recent = (clone $logs)->orderByDesc('audit_logs.occurred_at')->limit(5)->get(['audit_logs.action', 'audit_logs.occurred_at', 'users.name as user_name']);
         $sensitive = (clone $logs)->where('audit_logs.occurred_at', '>=', $now->subDays(30))->orderByDesc('audit_logs.occurred_at')->limit(300)->get(['audit_logs.action', 'audit_logs.occurred_at', 'users.name as user_name'])
-            ->map(fn (object $row): ?array => ($level = $this->sensitivity((string) $row->action)) === null ? null : ['title' => $this->label((string) $row->action), 'by' => $row->user_name ?? 'Sistema', 'at' => $row->occurred_at, 'level' => $level])
+            ->map(fn (stdClass $row): ?array => ($level = $this->sensitivity((string) $row->action)) === null ? null : ['title' => $this->label((string) $row->action), 'by' => $row->user_name ?? 'Sistema', 'at' => $row->occurred_at, 'level' => $level])
             ->filter()->values();
         $failed = DB::table('login_attempts')->where('succeeded', false)->where('created_at', '>=', $now->subDays(7))->selectRaw('email, CAST(COUNT(*) AS BIGINT) as total, MAX(created_at) as last_at, MAX(ip) as ip')->groupBy('email')->havingRaw('COUNT(*) >= 3')->orderByDesc('total')->limit(6)->get();
 
@@ -86,16 +87,16 @@ class AuditOverviewService
             'severity' => collect(['critical' => ['Críticos', '#dc2626'], 'high' => ['Altos', '#f97316'], 'medium' => ['Medios', '#f0c419'], 'low' => ['Bajos', '#9ca3af']])
                 ->map(fn (array $meta, string $key): array => ['label' => $meta[0], 'value' => $open->where('severity', $key)->count(), 'color' => $meta[1]])->values()->all(),
             'controls' => $controlBuckets,
-            'activity' => $recent->map(fn (object $row): array => ['who' => $row->user_name ?? 'Sistema', 'what' => $this->label((string) $row->action), 'at' => $row->occurred_at, 'level' => $this->sensitivity((string) $row->action) ?? 'Bajo'])->all(),
-            'exceptions' => $open->whereIn('severity', ['critical', 'high'])->sortByDesc('opened_at')->take(5)->map(fn (object $row): array => ['title' => $row->title, 'severity' => $row->severity, 'at' => $row->opened_at])->values()->all(),
+            'activity' => $recent->map(fn (stdClass $row): array => ['who' => $row->user_name ?? 'Sistema', 'what' => $this->label((string) $row->action), 'at' => $row->occurred_at, 'level' => $this->sensitivity((string) $row->action) ?? 'Bajo'])->all(),
+            'exceptions' => $open->whereIn('severity', ['critical', 'high'])->sortByDesc('opened_at')->take(5)->map(fn (stdClass $row): array => ['title' => $row->title, 'severity' => $row->severity, 'at' => $row->opened_at])->values()->all(),
             'exceptions_total' => $open->whereIn('severity', ['critical', 'high'])->count(),
             'high_risk_changes' => $sensitive->take(4)->all(),
             'high_risk_total' => $sensitive->count(),
-            'unusual_access' => $failed->map(fn (object $row): array => ['title' => 'Múltiples intentos fallidos de acceso', 'detail' => $row->email.' · '.$row->total.' intentos'.($row->ip ? ' · IP '.$row->ip : ''), 'at' => $row->last_at])->all(),
-            'pending_reviews' => $reviews->map(fn (object $row): array => ['type' => 'Revisión de cierre', 'description' => $row->company, 'assigned' => $row->assigned, 'due' => substr((string) $row->submitted_at, 0, 10), 'status' => $row->status])
-                ->concat($evidence->map(fn (object $row): array => ['type' => 'Solicitud de evidencia', 'description' => $row->title, 'assigned' => $row->assigned, 'due' => $row->due_date, 'status' => $row->status]))->take(8)->values()->all(),
+            'unusual_access' => $failed->map(fn (stdClass $row): array => ['title' => 'Múltiples intentos fallidos de acceso', 'detail' => $row->email.' · '.$row->total.' intentos'.($row->ip ? ' · IP '.$row->ip : ''), 'at' => $row->last_at])->all(),
+            'pending_reviews' => $reviews->map(fn (stdClass $row): array => ['type' => 'Revisión de cierre', 'description' => $row->company, 'assigned' => $row->assigned, 'due' => substr((string) $row->submitted_at, 0, 10), 'status' => $row->status])
+                ->concat($evidence->map(fn (stdClass $row): array => ['type' => 'Solicitud de evidencia', 'description' => $row->title, 'assigned' => $row->assigned, 'due' => $row->due_date, 'status' => $row->status]))->take(8)->values()->all(),
             'office_scores' => $offices->map(function (array $office, int $id) use ($findings, $companyOffice, $score, $now): array {
-                $mine = $findings->filter(fn (object $row): bool => ($companyOffice[$row->company_id] ?? null) === $id);
+                $mine = $findings->filter(fn (stdClass $row): bool => ($companyOffice[$row->company_id] ?? null) === $id);
                 $current = $score($mine);
 
                 return ['name' => $office['name'], 'score' => $current, 'trend' => $current - $score($mine, $now->startOfMonth()->subSecond())];

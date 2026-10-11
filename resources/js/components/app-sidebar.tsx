@@ -567,7 +567,11 @@ export function AppSidebar() {
             icon: ShieldCheck,
         },
         { title: 'Cierres', href: '/work/closings', icon: CalendarDays },
-        { title: 'Mapa de riesgos', href: '/office/risk-map', icon: ShieldAlert },
+        {
+            title: 'Mapa de riesgos',
+            href: '/office/risk-map',
+            icon: ShieldAlert,
+        },
     ];
     const executiveTeamItems: NavItem[] = [
         { title: 'Personal', href: '/office/users-roles', icon: Users },
@@ -577,7 +581,11 @@ export function AppSidebar() {
             icon: ListTree,
         },
         { title: 'Productividad', href: '/office/productivity', icon: Gauge },
-        { title: 'Capacitación', href: '/office/training', icon: GraduationCap },
+        {
+            title: 'Capacitación',
+            href: '/office/training',
+            icon: GraduationCap,
+        },
     ];
     const executiveBusinessItems: NavItem[] = [
         { title: 'Clientes (CRM)', href: '/office/crm', icon: Handshake },
@@ -2049,11 +2057,7 @@ export function AppSidebar() {
                 { title: 'Oficinas', href: '/office/offices', icon: Building2 },
                 adminLink('Empresas', '/office/companies', BriefcaseBusiness),
                 adminLink('Equipo', '/office/team', Users),
-                adminLink(
-                    'Asignaciones',
-                    '/office/assignments',
-                    Contact,
-                ),
+                adminLink('Asignaciones', '/office/assignments', Contact),
             ],
         },
         {
@@ -2086,7 +2090,11 @@ export function AppSidebar() {
                     href: '/office/training',
                     icon: GraduationCap,
                 },
-                { title: 'Clientes (CRM)', href: '/office/crm', icon: Handshake },
+                {
+                    title: 'Clientes (CRM)',
+                    href: '/office/crm',
+                    icon: Handshake,
+                },
                 {
                     title: 'Perfil de la firma',
                     href: '/office/firm-profile',

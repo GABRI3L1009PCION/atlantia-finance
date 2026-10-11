@@ -19,11 +19,11 @@ class ExecutiveReportsService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $offices = collect($executive['offices']);
         $companies = collect($executive['companies']);
         $workload = collect($executive['workload']);
-        $productivity = collect($executive['productivity'] ?? []);
+        $productivity = collect($executive['productivity']);
         $summary = $executive['summary'];
         $canRevenue = $this->authorization->can($organization, $user, 'crm.view');
         $overloaded = $workload->filter(fn (array $row): bool => ($row['utilization_percentage'] ?? 0) >= 90)->count();

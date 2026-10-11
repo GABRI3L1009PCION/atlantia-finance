@@ -42,7 +42,7 @@ class LuzmaController extends Controller
         $context = $this->context($request);
         $tab = in_array($request->query('tab'), ['chat', 'reminders', 'insights', 'history'], true) ? (string) $request->query('tab') : 'chat';
 
-        if ($context->organization !== null && app(WorkAuthorizationService::class)->isExecutiveReadOnly($context->organization, $context->user)) {
+        if (app(WorkAuthorizationService::class)->isExecutiveReadOnly($context->organization, $context->user)) {
             return Inertia::render('luzma/director', [
                 'summary' => app(LuzmaDirectorSummaryService::class)->summary($context->organization, $context->user),
                 'conversations' => $context->can('luzma.history.view') ? $this->conversations->list($context->organization, $context->user, null) : [],

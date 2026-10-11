@@ -18,7 +18,7 @@ class LuzmaDirectorSummaryService
     /** @return array<string, int|float|null> */
     public function summary(Organization $organization, User $user): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive');
+        $executive = $this->dashboard->executiveSnapshot($organization, $user);
         $companies = collect($executive['companies']);
         $workload = collect($executive['workload']);
         $today = now()->toDateString();

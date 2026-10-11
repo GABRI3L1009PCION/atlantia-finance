@@ -23,7 +23,7 @@ class WorkloadOverviewService
      */
     public function payload(Organization $organization, User $user, array $filters = []): array
     {
-        $executive = $this->dashboard->dashboard($organization, $user, 'executive', $filters);
+        $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $people = collect($executive['workload']);
         $officeIds = collect($executive['offices'])->pluck('id')->all();
         $now = now();
@@ -97,8 +97,8 @@ class WorkloadOverviewService
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $overloaded
-     * @param  Collection<int, array<string, mixed>>  $spare
+     * @param  Collection<int, covariant array<string, mixed>>  $overloaded
+     * @param  Collection<int, covariant array<string, mixed>>  $spare
      * @return list<array{tone: string, title: string, detail: string}>
      */
     private function recommendations($overloaded, $spare, int $dueToday): array

@@ -70,7 +70,8 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
                 <DialogContent>
                     <DialogTitle>Quitar llave de acceso</DialogTitle>
                     <DialogDescription>
-                        ¿Seguro que quieres quitar la llave "{passkey.name}"? Ya no podrás usarla para iniciar sesión.
+                        ¿Seguro que quieres quitar la llave "{passkey.name}"? Ya
+                        no podrás usarla para iniciar sesión.
                     </DialogDescription>
                     <DialogFooter className="gap-2">
                         <DialogClose asChild>
