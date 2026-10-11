@@ -28,6 +28,7 @@ class OperationalRecordController extends Controller
         $record = $this->accounting->company($organization, $request->user(), $company);
         $definition = $this->workflows->definition($module);
         $this->workspace->requireFeature($organization, $definition['feature']);
+        $this->accounting->assertModule($organization, $record->id, $request->user(), 'operations.view');
         $filters = $request->validate([
             'status' => ['nullable', 'string', 'max:40'],
             'type' => ['nullable', 'string', 'max:50'],
@@ -58,6 +59,7 @@ class OperationalRecordController extends Controller
     {
         $organization = $this->workspace->organization($request->user());
         $companyRecord = $this->accounting->company($organization, $request->user(), $company, true);
+        $this->accounting->assertModule($organization, $companyRecord->id, $request->user(), 'operations.manage');
         $data = $request->validate([
             'request_id' => ['required', 'uuid'],
             'record_type' => ['required', 'string', 'max:50'],
@@ -79,6 +81,7 @@ class OperationalRecordController extends Controller
         $companyRecord = $this->accounting->company($organization, $request->user(), $company);
         $definition = $this->workflows->definition($module);
         $this->workspace->requireFeature($organization, $definition['feature']);
+        $this->accounting->assertModule($organization, $companyRecord->id, $request->user(), 'operations.view');
         $operationalRecord = $this->record($companyRecord->id, $module, $record)->load([
             'creator:id,name,email',
             'events' => fn ($query) => $query->with('user:id,name,email')->latest('occurred_at'),
@@ -92,6 +95,7 @@ class OperationalRecordController extends Controller
     {
         $organization = $this->workspace->organization($request->user());
         $companyRecord = $this->accounting->company($organization, $request->user(), $company, true);
+        $this->accounting->assertModule($organization, $companyRecord->id, $request->user(), 'operations.manage');
         $operationalRecord = $this->record($companyRecord->id, $module, $record);
         $data = $request->validate([
             'title' => ['sometimes', 'required', 'string', 'max:180'],
@@ -110,6 +114,7 @@ class OperationalRecordController extends Controller
     {
         $organization = $this->workspace->organization($request->user());
         $companyRecord = $this->accounting->company($organization, $request->user(), $company, true);
+        $this->accounting->assertModule($organization, $companyRecord->id, $request->user(), 'operations.manage');
         $operationalRecord = $this->record($companyRecord->id, $module, $record);
         $definition = $this->workflows->definition($module);
         $statuses = collect($definition['transitions'])->flatten()->unique()->values()->all();

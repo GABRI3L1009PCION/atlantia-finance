@@ -6,19 +6,17 @@ import {
     CircleDollarSign,
     FileCheck2,
     Landmark,
-    Plus,
     ReceiptText,
     Save,
     ShieldCheck,
 } from 'lucide-react';
 import type { Company } from '@/components/accounting-section';
-import {
-    Card,
-    Errors,
-    field,
-    money,
-    primary,
-} from '@/components/accounting-ui';
+import { Card, Errors, field, primary } from '@/components/accounting-ui';
+import { TaxCatalog } from '@/components/fiscal/tax-catalog';
+import type {
+    FiscalTax,
+    LedgerAccountOption,
+} from '@/components/fiscal/tax-catalog';
 
 type FiscalProfile = {
     country_code: string;
@@ -29,20 +27,6 @@ type FiscalProfile = {
     accounting_template: string;
     exchange_rate_source: string;
     fiscal_year_starts_in: number;
-};
-
-type TaxRule = {
-    id: number;
-    code: string;
-    name: string;
-    tax_type: string;
-    regime: string;
-    rate_basis_points: number;
-    threshold_cents: number | null;
-    recoverable: boolean;
-    valid_from: string;
-    valid_to: string | null;
-    is_active: boolean;
 };
 
 type ExchangeRate = {
@@ -69,35 +53,25 @@ const labels: Record<string, string> = {
     withholding: 'Retención',
 };
 
-const today = new Date().toLocaleDateString('en-CA');
-
 export default function FiscalSettings({
     company,
     profile,
-    rules,
+    taxes,
+    accounts,
+    today,
     exchangeRates,
     canManage,
 }: {
     company: Company;
     profile: FiscalProfile;
-    rules: TaxRule[];
+    taxes: FiscalTax[];
+    accounts: LedgerAccountOption[];
+    today: string;
     exchangeRates: ExchangeRate[];
     canManage: boolean;
 }) {
     const endpoint = `/accounting/companies/${company.public_id}/fiscal-settings`;
     const profileForm = useForm({ ...profile });
-    const ruleForm = useForm({
-        code: '',
-        name: '',
-        tax_type: 'vat',
-        regime: profile.vat_regime,
-        rate: '12.00',
-        threshold: '',
-        recoverable: true,
-        valid_from: today,
-        valid_to: '',
-        is_active: true,
-    });
     const exchangeForm = useForm({
         currency: 'USD',
         rate: '',
@@ -632,216 +606,14 @@ export default function FiscalSettings({
                 </div>
 
                 <div id="reglas-fiscales">
-                    <Card title="Reglas fiscales y vigencias">
-                        <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
-                            <div className="overflow-x-auto rounded-xl border border-slate-200">
-                                <table className="w-full min-w-[760px] text-left text-sm">
-                                    <thead className="bg-[#faf4f4] text-xs text-slate-600 uppercase">
-                                        <tr>
-                                            <th className="p-3">Impuesto</th>
-                                            <th className="p-3">Régimen</th>
-                                            <th className="p-3">Tasa</th>
-                                            <th className="p-3">Umbral</th>
-                                            <th className="p-3">Vigencia</th>
-                                            <th className="p-3">Estado</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {rules.map((rule) => (
-                                            <tr
-                                                key={rule.id}
-                                                className="border-t border-slate-100"
-                                            >
-                                                <td className="p-3">
-                                                    <p className="font-semibold">
-                                                        {rule.name}
-                                                    </p>
-                                                    <p className="text-xs text-slate-500">
-                                                        {rule.code} ·{' '}
-                                                        {labels[rule.tax_type]}
-                                                    </p>
-                                                </td>
-                                                <td className="p-3">
-                                                    {labels[rule.regime] ??
-                                                        rule.regime}
-                                                </td>
-                                                <td className="p-3 font-semibold tabular-nums">
-                                                    {(
-                                                        rule.rate_basis_points /
-                                                        100
-                                                    ).toFixed(2)}
-                                                    %
-                                                </td>
-                                                <td className="p-3">
-                                                    {rule.threshold_cents
-                                                        ? money(
-                                                              rule.threshold_cents,
-                                                          )
-                                                        : '—'}
-                                                </td>
-                                                <td className="p-3">
-                                                    {rule.valid_from}
-                                                    <br />
-                                                    <span className="text-xs text-slate-500">
-                                                        a{' '}
-                                                        {rule.valid_to ??
-                                                            'sin vencimiento'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-3">
-                                                    <span
-                                                        className={`rounded-full px-2 py-1 text-xs font-semibold ${rule.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
-                                                    >
-                                                        {rule.is_active
-                                                            ? 'Activa'
-                                                            : 'Inactiva'}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <form
-                                className="rounded-xl border border-[#eadfdf] bg-[#fffafa] p-4"
-                                onSubmit={(event) => {
-                                    event.preventDefault();
-                                    ruleForm.post(`${endpoint}/tax-rules`, {
-                                        preserveScroll: true,
-                                        onSuccess: () =>
-                                            ruleForm.reset(
-                                                'code',
-                                                'name',
-                                                'threshold',
-                                                'valid_to',
-                                            ),
-                                    });
-                                }}
-                            >
-                                <h3 className="flex items-center gap-2 font-semibold">
-                                    <Plus className="size-4 text-[#76080e]" />{' '}
-                                    Nueva vigencia
-                                </h3>
-                                <p className="mt-1 text-xs text-slate-500">
-                                    No sobrescribe tasas históricas. Agrega una
-                                    regla con su fecha de inicio.
-                                </p>
-                                <Errors errors={ruleForm.errors} />
-                                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                                    <input
-                                        className={field}
-                                        placeholder="CÓDIGO_REGLA"
-                                        value={ruleForm.data.code}
-                                        onChange={(event) =>
-                                            ruleForm.setData(
-                                                'code',
-                                                event.target.value
-                                                    .toUpperCase()
-                                                    .replace(/[^A-Z0-9_]/g, ''),
-                                            )
-                                        }
-                                        disabled={!canManage}
-                                    />
-                                    <input
-                                        className={field}
-                                        placeholder="Nombre de la regla"
-                                        value={ruleForm.data.name}
-                                        onChange={(event) =>
-                                            ruleForm.setData(
-                                                'name',
-                                                event.target.value,
-                                            )
-                                        }
-                                        disabled={!canManage}
-                                    />
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <select
-                                            className={field}
-                                            value={ruleForm.data.tax_type}
-                                            onChange={(event) =>
-                                                ruleForm.setData(
-                                                    'tax_type',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            disabled={!canManage}
-                                        >
-                                            <option value="vat">IVA</option>
-                                            <option value="income_tax">
-                                                ISR
-                                            </option>
-                                            <option value="withholding">
-                                                Retención
-                                            </option>
-                                        </select>
-                                        <input
-                                            className={field}
-                                            placeholder="Tasa %"
-                                            value={ruleForm.data.rate}
-                                            onChange={(event) =>
-                                                ruleForm.setData(
-                                                    'rate',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            disabled={!canManage}
-                                        />
-                                    </div>
-                                    <input
-                                        className={field}
-                                        placeholder="Régimen (ej. general)"
-                                        value={ruleForm.data.regime}
-                                        onChange={(event) =>
-                                            ruleForm.setData(
-                                                'regime',
-                                                event.target.value
-                                                    .toLowerCase()
-                                                    .replace(/[^a-z0-9_]/g, ''),
-                                            )
-                                        }
-                                        disabled={!canManage}
-                                    />
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <input
-                                            type="date"
-                                            className={field}
-                                            value={ruleForm.data.valid_from}
-                                            onChange={(event) =>
-                                                ruleForm.setData(
-                                                    'valid_from',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            disabled={!canManage}
-                                        />
-                                        <input
-                                            type="date"
-                                            className={field}
-                                            value={ruleForm.data.valid_to}
-                                            onChange={(event) =>
-                                                ruleForm.setData(
-                                                    'valid_to',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            disabled={!canManage}
-                                        />
-                                    </div>
-                                    {canManage && (
-                                        <button
-                                            className={primary}
-                                            disabled={ruleForm.processing}
-                                        >
-                                            <CalendarClock className="size-4" />{' '}
-                                            Registrar vigencia
-                                        </button>
-                                    )}
-                                </div>
-                            </form>
-                        </div>
-                    </Card>
+                    <TaxCatalog
+                        company={company.public_id}
+                        taxes={taxes}
+                        accounts={accounts}
+                        today={today}
+                        canManage={canManage}
+                    />
                 </div>
-
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950">
                     <p className="flex items-center gap-2 font-semibold">
                         <BadgeCheck className="size-5" /> Control profesional

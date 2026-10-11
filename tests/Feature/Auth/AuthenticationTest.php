@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
@@ -20,6 +21,23 @@ test('users can authenticate using the login screen', function () {
 
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
+});
+
+test('enterprise users are redirected to their role dashboard after login', function () {
+    $user = User::factory()->create();
+    $organization = Organization::create(['name' => 'Atlantia Systems', 'status' => 'active']);
+    $organization->subscriptions()->create(['status' => 'active']);
+    $organization->users()->attach($user->id, ['role' => 'owner', 'status' => 'active']);
+
+    $response = $this
+        ->withSession(['url.intended' => '/accounting/companies/demo/accounting?status=success'])
+        ->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+    $this->assertAuthenticatedAs($user);
+    $response->assertRedirect('/office/executive-dashboard');
 });
 
 test('users with two factor enabled are redirected to two factor challenge', function () {

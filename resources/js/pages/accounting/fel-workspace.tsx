@@ -1,185 +1,173 @@
 import { Head } from '@inertiajs/react';
 import {
-    Check,
+    AlertTriangle,
+    CalendarDays,
+    CheckCircle2,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
-    CircleAlert,
+    CircleDollarSign,
     Clock3,
     Copy,
     Download,
-    ExternalLink,
+    Eye,
     FileCode2,
     FileDown,
     FileText,
-    Filter,
-    HelpCircle,
+    Mail,
     MoreVertical,
-    Pencil,
     Plus,
+    RefreshCw,
     Search,
-    Send,
-    ShieldCheck,
-    UserRound,
     X,
+    XCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-type DteStatus = 'Certificado' | 'Enviado' | 'Rechazado' | 'Pendiente';
+type DteStatus = 'Certificado' | 'Pendiente' | 'Con error' | 'Anulado';
 type Dte = {
     id: number;
+    status: DteStatus;
+    type: string;
     series: string;
     number: string;
-    type: string;
+    date: string;
     client: string;
     nit: string;
-    address: string;
-    date: string;
     total: string;
-    status: DteStatus;
+    certification: string;
     uuid: string;
+    user: string;
 };
 
-const documents: Dte[] = [
+const dtes: Dte[] = [
     {
         id: 1,
-        series: 'A1',
-        number: '00001234',
-        type: 'Factura (FEL)',
-        client: 'Cliente Industrial, S.A.',
-        nit: '1234567-8',
-        address: '7a. Avenida 12-34, Zona 9, Guatemala',
-        date: '15/01/2025',
-        total: 'Q 12,450.00',
         status: 'Certificado',
-        uuid: 'A1B2C3D4-E5F6-7890-1234-56789ABCDEFO',
+        type: 'Factura',
+        series: 'FEL',
+        number: '000128',
+        date: '15/04/2025',
+        client: 'Constructora del Norte, S.A.',
+        nit: '1234567',
+        total: 'Q 12,500.00',
+        certification: '15/04/2025 10:24',
+        uuid: '4867e3b9-2f1c-4c9a-8e13-b2d5f7a9c001',
+        user: 'J. Pérez',
     },
     {
         id: 2,
-        series: 'A1',
-        number: '00001233',
-        type: 'Factura (FEL)',
-        client: 'Distribuidora La Paz, S.A.',
-        nit: '5489123-6',
-        address: 'Zona 10, Guatemala',
-        date: '15/01/2025',
-        total: 'Q 8,900.00',
-        status: 'Enviado',
-        uuid: 'F3E2D1C0-0987-6543-210F',
+        status: 'Pendiente',
+        type: 'Factura',
+        series: 'FEL',
+        number: '000127',
+        date: '15/04/2025',
+        client: 'Distribuidora Central, S.A.',
+        nit: '7654321',
+        total: 'Q 8,750.00',
+        certification: 'En proceso',
+        uuid: '—',
+        user: 'M. López',
     },
     {
         id: 3,
-        series: 'CR',
-        number: '00000123',
-        type: 'Nota de Crédito (FEL)',
-        client: 'Comercial Delta, S.A.',
-        nit: '7684321-5',
-        address: 'Mixco, Guatemala',
-        date: '14/01/2025',
-        total: '- Q 1,250.00',
-        status: 'Certificado',
-        uuid: '9A8B7C6D-5432-1098-ABCD',
+        status: 'Con error',
+        type: 'Nota de crédito',
+        series: 'FEL',
+        number: '000126',
+        date: '14/04/2025',
+        client: 'Comercializadora Fenix, S.A.',
+        nit: '9876543',
+        total: '- Q 2,500.00',
+        certification: 'Error en certificación',
+        uuid: '—',
+        user: 'A. García',
     },
     {
         id: 4,
-        series: 'A1',
-        number: '00001232',
-        type: 'Factura (FEL)',
-        client: 'Servicios Profesionales, S.A.',
-        nit: '3345678-1',
-        address: 'Zona 4, Guatemala',
-        date: '14/01/2025',
-        total: 'Q 5,600.00',
         status: 'Certificado',
-        uuid: '4F5E6D7C-BA98-7654-3210',
+        type: 'Factura',
+        series: 'FEL',
+        number: '000125',
+        date: '14/04/2025',
+        client: 'Servicios Profesionales, S.A.',
+        nit: '1122334',
+        total: 'Q 5,000.00',
+        certification: '14/04/2025 16:18',
+        uuid: 'a9f2c0d4-8b7c-4e9f-b2a1',
+        user: 'J. Pérez',
     },
     {
         id: 5,
-        series: 'A1',
-        number: '00001231',
-        type: 'Factura (FEL)',
-        client: 'Inversiones Caribe, S.A.',
-        nit: '8754123-9',
-        address: 'Puerto Barrios, Izabal',
-        date: '13/01/2025',
-        total: 'Q 22,400.00',
-        status: 'Rechazado',
-        uuid: '8C7B6A5D-4321-0FED-CBA9',
+        status: 'Certificado',
+        type: 'Factura',
+        series: 'FEL',
+        number: '000124',
+        date: '13/04/2025',
+        client: 'Inversiones La Paz, S.A.',
+        nit: '5566778',
+        total: 'Q 3,200.00',
+        certification: '13/04/2025 11:02',
+        uuid: 'c3d9e6f2-14ad-4f0a-b19c',
+        user: 'M. López',
     },
     {
         id: 6,
-        series: 'A1',
-        number: '00001230',
-        type: 'Factura (FEL)',
+        status: 'Anulado',
+        type: 'Factura',
+        series: 'FEL',
+        number: '000123',
+        date: '12/04/2025',
         client: 'Tecnología Global, S.A.',
-        nit: '2233445-5',
-        address: 'Zona 10, Guatemala',
-        date: '13/01/2025',
-        total: 'Q 3,150.00',
-        status: 'Certificado',
-        uuid: '5D4C3B2A-1098-7654-3210',
+        nit: '9988776',
+        total: 'Q 1,850.00',
+        certification: '12/04/2025 09:15',
+        uuid: 'd7a1b3c9-5e2a-468f-9130',
+        user: 'A. García',
     },
     {
         id: 7,
-        series: 'A1',
-        number: '00001229',
-        type: 'Factura (FEL)',
-        client: 'Grupo Empresarial, S.A.',
-        nit: '5467891-2',
-        address: 'Zona 14, Guatemala',
-        date: '12/01/2025',
-        total: 'Q 17,800.00',
         status: 'Certificado',
-        uuid: '2A3B4C5D-6789-0123-4567',
+        type: 'Nota de débito',
+        series: 'FEL',
+        number: '000122',
+        date: '11/04/2025',
+        client: 'Transportes Unidos, S.A.',
+        nit: '7788990',
+        total: 'Q 950.00',
+        certification: '11/04/2025 14:33',
+        uuid: 'e4b8d1a0-7c9d-4dc5-850f',
+        user: 'J. Pérez',
     },
     {
         id: 8,
-        series: 'A1',
-        number: '00001228',
-        type: 'Factura (FEL)',
-        client: 'Soluciones Integrales, S.A.',
-        nit: '7524681-4',
-        address: 'Villa Nueva, Guatemala',
-        date: '12/01/2025',
-        total: 'Q 6,750.00',
         status: 'Pendiente',
-        uuid: '7E6D5C4B-3210-FEDC-BA98',
-    },
-    {
-        id: 9,
-        series: 'A1',
-        number: '00001227',
-        type: 'Factura (FEL)',
-        client: 'Constructora del Sur, S.A.',
-        nit: '9912345-7',
-        address: 'Escuintla, Guatemala',
-        date: '11/01/2025',
-        total: 'Q 28,900.00',
-        status: 'Certificado',
-        uuid: '1F2E3D4C-5B6A-7890-1234',
-    },
-    {
-        id: 10,
-        series: 'A1',
-        number: '00001226',
-        type: 'Factura (FEL)',
-        client: 'Agroindustria, S.A.',
-        nit: '3124567-8',
-        address: 'Mazatenango, Suchitepéquez',
-        date: '11/01/2025',
-        total: 'Q 9,320.00',
-        status: 'Certificado',
-        uuid: '6B5A4C3D-2E1F-0987-6543',
+        type: 'Factura',
+        series: 'FEL',
+        number: '000121',
+        date: '10/04/2025',
+        client: 'Industrias del Sur, S.A.',
+        nit: '4455667',
+        total: 'Q 7,600.00',
+        certification: 'En proceso',
+        uuid: '—',
+        user: 'M. López',
     },
 ];
 
-const panel = 'rounded-xl border border-slate-200 bg-white shadow-sm';
-const statusStyle: Record<DteStatus, string> = {
+const statusClass: Record<DteStatus, string> = {
     Certificado: 'bg-emerald-100 text-emerald-700',
-    Enviado: 'bg-blue-100 text-blue-700',
-    Rechazado: 'bg-red-100 text-red-700',
     Pendiente: 'bg-amber-100 text-amber-700',
+    'Con error': 'bg-red-100 text-red-700',
+    Anulado: 'bg-slate-200 text-slate-600',
+};
+
+const statusDot: Record<DteStatus, string> = {
+    Certificado: 'bg-emerald-600',
+    Pendiente: 'bg-amber-500',
+    'Con error': 'bg-red-600',
+    Anulado: 'bg-slate-500',
 };
 
 function Metric({
@@ -196,42 +184,39 @@ function Metric({
     tone: string;
 }) {
     return (
-        <article className={`${panel} flex min-h-28 items-center gap-5 p-5`}>
+        <article className="flex min-h-24 items-center gap-4 rounded-lg border border-[#eadada] bg-white p-4 shadow-[0_8px_22px_rgba(28,38,54,.04)]">
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-xl ${tone}`}
+                className={`grid size-12 shrink-0 place-items-center rounded-xl ${tone}`}
             >
-                <Icon className="size-7" />
+                <Icon size={23} />
             </span>
-            <div>
-                <p className="text-sm text-slate-600">{label}</p>
-                <strong className="text-3xl text-slate-950">{value}</strong>
-                <p className="mt-1 text-xs font-medium text-slate-500">
-                    {detail}
+            <div className="min-w-0">
+                <p className="text-[11px] font-medium text-[#536889]">
+                    {label}
+                </p>
+                <div className="mt-1 flex items-end gap-2">
+                    <strong className="text-2xl leading-none text-[#08162c]">
+                        {value}
+                    </strong>
+                    <span className="pb-0.5 text-[10px] font-bold text-emerald-600">
+                        {detail}
+                    </span>
+                </div>
+                <p className="mt-1 text-[10px] text-[#6d7b92]">
+                    {label === 'Documentos emitidos'
+                        ? 'Este mes: 28'
+                        : label === 'Total facturado'
+                          ? 'Este mes: Q 28,750.00'
+                          : label === 'Pendientes'
+                            ? 'En proceso de certificación'
+                            : label === 'Certificados'
+                              ? '84.6% del total'
+                              : label === 'Con error'
+                                ? 'Requieren atención'
+                                : '2.6% del total'}
                 </p>
             </div>
         </article>
-    );
-}
-
-function StatusSummary({
-    label,
-    value,
-    tone,
-}: {
-    label: string;
-    value: string;
-    tone: string;
-}) {
-    return (
-        <div className="flex min-w-28 flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <span className={`size-3 rounded-full ring-4 ${tone}`} />
-            <span>
-                <small className="block text-[10px] text-slate-500">
-                    {label}
-                </small>
-                <strong className="text-sm">{value}</strong>
-            </span>
-        </div>
     );
 }
 
@@ -241,569 +226,526 @@ export default function FelWorkspace({
     company: { name: string; public_id: string };
 }) {
     const [selectedId, setSelectedId] = useState(1);
-    const [status, setStatus] = useState('Todos los estados');
-    const [type, setType] = useState('Todos los tipos');
+    const [status, setStatus] = useState('Todos');
+    const [type, setType] = useState('Todos');
     const [query, setQuery] = useState('');
-    const [tab, setTab] = useState('Información');
-    const [notice, setNotice] = useState('');
-    const [page, setPage] = useState(1);
-    const selected =
-        documents.find((document) => document.id === selectedId) ??
-        documents[0];
+    const selected = dtes.find((dte) => dte.id === selectedId) ?? dtes[0];
     const filtered = useMemo(
         () =>
-            documents.filter(
-                (document) =>
-                    (status === 'Todos los estados' ||
-                        document.status === status) &&
-                    (type === 'Todos los tipos' || document.type === type) &&
-                    `${document.series} ${document.number} ${document.client} ${document.uuid}`
+            dtes.filter(
+                (dte) =>
+                    (status === 'Todos' || dte.status === status) &&
+                    (type === 'Todos' || dte.type === type) &&
+                    `${dte.client} ${dte.nit} ${dte.number} ${dte.uuid}`
                         .toLowerCase()
                         .includes(query.toLowerCase()),
             ),
         [query, status, type],
     );
 
-    const action = (message: string) => {
-        setNotice(message);
-        window.setTimeout(() => setNotice(''), 3500);
-    };
-    const createUrl = `/accounting/companies/${company.public_id}/fel/create`;
-    const indexUrl = `/accounting/companies/${company.public_id}/fel`;
-
     return (
-        <main className="min-h-full bg-[#f6f8fb] p-3 text-[#172033] sm:p-5">
-            <Head title={`FEL / SAT · ${company.name}`} />
-            <div className="mx-auto max-w-[1900px] space-y-4">
-                <header className="flex flex-wrap items-start justify-between gap-4">
+        <main className="min-h-full bg-[#f6f8fb] p-4 text-[#102039] sm:p-6">
+            <Head title={`Facturación electrónica FEL · ${company.name}`} />
+            <div className="mx-auto max-w-[1880px] space-y-3">
+                <section className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#7a0007] via-[#980b12] to-[#640006] px-6 py-5 text-white shadow-[0_10px_28px_rgba(70,0,0,.20)]">
+                    <div className="pointer-events-none absolute inset-0 opacity-20">
+                        <div className="absolute top-[-90px] right-20 size-72 rounded-full border border-white" />
+                        <div className="absolute top-[-40px] right-48 size-48 rounded-full border border-white" />
+                    </div>
+                    <div className="relative flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-semibold tracking-[.34em] text-white/80">
+                                ATLANTIA SYSTEMS / Facturación electrónica
+                            </p>
+                            <h1 className="mt-2 text-4xl leading-tight font-extrabold">
+                                Facturación electrónica FEL
+                            </h1>
+                            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                                <span>
+                                    Empresa: <strong>Atlantia Systems</strong>
+                                </span>
+                                <span className="opacity-60">|</span>
+                                <span>
+                                    NIT: <strong>97655988</strong>
+                                </span>
+                                <span className="opacity-60">|</span>
+                                <span>
+                                    Ambiente: <strong>Pruebas</strong>
+                                </span>
+                                <span className="opacity-60">|</span>
+                                <span>
+                                    Certificador: <strong>FEL simulado</strong>
+                                </span>
+                                <span className="opacity-60">|</span>
+                                <span>
+                                    Estado del emisor: <strong>Activo</strong>{' '}
+                                    <span className="ml-1 inline-block size-2 rounded-full bg-emerald-400" />
+                                </span>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button className="rounded-lg bg-white px-5 py-3 text-sm font-bold text-[#7a0007] shadow-sm">
+                                Configurar emisor
+                            </button>
+                            <a
+                                href={`/accounting/companies/${company.public_id}/fel/create`}
+                                className="inline-flex items-center gap-2 rounded-lg bg-[#c58b1b] px-5 py-3 text-sm font-bold text-white shadow-sm"
+                            >
+                                <Plus size={17} /> Nuevo DTE
+                            </a>
+                            <button className="inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-bold text-[#102039] shadow-sm">
+                                <RefreshCw size={16} /> Sincronizar
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <section className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-900">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-amber-400 text-white">
+                        <AlertTriangle size={18} />
+                    </span>
                     <div>
-                        <h1 className="text-3xl font-bold">FEL / SAT</h1>
-                        <p className="mt-1 text-base text-slate-500">
-                            Documentos tributarios electrónicos
+                        <strong>AMBIENTE DE PRUEBA · FEL SIMULADO</strong>
+                        <p className="mt-1 text-xs">
+                            Los documentos generados en este ambiente no
+                            constituyen certificación FEL ante la SAT. Úsalos
+                            solo para pruebas y validaciones.
                         </p>
                     </div>
-                    <div className="flex gap-2">
-                        <a
-                            href={indexUrl}
-                            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold"
-                        >
-                            <HelpCircle className="size-4" />
-                            Ayuda
-                        </a>
-                        <a
-                            href={createUrl}
-                            className="flex items-center gap-2 rounded-lg bg-[#74000a] px-5 py-2.5 text-xs font-semibold text-white"
-                        >
-                            <Plus className="size-4" />
-                            Nuevo documento
-                        </a>
-                    </div>
-                </header>
-                {notice && (
-                    <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-800">
-                        <span className="flex items-center gap-2">
-                            <Check className="size-4" />
-                            {notice}
-                        </span>
-                        <button type="button" onClick={() => setNotice('')}>
-                            <X className="size-4" />
-                        </button>
-                    </div>
-                )}
+                </section>
 
-                <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
                     <Metric
                         icon={FileText}
                         label="Documentos emitidos"
-                        value="1,284"
-                        detail="▲ +12% vs. período anterior"
+                        value="156"
+                        detail="↑ 12%"
                         tone="bg-blue-50 text-blue-600"
                     />
                     <Metric
-                        icon={ShieldCheck}
-                        label="Certificados"
-                        value="1,196"
-                        detail="▲ 93.1% del total"
+                        icon={CircleDollarSign}
+                        label="Total facturado"
+                        value="Q 125,430.50"
+                        detail="↑ 18%"
                         tone="bg-emerald-50 text-emerald-600"
-                    />
-                    <Metric
-                        icon={CircleAlert}
-                        label="Rechazados"
-                        value="24"
-                        detail="▲ 1.9% del total"
-                        tone="bg-red-50 text-red-600"
                     />
                     <Metric
                         icon={Clock3}
                         label="Pendientes"
-                        value="64"
-                        detail="▲ 5.0% del total"
+                        value="12"
+                        detail="↓ 25%"
                         tone="bg-amber-50 text-amber-600"
+                    />
+                    <Metric
+                        icon={CheckCircle2}
+                        label="Certificados"
+                        value="132"
+                        detail="↑ 15%"
+                        tone="bg-emerald-50 text-emerald-600"
+                    />
+                    <Metric
+                        icon={AlertTriangle}
+                        label="Con error"
+                        value="8"
+                        detail="↓ 20%"
+                        tone="bg-red-50 text-red-600"
+                    />
+                    <Metric
+                        icon={X}
+                        label="Anulados"
+                        value="4"
+                        detail="− 0%"
+                        tone="bg-slate-100 text-slate-600"
                     />
                 </section>
 
-                <div className="grid gap-3 xl:grid-cols-[1.35fr_.65fr]">
-                    <section className={`${panel} p-4`}>
-                        <h2 className="mb-3 text-sm font-bold">
-                            Resumen por estado
-                        </h2>
-                        <div className="flex flex-wrap gap-2">
-                            <StatusSummary
-                                label="Borrador"
-                                value="18"
-                                tone="bg-slate-500 ring-slate-200"
-                            />
-                            <StatusSummary
-                                label="Enviado"
-                                value="42"
-                                tone="bg-blue-500 ring-blue-100"
-                            />
-                            <StatusSummary
-                                label="Certificado"
-                                value="1,196"
-                                tone="bg-emerald-600 ring-emerald-100"
-                            />
-                            <StatusSummary
-                                label="Anulado"
-                                value="14"
-                                tone="bg-red-500 ring-red-100"
-                            />
-                            <StatusSummary
-                                label="Error"
-                                value="24"
-                                tone="bg-red-600 ring-red-100"
-                            />
-                        </div>
-                    </section>
-                    <section className={`${panel} p-4`}>
-                        <h2 className="mb-3 text-sm font-bold">
-                            Acciones rápidas
-                        </h2>
-                        <div className="flex flex-wrap gap-2">
-                            <a
-                                href={createUrl}
-                                className="rounded-lg bg-[#74000a] px-4 py-2 text-xs font-semibold text-white"
-                            >
-                                Emitir DTE
-                            </a>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    action(
-                                        'Selector XML listo para cargar un documento.',
-                                    )
-                                }
-                                className="rounded-lg border px-4 py-2 text-xs"
-                            >
-                                Subir XML
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    action('Consulta simulada enviada a SAT.')
-                                }
-                                className="rounded-lg border px-4 py-2 text-xs"
-                            >
-                                Consultar en SAT
-                            </button>
-                        </div>
-                    </section>
-                </div>
+                <nav className="flex gap-8 border-b border-slate-200 px-4 text-sm">
+                    {[
+                        'Resumen',
+                        'Documentos',
+                        'Emitir',
+                        'Anulaciones',
+                        'Incidencias',
+                        'Configuración',
+                    ].map((item) => (
+                        <button
+                            key={item}
+                            className={`border-b-2 px-1 py-3 font-medium ${item === 'Documentos' ? 'border-[#7a0007] text-[#7a0007]' : 'border-transparent text-[#4e6384]'}`}
+                        >
+                            {item}
+                        </button>
+                    ))}
+                </nav>
 
-                <div className="grid gap-4 2xl:grid-cols-[1fr_430px]">
-                    <section className={`${panel} overflow-hidden`}>
-                        <header className="flex items-center justify-between border-b p-4">
-                            <h2 className="text-lg font-bold">
-                                Documentos tributarios
+                <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_530px]">
+                    <div className="space-y-3">
+                        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_8px_22px_rgba(28,38,54,.04)]">
+                            <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
+                                <Search size={17} className="text-[#7a0007]" />{' '}
+                                Filtros de búsqueda
                             </h2>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    action('Exportación FEL preparada.')
-                                }
-                                className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs"
-                            >
-                                <Download className="size-4" />
-                                Exportar
-                                <ChevronDown className="size-3" />
-                            </button>
-                        </header>
-                        <div className="space-y-3 p-4">
-                            <label className="relative block">
-                                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    value={query}
-                                    onChange={(event) =>
-                                        setQuery(event.target.value)
-                                    }
-                                    placeholder="Buscar por serie, número, cliente o UUID..."
-                                    className="w-full rounded-lg border border-slate-200 py-2.5 pr-3 pl-9 text-xs outline-none focus:border-[#74000a]"
-                                />
-                            </label>
-                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.55fr_auto]">
-                                <select
-                                    value={type}
-                                    onChange={(event) =>
-                                        setType(event.target.value)
-                                    }
-                                    className="rounded-lg border bg-white px-3 py-2.5 text-xs"
-                                >
-                                    <option>Todos los tipos</option>
-                                    <option>Factura (FEL)</option>
-                                    <option>Nota de Crédito (FEL)</option>
-                                </select>
-                                <select
-                                    value={status}
-                                    onChange={(event) =>
-                                        setStatus(event.target.value)
-                                    }
-                                    className="rounded-lg border bg-white px-3 py-2.5 text-xs"
-                                >
-                                    <option>Todos los estados</option>
-                                    {Object.keys(statusStyle).map((item) => (
-                                        <option key={item}>{item}</option>
-                                    ))}
-                                </select>
-                                <button
-                                    type="button"
-                                    className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs text-slate-500"
-                                >
-                                    <span>Desde</span>
-                                    <span>–</span>
-                                    <span>Hasta</span>
-                                    <Clock3 className="size-4" />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        action(
-                                            `${filtered.length} documentos coinciden con los filtros.`,
-                                        )
-                                    }
-                                    className="flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-xs"
-                                >
-                                    <Filter className="size-4" />
-                                    Filtros
-                                </button>
-                            </div>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[900px] text-left text-xs">
-                                <thead className="border-y bg-slate-50">
-                                    <tr>
-                                        <th className="px-4 py-3">Serie</th>
-                                        <th>Número</th>
-                                        <th>Tipo DTE</th>
-                                        <th>Cliente</th>
-                                        <th>Fecha</th>
-                                        <th>Total</th>
-                                        <th>Estado</th>
-                                        <th>UUID</th>
-                                        <th className="pr-4 text-center">
-                                            Acciones
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {filtered.map((document) => (
-                                        <tr
-                                            key={document.id}
-                                            onClick={() =>
-                                                setSelectedId(document.id)
-                                            }
-                                            className={`cursor-pointer hover:bg-rose-50/50 ${selected.id === document.id ? 'bg-rose-50' : ''}`}
-                                        >
-                                            <td className="px-4 py-3">
-                                                {document.series}
-                                            </td>
-                                            <td>{document.number}</td>
-                                            <td>{document.type}</td>
-                                            <td>{document.client}</td>
-                                            <td>{document.date}</td>
-                                            <td className="font-medium">
-                                                {document.total}
-                                            </td>
-                                            <td>
-                                                <span
-                                                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold ${statusStyle[document.status]}`}
-                                                >
-                                                    <span className="size-1.5 rounded-full bg-current" />
-                                                    {document.status}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                {document.uuid.slice(0, 9)}...
-                                            </td>
-                                            <td className="pr-4 text-center">
-                                                <MoreVertical className="inline size-5 rounded border p-0.5" />
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            {!filtered.length && (
-                                <div className="p-10 text-center text-sm text-slate-400">
-                                    No hay documentos para estos filtros.
-                                </div>
-                            )}
-                        </div>
-                        <footer className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-xs text-slate-500">
-                            <span>
-                                Mostrando 1 a {filtered.length} de 1,284
-                                documentos
-                            </span>
-                            <div className="flex gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setPage(Math.max(1, page - 1))
-                                    }
-                                    className="grid size-8 place-items-center rounded border"
-                                >
-                                    <ChevronLeft className="size-4" />
-                                </button>
-                                {[1, 2, 3, 4, 5].map((item) => (
-                                    <button
-                                        key={item}
-                                        type="button"
-                                        onClick={() => setPage(item)}
-                                        className={`grid size-8 place-items-center rounded ${page === item ? 'bg-[#74000a] text-white' : 'border'}`}
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    Tipo de DTE
+                                    <select
+                                        value={type}
+                                        onChange={(event) =>
+                                            setType(event.target.value)
+                                        }
+                                        className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs"
                                     >
-                                        {item}
-                                    </button>
-                                ))}
-                                <span className="grid size-8 place-items-center">
-                                    …
-                                </span>
-                                <button
-                                    type="button"
-                                    className="grid size-8 place-items-center rounded border"
-                                >
-                                    129
+                                        <option>Todos</option>
+                                        <option>Factura</option>
+                                        <option>Nota de crédito</option>
+                                        <option>Nota de débito</option>
+                                    </select>
+                                </label>
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    Serie
+                                    <select className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs">
+                                        <option>Todas</option>
+                                        <option>FEL</option>
+                                    </select>
+                                </label>
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    Número interno
+                                    <input
+                                        className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs"
+                                        placeholder="Ej. 1234"
+                                    />
+                                </label>
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    Estado
+                                    <select
+                                        value={status}
+                                        onChange={(event) =>
+                                            setStatus(event.target.value)
+                                        }
+                                        className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs"
+                                    >
+                                        <option>Todos</option>
+                                        <option>Certificado</option>
+                                        <option>Pendiente</option>
+                                        <option>Con error</option>
+                                        <option>Anulado</option>
+                                    </select>
+                                </label>
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    Cliente
+                                    <div className="relative mt-1">
+                                        <input
+                                            value={query}
+                                            onChange={(event) =>
+                                                setQuery(event.target.value)
+                                            }
+                                            className="h-9 w-full rounded-md border border-slate-200 px-3 pr-8 text-xs"
+                                            placeholder="Buscar cliente..."
+                                        />
+                                        <Search className="absolute top-1/2 right-2 size-4 -translate-y-1/2 text-[#6d7b92]" />
+                                    </div>
+                                </label>
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    NIT receptor
+                                    <input
+                                        className="mt-1 h-9 w-full rounded-md border border-slate-200 px-3 text-xs"
+                                        placeholder="Ej. 1234567"
+                                    />
+                                </label>
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    Desde
+                                    <div className="relative mt-1">
+                                        <input
+                                            className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs"
+                                            placeholder="dd / mm / aaaa"
+                                        />
+                                        <CalendarDays className="absolute top-1/2 right-2 size-4 -translate-y-1/2 text-[#536889]" />
+                                    </div>
+                                </label>
+                                <label className="text-[11px] font-medium text-[#536889]">
+                                    Hasta
+                                    <div className="relative mt-1">
+                                        <input
+                                            className="h-9 w-full rounded-md border border-slate-200 px-3 text-xs"
+                                            placeholder="dd / mm / aaaa"
+                                        />
+                                        <CalendarDays className="absolute top-1/2 right-2 size-4 -translate-y-1/2 text-[#536889]" />
+                                    </div>
+                                </label>
+                            </div>
+                            <div className="mt-3 flex gap-2">
+                                <button className="inline-flex min-w-44 items-center justify-center gap-2 rounded-lg bg-[#820009] px-4 py-2 text-sm font-bold text-white">
+                                    <Search size={16} /> Filtrar
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setPage(Math.min(129, page + 1))
-                                    }
-                                    className="grid size-8 place-items-center rounded border"
-                                >
-                                    <ChevronRight className="size-4" />
+                                <button className="inline-flex min-w-40 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-[#435878]">
+                                    <X size={15} /> Limpiar
                                 </button>
                             </div>
-                        </footer>
-                    </section>
+                        </section>
 
-                    <aside className={`${panel} overflow-hidden`}>
-                        <header className="flex items-start gap-3 border-b p-4">
-                            <span className="grid size-11 place-items-center rounded-lg bg-blue-50 text-blue-600">
-                                <FileText className="size-6" />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <h2 className="font-bold">
-                                        {selected.type}
-                                    </h2>
+                        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_8px_22px_rgba(28,38,54,.04)]">
+                            <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                <h2 className="flex items-center gap-2 text-sm font-bold">
+                                    <FileText
+                                        size={17}
+                                        className="text-[#7a0007]"
+                                    />{' '}
+                                    Documentos electrónicos
+                                </h2>
+                                <div className="flex items-center gap-2 text-xs text-[#536889]">
+                                    <span>Mostrando 1–8 de 156</span>
+                                    <button className="grid size-8 place-items-center rounded-md border">
+                                        <ChevronLeft size={15} />
+                                    </button>
+                                    <button className="grid size-8 place-items-center rounded-md bg-[#7a0007] text-white">
+                                        1
+                                    </button>
+                                    <button className="grid size-8 place-items-center rounded-md border">
+                                        <ChevronRight size={15} />
+                                    </button>
+                                    <button className="inline-flex h-8 items-center gap-1 rounded-md border px-3">
+                                        10 por página <ChevronDown size={13} />
+                                    </button>
+                                </div>
+                            </header>
+                            <div className="overflow-x-auto">
+                                <table className="w-full min-w-[980px] text-left text-[11px]">
+                                    <thead className="bg-[#f3f6fa] text-[#314261]">
+                                        <tr>
+                                            <th className="px-3 py-2">
+                                                Estado
+                                            </th>
+                                            <th>Tipo</th>
+                                            <th>Serie</th>
+                                            <th>Número</th>
+                                            <th>Fecha</th>
+                                            <th>Cliente</th>
+                                            <th>NIT</th>
+                                            <th>Total</th>
+                                            <th>Certificación</th>
+                                            <th>UUID</th>
+                                            <th>Usuario</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filtered.map((dte) => (
+                                            <tr
+                                                key={dte.id}
+                                                onClick={() =>
+                                                    setSelectedId(dte.id)
+                                                }
+                                                className={`cursor-pointer hover:bg-[#fff4f4] ${selected.id === dte.id ? 'bg-[#fff8f8]' : ''}`}
+                                            >
+                                                <td className="px-3 py-2">
+                                                    <span
+                                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold ${statusClass[dte.status]}`}
+                                                    >
+                                                        <span
+                                                            className={`size-2 rounded-full ${statusDot[dte.status]}`}
+                                                        />
+                                                        {dte.status}
+                                                    </span>
+                                                </td>
+                                                <td>{dte.type}</td>
+                                                <td>{dte.series}</td>
+                                                <td>{dte.number}</td>
+                                                <td>{dte.date}</td>
+                                                <td>{dte.client}</td>
+                                                <td>{dte.nit}</td>
+                                                <td>{dte.total}</td>
+                                                <td
+                                                    className={
+                                                        dte.status ===
+                                                        'Con error'
+                                                            ? 'text-red-600'
+                                                            : 'text-[#536889]'
+                                                    }
+                                                >
+                                                    {dte.certification}
+                                                </td>
+                                                <td>
+                                                    {dte.uuid === '—'
+                                                        ? '—'
+                                                        : `${dte.uuid.slice(0, 9)}...`}
+                                                </td>
+                                                <td>{dte.user}</td>
+                                                <td>
+                                                    <div className="flex items-center gap-1 text-blue-700">
+                                                        <Eye size={13} /> Ver{' '}
+                                                        <span>|</span>{' '}
+                                                        <FileDown size={13} />{' '}
+                                                        PDF <span>|</span>{' '}
+                                                        <FileCode2 size={13} />{' '}
+                                                        XML
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside className="rounded-xl border border-slate-200 bg-white shadow-[0_8px_22px_rgba(28,38,54,.04)]">
+                        <header className="flex items-start justify-between border-b border-slate-100 px-4 py-3">
+                            <div>
+                                <h2 className="flex items-center gap-2 text-lg font-bold">
+                                    <FileText
+                                        size={18}
+                                        className="text-[#7a0007]"
+                                    />
+                                    DTE FEL-{selected.number}
                                     <span
-                                        className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusStyle[selected.status]}`}
+                                        className={`rounded-full px-2 py-1 text-[10px] ${statusClass[selected.status]}`}
                                     >
                                         {selected.status}
                                     </span>
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                    Serie {selected.series} · Número{' '}
-                                    {selected.number}
-                                </p>
-                                <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-slate-500">
-                                    UUID: {selected.uuid}
-                                    <Copy className="size-3" />
-                                </p>
+                                </h2>
                             </div>
-                            <X className="size-4" />
+                            <MoreVertical size={18} />
                         </header>
-                        <nav className="flex border-b">
-                            {[
-                                'Información',
-                                'XML / Archivos',
-                                'Bitácora',
-                                'Historial',
-                            ].map((item) => (
-                                <button
-                                    key={item}
-                                    type="button"
-                                    onClick={() => setTab(item)}
-                                    className={`flex-1 border-b-2 py-3 text-[10px] font-semibold ${tab === item ? 'border-[#74000a] text-[#74000a]' : 'border-transparent text-slate-500'}`}
-                                >
-                                    {item}
+                        <div className="space-y-4 p-4 text-xs">
+                            <section>
+                                <h3 className="mb-2 font-bold">
+                                    Información general
+                                </h3>
+                                <dl className="grid grid-cols-[150px_1fr] gap-y-1 text-[#536889]">
+                                    <dt>UUID</dt>
+                                    <dd className="flex items-center gap-2 text-[#314261]">
+                                        {selected.uuid}
+                                        <Copy size={13} />
+                                    </dd>
+                                    <dt>Fecha de emisión</dt>
+                                    <dd className="text-[#314261]">
+                                        15/04/2025 10:22:15
+                                    </dd>
+                                    <dt>Fecha de certificación</dt>
+                                    <dd className="text-[#314261]">
+                                        15/04/2025 10:24:36
+                                    </dd>
+                                    <dt>Tipo de DTE</dt>
+                                    <dd className="text-[#314261]">
+                                        {selected.type} (FACT)
+                                    </dd>
+                                    <dt>Serie y número</dt>
+                                    <dd className="text-[#314261]">
+                                        FEL - {selected.number}
+                                    </dd>
+                                    <dt>Ambiente</dt>
+                                    <dd className="text-[#314261]">
+                                        Pruebas (FEL simulado)
+                                    </dd>
+                                </dl>
+                            </section>
+                            <section className="border-t border-slate-100 pt-3">
+                                <h3 className="mb-2 font-bold">Emisor</h3>
+                                <dl className="grid grid-cols-[150px_1fr] gap-y-1 text-[#536889]">
+                                    <dt>Empresa</dt>
+                                    <dd className="text-[#314261]">
+                                        Atlantia Systems
+                                    </dd>
+                                    <dt>NIT</dt>
+                                    <dd className="text-[#314261]">97655988</dd>
+                                </dl>
+                            </section>
+                            <section className="border-t border-slate-100 pt-3">
+                                <h3 className="mb-2 font-bold">Receptor</h3>
+                                <dl className="grid grid-cols-[150px_1fr] gap-y-1 text-[#536889]">
+                                    <dt>Cliente</dt>
+                                    <dd className="text-[#314261]">
+                                        {selected.client}
+                                    </dd>
+                                    <dt>NIT</dt>
+                                    <dd className="text-[#314261]">
+                                        {selected.nit}
+                                    </dd>
+                                </dl>
+                            </section>
+                            <section className="border-t border-slate-100 pt-3">
+                                <h3 className="mb-2 font-bold">Totales</h3>
+                                <dl className="space-y-1 text-[#536889]">
+                                    <div className="flex justify-between">
+                                        <dt>Subtotal</dt>
+                                        <dd className="text-[#314261]">
+                                            Q 11,160.71
+                                        </dd>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <dt>IVA (12%)</dt>
+                                        <dd className="text-[#314261]">
+                                            Q 1,339.29
+                                        </dd>
+                                    </div>
+                                    <div className="flex justify-between rounded-md bg-[#edf1f5] px-3 py-2 text-base font-extrabold text-[#102039]">
+                                        <dt>Total</dt>
+                                        <dd>{selected.total}</dd>
+                                    </div>
+                                </dl>
+                            </section>
+                            <section className="border-t border-slate-100 pt-3">
+                                <h3 className="mb-2 font-bold">
+                                    Respuesta del certificador
+                                </h3>
+                                <dl className="grid grid-cols-[150px_1fr] gap-y-1 text-[#536889]">
+                                    <dt>Estado</dt>
+                                    <dd className="font-bold text-emerald-600">
+                                        Certificado correctamente
+                                    </dd>
+                                    <dt>Código de respuesta</dt>
+                                    <dd className="text-[#314261]">200</dd>
+                                    <dt>Descripción</dt>
+                                    <dd className="text-[#314261]">
+                                        Documento certificado
+                                        satisfactoriamente.
+                                    </dd>
+                                </dl>
+                            </section>
+                            <section className="grid grid-cols-4 gap-2 border-t border-slate-100 pt-3">
+                                <button className="inline-flex items-center justify-center gap-1 rounded-md border px-2 py-2 font-semibold">
+                                    <Download size={14} /> Descargar PDF
                                 </button>
-                            ))}
-                        </nav>
-                        {tab === 'Información' ? (
-                            <div className="space-y-3 p-3">
-                                <section className="rounded-lg border p-3">
-                                    <div className="mb-3 flex justify-between">
-                                        <h3 className="text-xs font-bold">
-                                            Datos generales
-                                        </h3>
-                                        <button
-                                            type="button"
-                                            className="flex items-center gap-1 rounded border px-2 py-1 text-[10px]"
-                                        >
-                                            <Pencil className="size-3" />
-                                            Editar
-                                        </button>
-                                    </div>
-                                    <dl className="grid grid-cols-[140px_1fr] gap-y-2 text-[10px]">
-                                        <dt className="text-slate-500">
-                                            Fecha de emisión
-                                        </dt>
-                                        <dd>15/01/2025 10:24:35</dd>
-                                        <dt className="text-slate-500">
-                                            Fecha de certificación
-                                        </dt>
-                                        <dd>15/01/2025 10:24:37</dd>
-                                        <dt className="text-slate-500">
-                                            Tipo de DTE
-                                        </dt>
-                                        <dd>{selected.type}</dd>
-                                        <dt className="text-slate-500">
-                                            Serie / Número
-                                        </dt>
-                                        <dd>
-                                            {selected.series} ·{' '}
-                                            {selected.number}
-                                        </dd>
-                                        <dt className="text-slate-500">
-                                            Moneda
-                                        </dt>
-                                        <dd>GTQ · Quetzales</dd>
-                                        <dt className="text-slate-500">
-                                            Total
-                                        </dt>
-                                        <dd className="font-bold">
-                                            {selected.total}
-                                        </dd>
-                                    </dl>
-                                </section>
-                                <section className="rounded-lg border p-3">
-                                    <div className="mb-3 flex justify-between">
-                                        <h3 className="text-xs font-bold">
-                                            Datos del receptor
-                                        </h3>
-                                        <button
-                                            type="button"
-                                            className="flex items-center gap-1 rounded border px-2 py-1 text-[10px]"
-                                        >
-                                            <UserRound className="size-3" />
-                                            Ver cliente
-                                        </button>
-                                    </div>
-                                    <dl className="grid grid-cols-[140px_1fr] gap-y-2 text-[10px]">
-                                        <dt className="text-slate-500">
-                                            Nombre / Razón social
-                                        </dt>
-                                        <dd>{selected.client}</dd>
-                                        <dt className="text-slate-500">NIT</dt>
-                                        <dd>{selected.nit}</dd>
-                                        <dt className="text-slate-500">
-                                            Dirección
-                                        </dt>
-                                        <dd>{selected.address}</dd>
-                                    </dl>
-                                </section>
-                                <section className="rounded-lg border p-3">
-                                    <h3 className="mb-2 text-xs font-bold">
-                                        Totales e impuestos
+                                <button className="inline-flex items-center justify-center gap-1 rounded-md border px-2 py-2 font-semibold">
+                                    <FileCode2 size={14} /> Descargar XML
+                                </button>
+                                <button className="inline-flex items-center justify-center gap-1 rounded-md border px-2 py-2 font-semibold">
+                                    <Mail size={14} /> Reenviar correo
+                                </button>
+                                <button className="inline-flex items-center justify-center gap-1 rounded-md border border-red-200 px-2 py-2 font-semibold text-red-700">
+                                    <XCircle size={14} /> Anular
+                                </button>
+                            </section>
+                            <section className="border-t border-slate-100 pt-3">
+                                <div className="mb-2 flex justify-between">
+                                    <h3 className="font-bold">
+                                        Historial del documento
                                     </h3>
-                                    <table className="w-full text-[10px]">
-                                        <thead className="bg-slate-100">
-                                            <tr>
-                                                <th className="p-2 text-left">
-                                                    Descripción
-                                                </th>
-                                                <th>Base</th>
-                                                <th>Impuesto</th>
-                                                <th className="text-right">
-                                                    Total
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td className="p-2">
-                                                    Gravado (IVA 12%)
-                                                </td>
-                                                <td className="text-right">
-                                                    Q 11,116.07
-                                                </td>
-                                                <td className="text-right">
-                                                    Q 1,333.93
-                                                </td>
-                                                <td className="text-right">
-                                                    Q 12,450.00
-                                                </td>
-                                            </tr>
-                                            <tr className="border-t font-bold">
-                                                <td className="p-2">Total</td>
-                                                <td className="text-right">
-                                                    Q 11,116.07
-                                                </td>
-                                                <td className="text-right">
-                                                    Q 1,333.93
-                                                </td>
-                                                <td className="text-right">
-                                                    Q 12,450.00
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </section>
-                            </div>
-                        ) : (
-                            <div className="grid min-h-96 place-items-center p-8 text-center">
-                                <div>
-                                    <FileCode2 className="mx-auto size-12 text-[#74000a]" />
-                                    <h3 className="mt-3 font-bold">{tab}</h3>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                        Información vinculada al DTE
-                                        seleccionado.
-                                    </p>
+                                    <button className="text-blue-700">
+                                        Ver todo
+                                    </button>
                                 </div>
-                            </div>
-                        )}
-                        <footer className="grid gap-2 border-t p-3 sm:grid-cols-3">
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    action('XML listo para descargar.')
-                                }
-                                className="flex items-center justify-center gap-1 rounded-lg border py-2 text-[10px]"
-                            >
-                                <FileDown className="size-4" />
-                                Descargar XML
-                            </button>
-                            <a
-                                href={indexUrl}
-                                className="flex items-center justify-center gap-1 rounded-lg border py-2 text-[10px]"
-                            >
-                                <ExternalLink className="size-4" />
-                                Representación gráfica
-                            </a>
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    action(
-                                        `Correo FEL preparado para ${selected.client}.`,
-                                    )
-                                }
-                                className="flex items-center justify-center gap-1 rounded-lg border py-2 text-[10px]"
-                            >
-                                <Send className="size-4" />
-                                Enviar por correo
-                            </button>
-                        </footer>
+                                {[
+                                    'Documento certificado por FEL simulado',
+                                    'Documento enviado a certificación',
+                                    'Documento creado por J. Pérez',
+                                ].map((item, index) => (
+                                    <div
+                                        key={item}
+                                        className="flex gap-2 border-l border-emerald-200 pb-2 pl-3 last:pb-0"
+                                    >
+                                        <span className="mt-1 -ml-[17px] size-2 rounded-full bg-emerald-600" />
+                                        <p>
+                                            <span className="text-[#536889]">
+                                                15/04/2025 10:{24 - index}
+                                            </span>{' '}
+                                            {item}
+                                        </p>
+                                    </div>
+                                ))}
+                            </section>
+                        </div>
                     </aside>
-                </div>
+                </section>
             </div>
         </main>
     );

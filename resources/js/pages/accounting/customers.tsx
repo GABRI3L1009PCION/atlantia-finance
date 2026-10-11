@@ -152,7 +152,12 @@ export default function Customers({
         search: filters.search ?? '',
         situation: filters.situation ?? 'all',
     });
-    const create = useForm({ name: '', tax_id: '', email: '' });
+    const create = useForm({
+        name: '',
+        tax_id: '',
+        email: '',
+        payment_terms_days: '',
+    });
 
     const selected = useMemo(
         () =>
@@ -580,6 +585,23 @@ export default function Customers({
                                         onChange={(event) =>
                                             create.setData(
                                                 'email',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label className="block text-sm font-medium">
+                                    Plazo de pago (días)
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={365}
+                                        className={field}
+                                        placeholder="Ej. 30 (vacío = sin plazo)"
+                                        value={create.data.payment_terms_days}
+                                        onChange={(event) =>
+                                            create.setData(
+                                                'payment_terms_days',
                                                 event.target.value,
                                             )
                                         }

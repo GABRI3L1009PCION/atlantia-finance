@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionItem;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\FiscalConfigurationService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -172,10 +173,12 @@ class AtlantiaDemoSeeder extends Seeder
                 'issued_on' => now()->subDays(12 - $index * 3)->toDateString(), 'due_on' => now()->addDays(18 + $index * 3)->toDateString(),
                 'total_cents' => $total, 'customer_name' => $name, 'customer_tax_id' => $taxId,
                 'created_by' => $userId, 'issued_by' => $userId, 'issued_at' => now()->subDays(12 - $index * 3),
+                ...$this->fiscalBreakdown($total, 'services', 'A1B2C3D4', (string) (3001 + $index)),
             ]);
             DB::table('sales_invoice_lines')->updateOrInsert(
                 ['sales_invoice_id' => $invoiceId, 'position' => 1],
-                ['description' => 'Servicios contables y financieros', 'quantity' => 1, 'unit_cents' => $total],
+                ['description' => 'Servicios contables y financieros', 'quantity' => 1, 'unit_cents' => $total,
+                    'tax_treatment' => 'services', 'vat_cents' => $this->includedVat($total)],
             );
             if ($index < 2) {
                 $this->upsert('sales_receipts', ['sales_invoice_id' => $invoiceId, 'reference' => 'REC-DEMO-'.($index + 1)], [
@@ -205,10 +208,12 @@ class AtlantiaDemoSeeder extends Seeder
                 'due_on' => now()->addDays(20 + $index * 2)->toDateString(), 'total_cents' => $total,
                 'supplier_name' => $name, 'supplier_tax_id' => $taxId, 'created_by' => $userId,
                 'approved_by' => $userId, 'approved_at' => now()->subDays(9 - $index * 2),
+                ...$this->fiscalBreakdown($total, $index === 2 ? 'services' : 'goods', 'PROV'.($index + 1), (string) (101 + $index)),
             ]);
             DB::table('purchase_document_lines')->updateOrInsert(
                 ['purchase_document_id' => $documentId, 'position' => 1],
-                ['ledger_account_id' => $expense, 'description' => 'Compra y gasto operativo', 'quantity' => 1, 'unit_cents' => $total],
+                ['ledger_account_id' => $expense, 'description' => 'Compra y gasto operativo', 'quantity' => 1, 'unit_cents' => $total,
+                    'tax_treatment' => $index === 2 ? 'services' : 'goods', 'vat_cents' => $this->includedVat($total)],
             );
             if ($index === 1) {
                 $this->upsert('purchase_payments', ['purchase_document_id' => $documentId, 'reference' => 'PAG-DEMO-1'], [
@@ -252,20 +257,48 @@ class AtlantiaDemoSeeder extends Seeder
             ['Gastos administrativos demo', 680000, '5201', '2102'],
         ];
         foreach ($rows as [$description, $amount, $debit, $credit]) {
-            $entry = DB::table('journal_entries')->where('accounting_period_id', $periodId)->where('description', $description)->first();
-            $entryId = $entry !== null ? (int) $entry->id : DB::table('journal_entries')->insertGetId([
+            if (DB::table('journal_entries')->where('accounting_period_id', $periodId)->where('description', $description)->exists()) {
+                continue;
+            }
+            $entryId = DB::table('journal_entries')->insertGetId([
                 'public_id' => (string) Str::uuid(), 'accounting_period_id' => $periodId,
                 'entry_date' => now()->toDateString(), 'description' => $description, 'kind' => 'standard',
+                'status' => 'draft', 'created_by' => $userId, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            DB::table('journal_lines')->insert([
+                ['journal_entry_id' => $entryId, 'position' => 1, 'ledger_account_id' => $account[$debit], 'debit_cents' => $amount, 'credit_cents' => 0],
+                ['journal_entry_id' => $entryId, 'position' => 2, 'ledger_account_id' => $account[$credit], 'debit_cents' => 0, 'credit_cents' => $amount],
+            ]);
+            DB::table('journal_entries')->where('id', $entryId)->update([
                 'status' => 'posted', 'number' => (int) DB::table('journal_entries')->where('accounting_period_id', $periodId)->max('number') + 1,
-                'created_by' => $userId, 'posted_by' => $userId, 'posted_at' => now(), 'created_at' => now(), 'updated_at' => now(),
-            ]);
-            DB::table('journal_lines')->updateOrInsert(['journal_entry_id' => $entryId, 'position' => 1], [
-                'ledger_account_id' => $account[$debit], 'debit_cents' => $amount, 'credit_cents' => 0,
-            ]);
-            DB::table('journal_lines')->updateOrInsert(['journal_entry_id' => $entryId, 'position' => 2], [
-                'ledger_account_id' => $account[$credit], 'debit_cents' => 0, 'credit_cents' => $amount,
+                'posted_by' => $userId, 'posted_at' => now(), 'updated_at' => now(),
             ]);
         }
+    }
+
+    /**
+     * Fiscal columns of a single-line demo document whose price includes the 12% VAT.
+     *
+     * @return array{fiscal_document_type: string, fiscal_series: string, fiscal_number: string, taxable_goods_cents: int, taxable_services_cents: int, vat_cents: int, vat_rate_basis_points: int}
+     */
+    private function fiscalBreakdown(int $total, string $treatment, string $series, string $number): array
+    {
+        $vat = $this->includedVat($total);
+
+        return [
+            'fiscal_document_type' => 'FACT',
+            'fiscal_series' => $series,
+            'fiscal_number' => $number,
+            'taxable_goods_cents' => $treatment === 'goods' ? $total - $vat : 0,
+            'taxable_services_cents' => $treatment === 'services' ? $total - $vat : 0,
+            'vat_cents' => $vat,
+            'vat_rate_basis_points' => 1200,
+        ];
+    }
+
+    private function includedVat(int $total): int
+    {
+        return app(FiscalConfigurationService::class)->includedTaxCents($total, 1200);
     }
 
     /**

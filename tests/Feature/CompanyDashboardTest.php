@@ -3,6 +3,7 @@
 use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\User;
+use App\Services\FiscalConfigurationService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -37,7 +38,11 @@ test('core plans share the complete tenant scoped financial cockpit', function (
             ->where('metrics.income_cents', 100_000)
             ->where('metrics.expense_cents', 30_000)
             ->where('metrics.profit_cents', 70_000)
+            ->where('metrics.cash_cents', 75_000)
             ->where('metrics.drafts', 3)
+            ->where('metrics.period.name', now()->format('F Y'))
+            ->where('metrics.period.status', 'open')
+            ->where('metrics.period_close.progress', 64)
             ->where('health.accounts', 3)
             ->where('health.open_periods', 1)
             ->where('health.customers', 1)
@@ -49,7 +54,12 @@ test('core plans share the complete tenant scoped financial cockpit', function (
             ->has('metrics.receivable_aging', 4)
             ->where('metrics.receivable_aging.0.amount_cents', 60_000)
             ->has('metrics.recent_invoices', 2)
-            ->has('metrics.recent'));
+            ->has('metrics.recent')
+            ->has('metrics.attention', 3)
+            ->where('metrics.attention.0.module', 'conciliacion')
+            ->has('metrics.fiscal_obligations', 1)
+            ->where('metrics.fiscal_obligations.0.label', 'IVA mensual')
+            ->has('metrics.ai_context.suggestions'));
 })->with(['essential', 'enterprise']);
 
 test('company cockpit rejects cross organization access', function () {
@@ -133,6 +143,24 @@ function executiveDashboardActivity(array $fixture, int $sales, int $purchases):
         'amount_cents' => 10_000, 'paid_on' => $today, 'reference' => 'PAG-1',
         'created_by' => $fixture['owner']->id,
     ]);
+    $bankAccountId = DB::table('bank_accounts')->insertGetId([
+        'public_id' => (string) Str::uuid(), 'company_id' => $fixture['company_id'],
+        'ledger_account_id' => $fixture['asset_id'], 'bank_name' => 'Banco Atlántida',
+        'account_name' => 'Cuenta monetaria', 'account_type' => 'checking',
+        'last_four' => '1234', 'bank_balance_cents' => 75_000,
+        'created_by' => $fixture['owner']->id,
+    ]);
+    DB::table('bank_transactions')->insert([
+        'public_id' => (string) Str::uuid(), 'bank_account_id' => $bankAccountId,
+        'transaction_date' => $today, 'reference' => 'BNK-1',
+        'description' => 'Depósito pendiente de conciliación', 'flow' => 'inflow',
+        'amount_cents' => 25_000, 'running_balance_cents' => 75_000,
+        'reconciliation_status' => 'pending', 'created_by' => $fixture['owner']->id,
+    ]);
+    app(FiscalConfigurationService::class)->createTax($fixture['company_id'], $fixture['owner']->id, [
+        'code' => 'IVA_MENSUAL', 'name' => 'IVA mensual', 'tax_type' => 'vat', 'regime' => 'general',
+        'applies_to' => 'both', 'calculation' => 'percentage', 'price_includes_tax' => true, 'recoverable' => true,
+    ], ['rate_basis_points' => 1200, 'valid_from' => now()->startOfYear()->toDateString()]);
 
     executiveDashboardEntry($fixture, $sales, 'income');
     executiveDashboardEntry($fixture, 30_000, 'expense');
@@ -161,8 +189,7 @@ function executiveDashboardEntry(array $fixture, int $amount, string $type): voi
     $entryId = DB::table('journal_entries')->insertGetId([
         'public_id' => (string) Str::uuid(), 'accounting_period_id' => $fixture['period_id'],
         'entry_date' => now()->toDateString(), 'description' => 'Movimiento '.$type,
-        'status' => 'posted', 'number' => $type === 'income' ? 1 : 2,
-        'created_by' => $fixture['owner']->id, 'posted_by' => $fixture['owner']->id, 'posted_at' => now(),
+        'status' => 'draft', 'created_by' => $fixture['owner']->id,
     ]);
     $accountId = $type === 'income' ? $fixture['income_id'] : $fixture['expense_id'];
     DB::table('journal_lines')->insert($type === 'income' ? [
@@ -171,5 +198,8 @@ function executiveDashboardEntry(array $fixture, int $amount, string $type): voi
     ] : [
         ['journal_entry_id' => $entryId, 'ledger_account_id' => $accountId, 'position' => 1, 'debit_cents' => $amount, 'credit_cents' => 0],
         ['journal_entry_id' => $entryId, 'ledger_account_id' => $fixture['asset_id'], 'position' => 2, 'debit_cents' => 0, 'credit_cents' => $amount],
+    ]);
+    DB::table('journal_entries')->where('id', $entryId)->update([
+        'status' => 'posted', 'number' => $type === 'income' ? 1 : 2, 'posted_by' => $fixture['owner']->id, 'posted_at' => now(),
     ]);
 }

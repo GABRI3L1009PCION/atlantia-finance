@@ -28,6 +28,7 @@ export type Document = {
     issued_on: string;
     currency: string;
     document_type: string;
+    sales_invoice_id: number | null;
     status: string;
     subtotal_cents: number;
     discount_cents: number;
@@ -60,14 +61,22 @@ export const labels: Record<string, string> = {
 };
 export const decimal = (cents: number) =>
     `${Math.trunc(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
-export function TestNotice({ notice }: { notice: string }) {
+export function TestNotice({
+    notice,
+    compact = false,
+}: {
+    notice: string;
+    compact?: boolean;
+}) {
     return (
         <div
             role="status"
-            className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+            className={`rounded-xl border border-amber-300 bg-amber-50 text-amber-900 ${
+                compact ? 'px-4 py-2 text-xs' : 'p-4 text-sm'
+            }`}
         >
             <strong>AMBIENTE DE PRUEBA · FEL SIMULADO</strong>
-            <p className="mt-1">{notice}</p>
+            <p className={compact ? 'mt-0.5' : 'mt-1'}>{notice}</p>
         </div>
     );
 }

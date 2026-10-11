@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Feature;
 use App\Models\Organization;
 use App\Services\AccountingService;
 use App\Services\ExecutiveDashboardService;
+use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +17,7 @@ use Inertia\Response;
 
 class WorkspaceController extends Controller
 {
-    public function show(Request $request, WorkspaceContext $context, AccountingService $accounting, ExecutiveDashboardService $dashboard): Response|RedirectResponse
+    public function show(Request $request, WorkspaceContext $context, AccountingService $accounting, ExecutiveDashboardService $dashboard, WorkAuthorizationService $authorization): Response|RedirectResponse
     {
         $organization = $context->organization($request->user());
         $owner = $organization->pivot->role === 'owner';
@@ -31,8 +33,10 @@ class WorkspaceController extends Controller
             'office_name' => $company->office_name,
         ]);
 
-        if (! $request->boolean('organization') && $companies->isNotEmpty()) {
-            return to_route('accounting.companyDashboard', $companies->first()['public_id']);
+        if (! $request->boolean('organization') && $office !== null && $office->status === 'active') {
+            $authorization->ensureDefaults($organization);
+
+            return redirect($authorization->dashboardPathFor($organization, $request->user()));
         }
 
         return Inertia::render('dashboard', [
@@ -42,7 +46,7 @@ class WorkspaceController extends Controller
                 'canManage' => $owner,
                 'needsSetup' => $office === null || $office->status !== 'active',
                 'office' => $owner ? $office?->only(['name', 'email', 'phone', 'address_line_1', 'city']) : null,
-                'offices' => $owner ? $organization->offices()->get(['name', 'city', 'status']) : $request->user()->offices()->where('organization_id', $organization->id)->wherePivot('status', 'active')->get(['name', 'city', 'offices.status']),
+                'offices' => $owner ? $organization->offices()->get(['name', 'city', 'status']) : $request->user()->offices()->where('offices.organization_id', $organization->id)->wherePivot('status', 'active')->get(['name', 'city', 'offices.status']),
                 'members' => $owner ? $organization->users()->wherePivot('status', 'active')->get()->map(fn ($user) => ['name' => $user->name, 'email' => $user->email, 'role' => $user->pivot->role]) : [],
                 'invitations' => $owner ? $organization->invitations()->where('status', 'pending')->where('expires_at', '>', now())->get(['public_id', 'email', 'expires_at']) : [],
                 'companies' => $companies,
@@ -54,10 +58,9 @@ class WorkspaceController extends Controller
                 'currency' => $price->currency_code,
                 'period' => $price->billing_period,
                 'limits' => $price->plan->limits->pluck('limit_value', 'metric'),
-                'features' => $price->plan->features()->orderBy('name')->get(['code', 'name']),
+                'features' => Feature::query()->whereIn('code', app(WorkspaceContext::class)->features($organization))->orderBy('name')->get(['code', 'name']),
             ] : null,
             'metrics' => $dashboard->organization($companyRows->pluck('id')),
-            'notice' => $request->session()->get('workspace_notice'),
         ]);
     }
 

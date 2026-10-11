@@ -1,4 +1,5 @@
 import { Link, router, useForm, usePoll } from '@inertiajs/react';
+import { useState } from 'react';
 import AccountingSection from '@/components/accounting-section';
 import type { Company } from '@/components/accounting-section';
 import {
@@ -10,8 +11,15 @@ import {
     secondary,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import * as fel from '@/routes/accounting/fel';
-import * as settings from '@/routes/accounting/fel/settings';
+import { FelInvoiceForm } from './create';
+import { FelIssuerForm } from './settings';
 import { labels, TestNotice } from './types';
 import type { Customer, Document } from './types';
 
@@ -25,6 +33,12 @@ export default function FelIndex({
     canWrite,
     canManage,
     notice,
+    issuer,
+    certification,
+    certifiers,
+    vatAffiliations,
+    isPlatform,
+    today,
 }: {
     company: Company;
     companies: Company[];
@@ -35,7 +49,31 @@ export default function FelIndex({
     canWrite: boolean;
     canManage: boolean;
     notice: string;
+    issuer: {
+        name: string;
+        nit: string;
+        address: string;
+        logo_data_uri: string | null;
+        provider: string;
+        environment: string;
+        establishment_code?: string;
+        vat_affiliation?: string;
+        issuer_email?: string | null;
+        trade_name?: string | null;
+        certifier_environment?: string;
+    };
+    certification: { certifier: string; credentials: Record<string, string> };
+    certifiers: {
+        code: string;
+        label: string;
+        fields: { key: string; label: string; secret?: boolean }[];
+    }[];
+    vatAffiliations: Record<string, string>;
+    isPlatform: boolean;
+    today: string;
 }) {
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [invoiceOpen, setInvoiceOpen] = useState(false);
     const form = useForm({
         search: filters.search ?? '',
         status: filters.status ?? '',
@@ -51,28 +89,31 @@ export default function FelIndex({
         <AccountingSection
             company={company}
             title="Facturación electrónica"
+            denseHeader
             action={
                 canWrite && (
                     <div className="flex flex-wrap gap-2">
                         {canManage && (
-                            <Link
+                            <button
+                                type="button"
                                 className={secondary}
-                                href={settings.edit(company.public_id)}
+                                onClick={() => setSettingsOpen(true)}
                             >
                                 Configurar emisor
-                            </Link>
+                            </button>
                         )}
-                        <Link
+                        <button
+                            type="button"
                             className={secondary}
-                            href={fel.create(company.public_id)}
+                            onClick={() => setInvoiceOpen(true)}
                         >
                             Nueva factura
-                        </Link>
+                        </button>
                     </div>
                 )
             }
         >
-            <TestNotice notice={notice} />
+            <TestNotice notice={notice} compact />
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                 {Object.entries({
                     documents: 'Documentos del mes',
@@ -84,10 +125,10 @@ export default function FelIndex({
                 }).map(([key, label]) => (
                     <div
                         key={key}
-                        className="rounded-2xl border border-rose-100 bg-white p-4"
+                        className="rounded-xl border border-rose-100 bg-white px-4 py-3"
                     >
                         <p className="text-xs text-slate-500">{label}</p>
-                        <p className="mt-2 text-xl font-semibold">
+                        <p className="mt-1 text-lg leading-tight font-semibold">
                             {key === 'total' ? money(stats[key]) : stats[key]}
                         </p>
                     </div>
@@ -289,6 +330,41 @@ export default function FelIndex({
                 Tipo disponible: factura. Notas de crédito y débito se
                 incorporarán en una fase posterior.
             </p>
+            <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+                <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-4xl">
+                    <DialogTitle>Configurar emisor</DialogTitle>
+                    <DialogDescription>
+                        Datos fiscales y de emisión usados por la facturación
+                        electrónica de esta empresa.
+                    </DialogDescription>
+                    <FelIssuerForm
+                        company={company}
+                        issuer={issuer}
+                        certification={certification}
+                        certifiers={certifiers}
+                        vatAffiliations={vatAffiliations}
+                        isPlatform={isPlatform}
+                        notice={null}
+                    />
+                </DialogContent>
+            </Dialog>
+            <Dialog open={invoiceOpen} onOpenChange={setInvoiceOpen}>
+                <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-6xl">
+                    <DialogTitle>Nueva factura</DialogTitle>
+                    <DialogDescription>
+                        Completa los datos del receptor, líneas e impuestos
+                        antes de emitir la factura de prueba.
+                    </DialogDescription>
+                    <TestNotice notice={notice} compact />
+                    <FelInvoiceForm
+                        company={company}
+                        customers={customers}
+                        document={null}
+                        today={today}
+                        notice={notice}
+                    />
+                </DialogContent>
+            </Dialog>
         </AccountingSection>
     );
 }

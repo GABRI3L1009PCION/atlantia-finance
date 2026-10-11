@@ -212,19 +212,27 @@ function Metric({
     tone: string;
     negative?: boolean;
 }) {
+    const trendTone = change.includes('33%')
+        ? 'text-red-600'
+        : 'text-emerald-600';
+
     return (
-        <article className={`${panel} flex min-h-24 items-center gap-4 p-5`}>
+        <article
+            className={`${panel} flex min-h-[102px] min-w-0 items-center gap-4 overflow-hidden p-5`}
+        >
             <span
                 className={`grid size-12 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 <Icon className="size-6" />
             </span>
-            <div>
+            <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-600">{label}</p>
                 <div className="mt-1 flex items-end gap-3">
-                    <strong className="text-2xl">{value}</strong>
+                    <strong className="text-2xl font-black text-slate-950">
+                        {value}
+                    </strong>
                     <span
-                        className={`pb-1 text-xs font-semibold ${negative ? 'text-red-600' : 'text-emerald-600'}`}
+                        className={`pb-1 text-xs font-semibold ${negative ? 'text-red-600' : trendTone}`}
                     >
                         {change}
                     </span>
@@ -271,7 +279,7 @@ export default function AuditWorkspace({
     };
 
     return (
-        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] p-3 text-[#172033] sm:p-5">
+        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] px-4 py-5 text-[#172033] sm:px-6">
             <Head title={`Auditoría · ${company.name}`} />
             <div className="mx-auto max-w-[1900px] space-y-4">
                 <header className="flex flex-wrap items-start justify-between gap-4">
@@ -279,7 +287,7 @@ export default function AuditWorkspace({
                         <p className="mb-2 text-xs text-slate-500">
                             Inicio <span className="px-2">›</span> Auditoría
                         </p>
-                        <h1 className="text-3xl font-bold text-[#74000a]">
+                        <h1 className="text-[2rem] leading-none font-black tracking-tight text-[#74000a]">
                             Auditoría
                         </h1>
                         <p className="mt-1 text-sm text-slate-500">
@@ -287,24 +295,12 @@ export default function AuditWorkspace({
                             sistema
                         </p>
                     </div>
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2.5 text-xs font-semibold"
-                        >
-                            <Building2 className="size-4 text-[#74000a]" />
-                            {company.name}
-                            <ChevronDown className="size-4" />
-                        </button>
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2.5 text-xs font-semibold"
-                        >
-                            <CalendarDays className="size-4 text-[#74000a]" />
-                            Septiembre 2026
-                            <ChevronDown className="size-4" />
-                        </button>
-                    </div>
+                    <blockquote className="max-w-md pt-6 text-right text-sm text-slate-500 italic">
+                        “Transparencia hoy, confianza siempre.”
+                        <span className="block text-xs">
+                            — Atlantia Finance
+                        </span>
+                    </blockquote>
                 </header>
                 {notice && (
                     <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
@@ -317,7 +313,7 @@ export default function AuditWorkspace({
                         </button>
                     </div>
                 )}
-                <section className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+                <section className="grid grid-cols-4 gap-3">
                     <Metric
                         icon={FileText}
                         label="Eventos hoy"
@@ -353,91 +349,113 @@ export default function AuditWorkspace({
                     />
                 </section>
                 <section
-                    className={`${panel} grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[1fr_.8fr_.9fr_1fr_1fr_1fr_.8fr_auto_auto]`}
+                    className={`${panel} grid gap-3 p-4 xl:grid-cols-[1fr_.8fr_.9fr_1fr_1fr_1fr_.8fr_auto_auto]`}
                 >
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        Todas las empresas
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <select
-                        value={module}
-                        onChange={(event) => setModule(event.target.value)}
-                        className="rounded-lg border bg-white px-3 py-2.5 text-xs"
-                    >
-                        <option>Todos</option>
-                        <option>Compras</option>
-                        <option>Contabilidad</option>
-                        <option>Cierre de Período</option>
-                        <option>Ventas</option>
-                        <option>Inventario</option>
-                    </select>
-                    <label className="relative">
-                        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Empresa</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            Todas las empresas
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Módulo</span>
+                        <select
+                            value={module}
+                            onChange={(event) => setModule(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <option>Todos</option>
+                            <option>Compras</option>
+                            <option>Contabilidad</option>
+                            <option>Cierre de Período</option>
+                            <option>Ventas</option>
+                            <option>Inventario</option>
+                        </select>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Usuario</span>
                         <input
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Usuario o registro..."
-                            className="w-full rounded-lg border py-2.5 pr-3 pl-9 text-xs"
+                            placeholder="Todos"
+                            className="h-10 w-full rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
                         />
                     </label>
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        Todas las acciones
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        01/09/2026
-                        <CalendarDays className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        30/09/2026
-                        <CalendarDays className="size-4" />
-                    </button>
-                    <select
-                        value={risk}
-                        onChange={(event) => setRisk(event.target.value)}
-                        className="rounded-lg border bg-white px-3 py-2.5 text-xs"
-                    >
-                        <option>Todos</option>
-                        <option>Crítico</option>
-                        <option>Alto</option>
-                        <option>Medio</option>
-                        <option>Bajo</option>
-                    </select>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setModule('Todos');
-                            setRisk('Todos');
-                            setQuery('');
-                        }}
-                        className="rounded-lg border px-4 py-2.5 text-xs text-slate-600"
-                    >
-                        Limpiar filtros
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() =>
-                            showNotice(
-                                `${filtered.length} eventos encontrados.`,
-                            )
-                        }
-                        className="flex items-center justify-center gap-2 rounded-lg bg-[#74000a] px-5 py-2.5 text-xs font-semibold text-white"
-                    >
-                        <Search className="size-4" />
-                        Buscar
-                    </button>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Acción</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            Todas
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Fecha desde</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            01/09/2026
+                            <CalendarDays className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Fecha hasta</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            30/09/2026
+                            <CalendarDays className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Riesgo</span>
+                        <select
+                            value={risk}
+                            onChange={(event) => setRisk(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <option>Todos</option>
+                            <option>Crítico</option>
+                            <option>Alto</option>
+                            <option>Medio</option>
+                            <option>Bajo</option>
+                        </select>
+                    </label>
+                    <div className="flex items-end">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setModule('Todos');
+                                setRisk('Todos');
+                                setQuery('');
+                            }}
+                            className="h-10 rounded-lg border border-[#dfe5ef] bg-slate-50 px-6 text-xs font-semibold text-slate-600"
+                        >
+                            Limpiar filtros
+                        </button>
+                    </div>
+                    <div className="flex items-end">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                showNotice(
+                                    `${filtered.length} eventos encontrados.`,
+                                )
+                            }
+                            className="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#74000a] px-7 text-xs font-semibold text-white"
+                        >
+                            <Search className="size-4" />
+                            Buscar
+                        </button>
+                    </div>
                 </section>
                 {advanced && (
                     <section

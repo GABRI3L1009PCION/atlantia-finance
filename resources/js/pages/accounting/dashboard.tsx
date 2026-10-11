@@ -61,8 +61,7 @@ import PurchaseOrdersWorkspace from '@/pages/accounting/purchase-orders-workspac
 import QuotationsWorkspace from '@/pages/accounting/quotations-workspace';
 import RemindersWorkspace from '@/pages/accounting/reminders-workspace';
 import UsersRolesWorkspace from '@/pages/accounting/users-roles-workspace';
-import VatBooksWorkspace from '@/pages/accounting/vat-books-workspace';
-import { reports, sales } from '@/routes/accounting';
+import { companyDashboard, reports, sales } from '@/routes/accounting';
 
 type TrendRow = {
     label: string;
@@ -84,6 +83,7 @@ type Metrics = {
     income_cents: number;
     expense_cents: number;
     profit_cents: number;
+    cash_cents: number;
     drafts: number;
     trend: TrendRow[];
     receivable_aging: { label: string; amount_cents: number }[];
@@ -95,6 +95,41 @@ type Metrics = {
         total_cents: number;
         status: string;
     }[];
+    recent: {
+        kind: string;
+        title: string;
+        detail: string;
+        date: string;
+        company_id: string;
+    }[];
+    period: {
+        name: string;
+        starts_on: string;
+        ends_on: string;
+        status: 'open' | 'closed';
+        closed_at: string | null;
+    } | null;
+    attention: {
+        label: string;
+        detail: string;
+        tone: 'success' | 'warning' | 'danger';
+        module: string;
+    }[];
+    fiscal_obligations: {
+        label: string;
+        due: string;
+        status: string;
+        module: string;
+    }[];
+    period_close: {
+        label: string;
+        status: 'open' | 'closed';
+        progress: number;
+        pending: string[];
+    } | null;
+    ai_context: {
+        suggestions: string[];
+    };
 };
 
 type Props = {
@@ -283,14 +318,18 @@ function Kpi({
     change,
     icon: Icon,
     tone,
+    href,
+    tooltip,
 }: {
     label: string;
     value: number;
     change: string;
     icon: LucideIcon;
     tone: string;
+    href?: string;
+    tooltip?: string;
 }) {
-    return (
+    const body = (
         <div
             className={`${card} kpi-card p-4 transition hover:-translate-y-0.5 hover:shadow-lg`}
         >
@@ -299,7 +338,7 @@ function Kpi({
                     <p className="mb-1 truncate text-xs font-medium text-slate-500">
                         {label}
                     </p>
-                    <p className="truncate text-xl font-bold text-slate-800">
+                    <p className="text-[1.18rem] leading-tight font-bold text-slate-800">
                         {money(value)}
                     </p>
                     <p
@@ -316,6 +355,16 @@ function Kpi({
             </div>
         </div>
     );
+
+    if (href) {
+        return (
+            <Link href={href} title={tooltip} className="block">
+                {body}
+            </Link>
+        );
+    }
+
+    return body;
 }
 
 function LineChart({ rows }: { rows: TrendRow[] }) {
@@ -1333,6 +1382,62 @@ function ModuleStatus({
         return null;
     }
 
+    if (moduleKey === 'portal-cliente') {
+        return <ClientPortalWorkspace company={company} />;
+    }
+
+    if (moduleKey === 'notas-credito') {
+        return <CreditNotesWorkspace company={company} />;
+    }
+
+    if (moduleKey === 'ordenes-compra') {
+        return <PurchaseOrdersWorkspace company={company} />;
+    }
+
+    if (moduleKey === 'cierre-periodo') {
+        return <PeriodCloseWorkspace company={company} />;
+    }
+
+    if (moduleKey === 'estados-cuenta') {
+        return <AccountStatementsWorkspace company={company} />;
+    }
+
+    if (moduleKey === 'recordatorios') {
+        return <RemindersWorkspace company={company} />;
+    }
+
+    if (moduleKey === 'auditoria') {
+        return <AuditWorkspace company={company} />;
+    }
+
+    if (moduleKey === 'usuarios-roles') {
+        return <UsersRolesWorkspace company={company} />;
+    }
+
+    // The library is the shared legal catalog; the company's internal norms keep their own approval workflow below.
+    if (moduleKey === 'normativa') {
+        return (
+            <NormativeLibraryWorkspace company={company}>
+                <section className="space-y-2">
+                    <h2 className="text-sm font-black text-[#061633]">
+                        Normas internas de {company.name}
+                    </h2>
+                    <p className="text-xs text-[#526b92]">
+                        Políticas y normas propias de la empresa. Se redactan,
+                        revisan, aprueban y publican; una norma publicada solo
+                        se sustituye o archiva, nunca se edita.
+                    </p>
+                    <OperationalModuleCenter
+                        company={company}
+                        module={moduleKey}
+                        title="Normas internas"
+                        canWrite={canWrite}
+                    />
+                </section>
+            </NormativeLibraryWorkspace>
+        );
+    }
+
     if (!['fel', 'configuracion'].includes(moduleKey)) {
         return (
             <main className="min-h-full bg-[#f6f8fb] p-3 sm:p-5">
@@ -1456,10 +1561,6 @@ function ModuleStatus({
         return operational(<BudgetsWorkspace company={company} />);
     }
 
-    if (moduleKey === 'normativa') {
-        return operational(<NormativeLibraryWorkspace company={company} />);
-    }
-
     if (moduleKey === 'documentos') {
         return operational(<DocumentsWorkspace company={company} />);
     }
@@ -1470,42 +1571,6 @@ function ModuleStatus({
 
     if (moduleKey === 'fel') {
         return operational(<FelWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'portal-cliente') {
-        return operational(<ClientPortalWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'notas-credito') {
-        return operational(<CreditNotesWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'ordenes-compra') {
-        return operational(<PurchaseOrdersWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'libros-iva') {
-        return operational(<VatBooksWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'cierre-periodo') {
-        return operational(<PeriodCloseWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'estados-cuenta') {
-        return operational(<AccountStatementsWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'recordatorios') {
-        return operational(<RemindersWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'auditoria') {
-        return operational(<AuditWorkspace company={company} />);
-    }
-
-    if (moduleKey === 'usuarios-roles') {
-        return operational(<UsersRolesWorkspace company={company} />);
     }
 
     if (moduleKey === 'configuracion') {
@@ -1614,12 +1679,16 @@ export default function CompanyDashboard({
         | null
         | undefined;
     const planFeatures = navigation?.plan?.features ?? [];
-    const moduleKey = new URL(
+    const currentUrl = new URL(
         page.url,
         typeof window === 'undefined'
             ? 'http://localhost'
             : window.location.origin,
-    ).searchParams.get('module');
+    );
+    const moduleKey = currentUrl.searchParams.get('module');
+    const searchTerm = (currentUrl.searchParams.get('q') ?? '')
+        .trim()
+        .toLocaleLowerCase();
 
     if (
         moduleKey &&
@@ -1643,9 +1712,73 @@ export default function CompanyDashboard({
         payments_cents: 0,
     };
     const current = metrics.trend.at(-1) ?? previous;
-    const cash = metrics.collections_cents - metrics.payments_cents;
     const currentNet = current.sales_cents - current.purchases_cents;
     const previousNet = previous.sales_cents - previous.purchases_cents;
+    const moduleUrl = (module: string) =>
+        companyDashboard.url(company.public_id, { query: { module } });
+    const searchResults = (() => {
+        if (!searchTerm) {
+            return [];
+        }
+
+        const matches = (...values: Array<number | string | null>) =>
+            values.some((value) =>
+                String(value ?? '')
+                    .toLocaleLowerCase()
+                    .includes(searchTerm),
+            );
+
+        return [
+            ...metrics.attention
+                .filter((item) => matches(item.label, item.detail))
+                .map((item) => ({
+                    key: `attention-${item.module}-${item.label}`,
+                    title: item.label,
+                    detail: item.detail,
+                    href: moduleUrl(item.module),
+                    badge: 'Atención',
+                })),
+            ...metrics.fiscal_obligations
+                .filter((item) => matches(item.label, item.status, item.due))
+                .map((item) => ({
+                    key: `fiscal-${item.label}-${item.due}`,
+                    title: item.label,
+                    detail: `Vence ${shortDate(item.due)} · ${item.status}`,
+                    href: moduleUrl(item.module),
+                    badge: 'Fiscal',
+                })),
+            ...metrics.recent
+                .filter((item) => matches(item.title, item.detail, item.kind))
+                .map((item) => ({
+                    key: `recent-${item.kind}-${item.title}-${item.date}`,
+                    title: item.title,
+                    detail: item.detail,
+                    href: companyDashboard.url(item.company_id),
+                    badge: 'Actividad',
+                })),
+            ...metrics.recent_invoices
+                .filter((invoice) =>
+                    matches(
+                        invoice.public_id,
+                        invoice.number,
+                        invoice.customer,
+                        invoice.status,
+                    ),
+                )
+                .map((invoice) => ({
+                    key: `invoice-${invoice.public_id}`,
+                    title: `Factura ${invoice.number ?? invoice.public_id}`,
+                    detail: `${invoice.customer} · ${money(invoice.total_cents)}`,
+                    href: sales.url(company.public_id, {
+                        query: {
+                            search:
+                                invoice.number?.toString() ?? invoice.public_id,
+                        },
+                    }),
+                    badge: 'Factura',
+                })),
+        ].slice(0, 8);
+    })();
     const statuses: Record<string, { label: string; className: string }> = {
         issued: {
             label: 'Emitida',
@@ -1673,6 +1806,8 @@ export default function CompanyDashboard({
                             )}
                             icon={TrendingUp}
                             tone="bg-emerald-100 text-emerald-600"
+                            href={sales.url(company.public_id)}
+                            tooltip={`Ingresos registrados durante ${metrics.period?.name ?? 'el período actual'}.`}
                         />
                         <Kpi
                             label="Gastos del mes"
@@ -1683,25 +1818,35 @@ export default function CompanyDashboard({
                             )}
                             icon={ReceiptText}
                             tone="bg-red-100 text-red-500"
+                            href={reports.url(company.public_id)}
+                            tooltip="Gastos contabilizados del período actual."
                         />
                         <Kpi
-                            label="Utilidad neta"
+                            label={
+                                metrics.profit_cents < 0
+                                    ? 'Pérdida neta'
+                                    : 'Utilidad neta'
+                            }
                             value={metrics.profit_cents}
                             change={variation(currentNet, previousNet)}
                             icon={ChartNoAxesCombined}
                             tone="bg-amber-100 text-amber-600"
+                            href={reports.url(company.public_id)}
+                            tooltip="Resultado del período derivado de cuentas contables."
                         />
                         <Kpi
-                            label="Saldo de caja"
-                            value={cash}
+                            label="Disponibilidad"
+                            value={metrics.cash_cents}
                             change={variation(
-                                current.collections_cents -
-                                    current.payments_cents,
+                                metrics.collections_cents -
+                                    metrics.payments_cents,
                                 previous.collections_cents -
                                     previous.payments_cents,
                             )}
                             icon={Landmark}
                             tone="bg-[#f1e6e7] text-[#722f37]"
+                            href={moduleUrl('bancos')}
+                            tooltip="Saldo disponible en bancos activos de la empresa."
                         />
                         <Kpi
                             label="CxC pendiente"
@@ -1709,6 +1854,8 @@ export default function CompanyDashboard({
                             change={`${money(metrics.overdue_receivable_cents)} vencidos`}
                             icon={CircleDollarSign}
                             tone="bg-teal-100 text-teal-600"
+                            href={moduleUrl('estados-cuenta')}
+                            tooltip="Saldo pendiente de cuentas por cobrar activas."
                         />
                         <Kpi
                             label="CxP pendiente"
@@ -1716,7 +1863,174 @@ export default function CompanyDashboard({
                             change={`${money(metrics.overdue_payable_cents)} vencidos`}
                             icon={WalletCards}
                             tone="bg-orange-100 text-orange-600"
+                            href={moduleUrl('estados-cuenta')}
+                            tooltip="Saldo pendiente de cuentas por pagar activas."
                         />
+                    </section>
+
+                    {searchTerm && (
+                        <section className={`${card} mb-6 overflow-hidden`}>
+                            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                                <div>
+                                    <h2 className="font-semibold">
+                                        Resultados de búsqueda
+                                    </h2>
+                                    <p className="text-xs text-slate-500">
+                                        Coincidencias para “{searchTerm}” en la
+                                        empresa activa.
+                                    </p>
+                                </div>
+                                <Link
+                                    href={companyDashboard.url(
+                                        company.public_id,
+                                    )}
+                                    className="text-xs font-semibold text-[#722f37] hover:underline"
+                                >
+                                    Limpiar
+                                </Link>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {searchResults.map((item) => (
+                                    <Link
+                                        key={item.key}
+                                        href={item.href}
+                                        className="flex items-center justify-between gap-4 px-5 py-3 text-sm transition hover:bg-slate-50"
+                                    >
+                                        <span className="min-w-0">
+                                            <strong className="block truncate text-slate-800">
+                                                {item.title}
+                                            </strong>
+                                            <small className="block truncate text-slate-500">
+                                                {item.detail}
+                                            </small>
+                                        </span>
+                                        <span className="shrink-0 rounded-full bg-rose-50 px-3 py-1 text-[11px] font-semibold text-[#722f37]">
+                                            {item.badge}
+                                        </span>
+                                    </Link>
+                                ))}
+                                {searchResults.length === 0 && (
+                                    <div className="px-5 py-8 text-center text-sm text-slate-400">
+                                        No hay coincidencias en los datos
+                                        cargados del dashboard.
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    )}
+
+                    <section className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_.9fr_.9fr]">
+                        <div className={`${card} p-5`}>
+                            <div className="flex items-center justify-between gap-3">
+                                <h2 className="font-semibold">
+                                    Requiere atención
+                                </h2>
+                                <span className="rounded-full bg-rose-50 px-3 py-1 text-[10px] font-semibold text-[#722f37]">
+                                    Datos reales
+                                </span>
+                            </div>
+                            <div className="mt-4 space-y-2">
+                                {metrics.attention.map((item) => (
+                                    <Link
+                                        key={`${item.module}-${item.label}`}
+                                        href={moduleUrl(item.module)}
+                                        className="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-2 text-sm transition hover:bg-slate-50"
+                                    >
+                                        <span
+                                            className={`grid size-7 place-items-center rounded-full ${
+                                                item.tone === 'danger'
+                                                    ? 'bg-red-50 text-red-600'
+                                                    : item.tone === 'warning'
+                                                      ? 'bg-amber-50 text-amber-600'
+                                                      : 'bg-emerald-50 text-emerald-600'
+                                            }`}
+                                        >
+                                            {item.tone === 'success' ? (
+                                                <Check className="size-4" />
+                                            ) : (
+                                                <CircleAlert className="size-4" />
+                                            )}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <strong className="block truncate text-xs">
+                                                {item.label}
+                                            </strong>
+                                            <small className="block truncate text-[11px] text-slate-500">
+                                                {item.detail}
+                                            </small>
+                                        </span>
+                                        <ArrowRight className="size-4 text-slate-400" />
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+
+                        <Link
+                            href={moduleUrl('cierre-periodo')}
+                            className={`${card} block p-5 transition hover:-translate-y-0.5 hover:shadow-lg`}
+                        >
+                            <h2 className="flex items-center gap-2 font-semibold">
+                                <CalendarRange className="size-5 text-[#722f37]" />
+                                Período contable
+                            </h2>
+                            <div className="mt-4">
+                                <p className="text-2xl font-bold text-slate-900">
+                                    {metrics.period?.name ?? 'Sin período'}
+                                </p>
+                                <p className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+                                    <span
+                                        className={`size-2 rounded-full ${metrics.period?.status === 'closed' ? 'bg-slate-500' : 'bg-emerald-500'}`}
+                                    />
+                                    {metrics.period?.status === 'closed'
+                                        ? 'Cerrado'
+                                        : 'Abierto'}
+                                </p>
+                            </div>
+                            {metrics.period_close && (
+                                <div className="mt-4">
+                                    <div className="flex justify-between text-xs">
+                                        <span>Cierre</span>
+                                        <strong>
+                                            {metrics.period_close.progress}%
+                                        </strong>
+                                    </div>
+                                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                                        <div
+                                            className="h-full rounded-full bg-[#722f37]"
+                                            style={{
+                                                width: `${metrics.period_close.progress}%`,
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </Link>
+
+                        <div className={`${card} p-5`}>
+                            <h2 className="flex items-center gap-2 font-semibold">
+                                <Sparkles className="size-5 text-[#c7972d]" />
+                                Luzma
+                            </h2>
+                            <div className="mt-4 space-y-2">
+                                {metrics.ai_context.suggestions
+                                    .slice(0, 3)
+                                    .map((suggestion) => (
+                                        <p
+                                            key={suggestion}
+                                            className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"
+                                        >
+                                            {suggestion}
+                                        </p>
+                                    ))}
+                            </div>
+                            <button
+                                type="button"
+                                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#eadfda] px-3 py-2 text-xs font-semibold text-[#722f37]"
+                            >
+                                <Bot className="size-4" />
+                                Preguntar a Atlantia
+                            </button>
+                        </div>
                     </section>
 
                     <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -1753,6 +2067,91 @@ export default function CompanyDashboard({
                                 </div>
                             </div>
                             <CashChart rows={metrics.trend} />
+                        </div>
+                    </section>
+
+                    <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                        <div className={`${card} overflow-hidden`}>
+                            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                                <h2 className="font-semibold">
+                                    Obligaciones y vencimientos
+                                </h2>
+                                <Link
+                                    href={moduleUrl('impuestos')}
+                                    className="text-xs font-medium text-[#722f37] hover:underline"
+                                >
+                                    Ver fiscal{' '}
+                                    <ArrowRight className="inline size-3" />
+                                </Link>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {metrics.fiscal_obligations.map((item) => (
+                                    <Link
+                                        key={`${item.label}-${item.due}`}
+                                        href={moduleUrl(item.module)}
+                                        className="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-slate-50"
+                                    >
+                                        <span>
+                                            <strong className="block text-slate-800">
+                                                {item.label}
+                                            </strong>
+                                            <small className="text-slate-500">
+                                                Vence: {shortDate(item.due)}
+                                            </small>
+                                        </span>
+                                        <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
+                                            {item.status}
+                                        </span>
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className={`${card} overflow-hidden`}>
+                            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                                <h2 className="font-semibold">
+                                    Actividad reciente
+                                </h2>
+                                <Link
+                                    href={moduleUrl('auditoria')}
+                                    className="text-xs font-medium text-[#722f37] hover:underline"
+                                >
+                                    Ver auditoría{' '}
+                                    <ArrowRight className="inline size-3" />
+                                </Link>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {metrics.recent.map((item) => (
+                                    <Link
+                                        key={`${item.kind}-${item.title}-${item.date}`}
+                                        href={companyDashboard.url(
+                                            item.company_id,
+                                        )}
+                                        className="flex items-center gap-3 px-5 py-3 text-sm hover:bg-slate-50"
+                                    >
+                                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-rose-50 text-[#722f37]">
+                                            <Clock3 className="size-4" />
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <strong className="block truncate text-slate-800">
+                                                {item.title}
+                                            </strong>
+                                            <small className="block truncate text-slate-500">
+                                                {item.detail}
+                                            </small>
+                                        </span>
+                                        <small className="text-slate-400">
+                                            {shortDate(item.date)}
+                                        </small>
+                                    </Link>
+                                ))}
+                                {metrics.recent.length === 0 && (
+                                    <div className="px-5 py-8 text-center text-sm text-slate-400">
+                                        Sin actividad reciente para la empresa
+                                        activa.
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </section>
 

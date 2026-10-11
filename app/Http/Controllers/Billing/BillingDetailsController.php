@@ -18,7 +18,7 @@ class BillingDetailsController extends Controller
     public function edit(Request $request): Response
     {
         $organization = $this->organization($request);
-        $profile = DB::table('organization_billing_profiles')->where('organization_id', $organization->id)->first();
+        $profile = DB::table('organization_billing_profiles')->where('organization_billing_profiles.organization_id', $organization->id)->first();
 
         return Inertia::render('billing/details', [
             'billing' => $profile ? (array) $profile : ['name' => $organization->legal_name ?? '', 'nit' => $organization->tax_identifier ?? '', 'address' => ''],

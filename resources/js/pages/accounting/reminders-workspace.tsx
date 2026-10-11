@@ -3,7 +3,6 @@ import {
     AlertTriangle,
     Banknote,
     BarChart3,
-    Building2,
     CalendarDays,
     Check,
     CheckCircle2,
@@ -156,19 +155,28 @@ function Metric({
     tone: string;
     change?: string;
 }) {
+    const changeTone =
+        label === 'Vencidos' ? 'text-red-600' : 'text-emerald-600';
+
     return (
-        <article className={`${panel} flex min-h-24 items-center gap-4 p-5`}>
+        <article
+            className={`${panel} flex min-h-[98px] min-w-0 items-center gap-4 overflow-hidden p-5`}
+        >
             <span
                 className={`grid size-12 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 <Icon className="size-6" />
             </span>
-            <div>
+            <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-600">{label}</p>
                 <div className="mt-1 flex items-end gap-3">
-                    <strong className="text-2xl">{value}</strong>
+                    <strong className="text-2xl font-black text-slate-950">
+                        {value}
+                    </strong>
                     {change && (
-                        <span className="pb-1 text-xs font-semibold text-emerald-600">
+                        <span
+                            className={`pb-1 text-xs font-semibold ${changeTone}`}
+                        >
                             {change}
                         </span>
                     )}
@@ -277,6 +285,24 @@ const agenda = [
             ],
         ],
     },
+    {
+        day: 'Sáb',
+        date: '3 Oct',
+        items: [
+            [
+                '09:30',
+                'Revisión de vencimientos',
+                'bg-emerald-50 border-emerald-400',
+                CheckCircle2,
+            ],
+            [
+                '11:00',
+                'Seguimiento de pagos',
+                'bg-amber-50 border-amber-400',
+                Banknote,
+            ],
+        ],
+    },
 ] as const;
 
 export default function RemindersWorkspace({
@@ -312,7 +338,7 @@ export default function RemindersWorkspace({
         );
 
     return (
-        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] p-3 text-[#172033] sm:p-5">
+        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] px-4 py-5 text-[#172033] sm:px-6">
             <Head title={`Recordatorios · ${company.name}`} />
             <div className="mx-auto max-w-[1900px] space-y-4">
                 <header className="flex flex-wrap items-start justify-between gap-4">
@@ -320,7 +346,7 @@ export default function RemindersWorkspace({
                         <p className="mb-2 text-xs text-slate-500">
                             Inicio <span className="px-2">›</span> Recordatorios
                         </p>
-                        <h1 className="text-3xl font-bold text-[#74000a]">
+                        <h1 className="text-[2rem] leading-none font-black tracking-tight text-[#74000a]">
                             Recordatorios
                         </h1>
                         <p className="mt-1 text-sm text-slate-500">
@@ -328,24 +354,12 @@ export default function RemindersWorkspace({
                             contables
                         </p>
                     </div>
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2.5 text-xs font-semibold"
-                        >
-                            <Building2 className="size-4 text-[#74000a]" />
-                            {company.name}
-                            <ChevronDown className="size-4" />
-                        </button>
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2.5 text-xs font-semibold"
-                        >
-                            <CalendarDays className="size-4 text-[#74000a]" />
-                            Septiembre 2026
-                            <ChevronDown className="size-4" />
-                        </button>
-                    </div>
+                    <blockquote className="max-w-md pt-6 text-right text-sm text-slate-500 italic">
+                        “El orden de hoy, la tranquilidad de mañana.”
+                        <span className="block text-xs">
+                            — Atlantia Finance
+                        </span>
+                    </blockquote>
                 </header>
                 {notice && (
                     <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
@@ -358,7 +372,7 @@ export default function RemindersWorkspace({
                         </button>
                     </div>
                 )}
-                <section className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+                <section className="grid grid-cols-4 gap-3">
                     <Metric
                         icon={CalendarDays}
                         label="Hoy"
@@ -392,79 +406,103 @@ export default function RemindersWorkspace({
                     />
                 </section>
                 <section
-                    className={`${panel} grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_.7fr_1fr_1fr_1fr_auto_auto]`}
+                    className={`${panel} grid gap-3 p-4 xl:grid-cols-[1fr_1fr_.75fr_1fr_1.1fr_.9fr_auto_auto]`}
                 >
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        Todas las empresas
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        Todas las categorías
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <select
-                        value={priority}
-                        onChange={(event) => setPriority(event.target.value)}
-                        className="rounded-lg border bg-white px-3 py-2.5 text-xs"
-                    >
-                        <option>Todas</option>
-                        <option>Alta</option>
-                        <option>Media</option>
-                    </select>
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        Todos los responsables
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        <CalendarDays className="size-4" />
-                        Septiembre 2026
-                    </button>
-                    <select
-                        value={status}
-                        onChange={(event) => setStatus(event.target.value)}
-                        className="rounded-lg border bg-white px-3 py-2.5 text-xs"
-                    >
-                        <option>Todos</option>
-                        <option>Vencido</option>
-                        <option>Pendiente</option>
-                        <option>Próximo</option>
-                    </select>
-                    <button
-                        type="button"
-                        onClick={() =>
-                            showNotice(
-                                'Reglas automáticas listas para configurar.',
-                            )
-                        }
-                        className="flex items-center justify-center gap-2 rounded-lg border border-[#9b1923] px-4 py-2.5 text-xs font-semibold text-[#74000a]"
-                    >
-                        <Settings2 className="size-4" />
-                        Reglas automáticas
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() =>
-                            showNotice(
-                                'Formulario de nuevo recordatorio preparado.',
-                            )
-                        }
-                        className="flex items-center justify-center gap-2 rounded-lg bg-[#74000a] px-5 py-2.5 text-xs font-semibold text-white"
-                    >
-                        <Plus className="size-4" />
-                        Nuevo recordatorio
-                    </button>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Empresa</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            Todas las empresas
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Categoría</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            Todas las categorías
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Prioridad</span>
+                        <select
+                            value={priority}
+                            onChange={(event) =>
+                                setPriority(event.target.value)
+                            }
+                            className="h-10 w-full rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <option>Todas</option>
+                            <option>Alta</option>
+                            <option>Media</option>
+                        </select>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Responsable</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            Todos
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Fecha</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center gap-2 rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <CalendarDays className="size-4" />
+                            Septiembre 2026
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Estado</span>
+                        <select
+                            value={status}
+                            onChange={(event) => setStatus(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <option>Todos</option>
+                            <option>Vencido</option>
+                            <option>Pendiente</option>
+                            <option>Próximo</option>
+                        </select>
+                    </label>
+                    <div className="flex items-end">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                showNotice(
+                                    'Reglas automáticas listas para configurar.',
+                                )
+                            }
+                            className="flex h-10 items-center justify-center gap-2 rounded-lg border border-[#9b1923] px-4 text-xs font-semibold text-[#74000a]"
+                        >
+                            <Settings2 className="size-4" />
+                            Reglas automáticas
+                        </button>
+                    </div>
+                    <div className="flex items-end">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                showNotice(
+                                    'Formulario de nuevo recordatorio preparado.',
+                                )
+                            }
+                            className="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#74000a] px-5 text-xs font-semibold text-white"
+                        >
+                            <Plus className="size-4" />
+                            Nuevo recordatorio
+                        </button>
+                    </div>
                 </section>
                 <section className="grid items-stretch gap-4 2xl:grid-cols-[minmax(0,1.45fr)_minmax(330px,.8fr)]">
                     <article className={`${panel} overflow-hidden`}>
@@ -498,7 +536,7 @@ export default function RemindersWorkspace({
                             </div>
                         </header>
                         <div className="overflow-x-auto">
-                            <div className="grid min-w-[820px] grid-cols-5 divide-x">
+                            <div className="grid min-w-[980px] grid-cols-6 divide-x">
                                 {agenda.map((day) => (
                                     <section
                                         key={day.day}

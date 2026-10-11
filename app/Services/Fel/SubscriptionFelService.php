@@ -36,7 +36,7 @@ class SubscriptionFelService
                 throw new RuntimeException('El pago no está confirmado en GTQ.');
             }
             $office = DB::table('offices')->where('id', $company->office_id)->firstOrFail();
-            $ownerId = DB::table('organization_user')->where('organization_id', $office->organization_id)
+            $ownerId = DB::table('organization_user')->where('organization_user.organization_id', $office->organization_id)
                 ->where('role', 'owner')->where('status', 'active')->value('user_id');
             $owner = User::query()->where('id', $ownerId)->firstOrFail();
             $organization = $owner->organizations()->whereKey($office->organization_id)->firstOrFail();

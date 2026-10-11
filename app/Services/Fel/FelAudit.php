@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Fel;
 
 use App\Models\FelDocument;
+use App\Services\Integrations\WebhookDispatcher;
 use Illuminate\Support\Facades\DB;
 
 class FelAudit
@@ -19,5 +20,6 @@ class FelAudit
                 'environment' => $document->environment, ...$details], JSON_THROW_ON_ERROR),
             'occurred_at' => now(), 'created_at' => now(),
         ]);
+        app(WebhookDispatcher::class)->fromAudit((int) $document->organization_id, 'fel.'.$action, 'fel_documents', (int) $document->id);
     }
 }

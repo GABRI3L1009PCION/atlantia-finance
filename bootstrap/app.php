@@ -1,17 +1,26 @@
 <?php
 
+use App\Http\Middleware\AssignCorrelationId;
+use App\Http\Middleware\AuthenticateApiToken;
+use App\Http\Middleware\EnforceOfficeTwoFactor;
 use App\Http\Middleware\EnsureActiveSubscription;
+use App\Http\Middleware\EnsurePlatformStaff;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RestrictSupervisingDirector;
+use App\Http\Middleware\SetTenantDatabaseContext;
+use App\Http\Middleware\UseSystemDatabaseContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -20,11 +29,23 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'subscription.active' => EnsureActiveSubscription::class,
+            'tenancy.system' => UseSystemDatabaseContext::class,
+            'api.token' => AuthenticateApiToken::class,
+            'platform' => EnsurePlatformStaff::class,
         ]);
 
+        // Route model binding must already run inside the tenant (or system) database scope.
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: SetTenantDatabaseContext::class);
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: UseSystemDatabaseContext::class);
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: AuthenticateApiToken::class);
+
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        $middleware->prepend(AssignCorrelationId::class);
 
         $middleware->web(append: [
+            SetTenantDatabaseContext::class,
+            EnforceOfficeTwoFactor::class,
+            RestrictSupervisingDirector::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

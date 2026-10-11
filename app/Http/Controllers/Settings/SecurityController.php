@@ -59,7 +59,7 @@ class SecurityController extends Controller
             'password' => $request->password,
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
+        session()->flash('workspace_notice', 'Tu contraseña se actualizó correctamente.');
 
         return back();
     }

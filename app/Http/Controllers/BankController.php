@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Organization;
+use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\ReportExportService;
 use App\Services\WorkspaceContext;
@@ -35,14 +36,14 @@ class BankController extends Controller
 
         $ledgerBalances = DB::table('journal_lines as line')->join('journal_entries as entry', 'entry.id', '=', 'line.journal_entry_id')
             ->join('accounting_periods as period', 'period.id', '=', 'entry.accounting_period_id')
-            ->where('period.company_id', $record->id)->where('entry.status', 'posted')->groupBy('line.ledger_account_id')
-            ->select('line.ledger_account_id')->selectRaw('SUM(line.debit_cents - line.credit_cents) AS accounting_balance_cents');
+            ->where('period.company_id', $record->id)->whereIn('entry.status', ['posted', 'reversed'])->groupBy('line.ledger_account_id')
+            ->select('line.ledger_account_id')->selectRaw('CAST(SUM(line.debit_cents - line.credit_cents) AS BIGINT) AS accounting_balance_cents');
 
         $movementStats = DB::table('bank_transactions')->groupBy('bank_account_id')->select('bank_account_id')
             ->selectRaw('COUNT(*) AS movement_count')
-            ->selectRaw("SUM(CASE WHEN reconciliation_status = 'pending' THEN 1 ELSE 0 END) AS pending_count")
-            ->selectRaw("SUM(CASE WHEN reconciliation_status = 'matched' THEN 1 ELSE 0 END) AS matched_count")
-            ->selectRaw("SUM(CASE WHEN reconciliation_status = 'unmatched' THEN 1 ELSE 0 END) AS unmatched_count");
+            ->selectRaw("CAST(SUM(CASE WHEN reconciliation_status = 'pending' THEN 1 ELSE 0 END) AS BIGINT) AS pending_count")
+            ->selectRaw("CAST(SUM(CASE WHEN reconciliation_status = 'matched' THEN 1 ELSE 0 END) AS BIGINT) AS matched_count")
+            ->selectRaw("CAST(SUM(CASE WHEN reconciliation_status = 'unmatched' THEN 1 ELSE 0 END) AS BIGINT) AS unmatched_count");
 
         $accounts = DB::table('bank_accounts as bank')->join('ledger_accounts as ledger', 'ledger.id', '=', 'bank.ledger_account_id')
             ->leftJoinSub($ledgerBalances, 'balances', 'balances.ledger_account_id', '=', 'bank.ledger_account_id')
@@ -137,14 +138,14 @@ class BankController extends Controller
                 'reconciled_accounts' => $reconciledAccounts,
             ],
 
-            'canWrite' => $this->canWrite($org, $record->id, $request->user()->id),
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()),
             'today' => now()->toDateString(),
         ]);
     }
 
     public function storeAccount(Request $request, string $company): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'banks.manage');
 
         $data = $request->validate([
             'ledger_account_id' => 'required|integer',
@@ -193,7 +194,7 @@ class BankController extends Controller
 
     public function storeTransaction(Request $request, string $company): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'banks.manage');
 
         $data = $request->validate([
             'account_id' => 'required|integer',
@@ -258,7 +259,7 @@ class BankController extends Controller
 
     public function export(Request $request, string $company, ReportExportService $exporter): HttpResponse
     {
-        [, $record] = $this->scope($request, $company);
+        [, $record] = $this->scope($request, $company, 'banks.export');
 
         $data = $request->validate([
             'format' => 'required|in:pdf,xlsx',
@@ -305,29 +306,26 @@ class BankController extends Controller
     }
 
     /** @return array{Organization, stdClass} */
-    private function scope(Request $request, string $company, bool $write = false): array
+    private function scope(Request $request, string $company, string $permission = 'banks.view'): array
     {
         $org = $this->context->organization($request->user());
         $this->context->requireFeature($org, 'basic_accounting');
+        $record = $this->accounting->company($org, $request->user(), $company, ! $this->isReadPermission($permission));
+        $this->accounting->assertModule($org, $record->id, $request->user(), $permission);
 
         return [
             $org,
-            $this->accounting->company(
-                $org,
-                $request->user(),
-                $company,
-                $write
-            ),
+            $record,
         ];
     }
 
-    private function canWrite(Organization $org, int $companyId, int $userId): bool
+    private function canWrite(Organization $org, int $companyId, User $user): bool
     {
-        return $org->pivot->role === 'owner'
-            || DB::table('company_user')
-                ->where('company_id', $companyId)
-                ->where('user_id', $userId)
-                ->where('permission', 'editor')
-                ->exists();
+        return $this->accounting->canModule($org, $companyId, $user, 'banks.manage');
+    }
+
+    private function isReadPermission(string $permission): bool
+    {
+        return str_ends_with($permission, '.view') || str_ends_with($permission, '.export');
     }
 }

@@ -18,13 +18,19 @@ abstract class TestCase extends BaseTestCase
         return $app;
     }
 
+    /**
+     * Tests run against a dedicated PostgreSQL database (same engine, constraints, triggers and RLS as
+     * production) whose name must end in "_test", so a cached or mistyped config can never wipe real data.
+     */
     protected function assertDatabaseIsIsolated(Application $app): void
     {
+        $database = (string) $app['config']->get('database.connections.pgsql.database');
+
         if (! $app->environment('testing')
-            || $app['config']->get('database.default') !== 'sqlite'
-            || $app['config']->get('database.connections.sqlite.database') !== ':memory:'
-            || ! empty($app['config']->get('database.connections.sqlite.url'))) {
-            throw new RuntimeException('Tests require APP_ENV=testing and SQLite :memory:. Clear cached configuration before running tests.');
+            || $app['config']->get('database.default') !== 'pgsql'
+            || ! str_ends_with($database, '_test')
+            || ! empty($app['config']->get('database.connections.pgsql.url'))) {
+            throw new RuntimeException('Tests require APP_ENV=testing and a PostgreSQL database whose name ends in _test. Clear cached configuration before running tests.');
         }
     }
 

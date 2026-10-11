@@ -30,23 +30,35 @@ const blank: Line = {
     discount: '0.00',
 };
 
-export default function FelCreate({
-    company,
-    customers,
-    document,
-    today,
-    notice,
-}: {
+type FelCreateProps = {
     company: Company;
     customers: Customer[];
+    invoices?: {
+        id: number;
+        number: number;
+        sales_customer_id: number;
+        total_cents: number;
+        issued_on: string;
+    }[];
     document: Document | null;
     today: string;
     notice: string;
-}) {
+};
+
+export function FelInvoiceForm({
+    company,
+    customers,
+    invoices = [],
+    document,
+    today,
+}: FelCreateProps) {
     const form = useForm({
         issued_on: document?.issued_on.slice(0, 10) ?? today,
         currency: 'GTQ',
-        document_type: 'FACT',
+        document_type: document?.document_type ?? 'FACT',
+        sales_invoice_id: document?.sales_invoice_id
+            ? String(document.sales_invoice_id)
+            : '',
         intent: 'draft',
         customer_id: document ? String(document.customer_id) : '',
         receiver_name: document?.receiver_snapshot.name ?? '',
@@ -96,16 +108,7 @@ export default function FelCreate({
     }
 
     return (
-        <AccountingSection
-            company={company}
-            title={document ? 'Editar borrador' : 'Nueva factura'}
-            action={
-                <Link href={fel.index(company.public_id)} className={secondary}>
-                    Documentos
-                </Link>
-            }
-        >
-            <TestNotice notice={notice} />
+        <>
             <Errors errors={form.errors} />
             <Errors errors={quote.errors} />
             <div className="grid items-start gap-5 xl:grid-cols-[1fr_300px]">
@@ -126,6 +129,68 @@ export default function FelCreate({
                                     }
                                 />
                             </label>
+                            <label>
+                                Tipo de documento
+                                <select
+                                    className={field}
+                                    value={form.data.document_type}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'document_type',
+                                            e.target.value,
+                                        )
+                                    }
+                                >
+                                    <option value="FACT">Factura (FACT)</option>
+                                    <option value="NCRE">
+                                        Nota de crédito (NCRE)
+                                    </option>
+                                </select>
+                            </label>
+                            {form.data.document_type === 'NCRE' && (
+                                <label className="sm:col-span-2">
+                                    Factura interna que acredita
+                                    <select
+                                        className={field}
+                                        value={form.data.sales_invoice_id}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                'sales_invoice_id',
+                                                e.target.value,
+                                            )
+                                        }
+                                    >
+                                        <option value="">
+                                            Seleccionar factura del cliente
+                                        </option>
+                                        {invoices
+                                            .filter(
+                                                (invoice) =>
+                                                    String(
+                                                        invoice.sales_customer_id,
+                                                    ) === form.data.customer_id,
+                                            )
+                                            .map((invoice) => (
+                                                <option
+                                                    key={invoice.id}
+                                                    value={invoice.id}
+                                                >
+                                                    #{invoice.number} ·{' '}
+                                                    {invoice.issued_on} · Q{' '}
+                                                    {decimal(
+                                                        invoice.total_cents,
+                                                    )}
+                                                </option>
+                                            ))}
+                                    </select>
+                                    <span className="text-xs text-slate-500">
+                                        Al certificarse, reduce el saldo por
+                                        cobrar de esa factura y se contabiliza
+                                        contra ella; si se anula, el saldo
+                                        vuelve.
+                                    </span>
+                                </label>
+                            )}
                             <label>
                                 Moneda
                                 <input className={field} value="GTQ" readOnly />
@@ -439,6 +504,26 @@ export default function FelCreate({
                     </Card>
                 </div>
             </div>
+        </>
+    );
+}
+
+export default function FelCreate(props: FelCreateProps) {
+    return (
+        <AccountingSection
+            company={props.company}
+            title={props.document ? 'Editar borrador' : 'Nueva factura'}
+            action={
+                <Link
+                    href={fel.index(props.company.public_id)}
+                    className={secondary}
+                >
+                    Documentos
+                </Link>
+            }
+        >
+            <TestNotice notice={props.notice} />
+            <FelInvoiceForm {...props} />
         </AccountingSection>
     );
 }

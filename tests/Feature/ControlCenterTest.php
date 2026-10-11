@@ -1,0 +1,321 @@
+<?php
+
+use App\Jobs\CertifyFelDocumentJob;
+use App\Models\Organization;
+use App\Models\User;
+use App\Services\Platform\Billing\BillingMetricsService;
+use App\Services\Platform\IncidentManagementService;
+use App\Services\Platform\PlatformAuditService;
+use App\Services\Platform\PlatformAuthorization;
+use App\Services\Platform\PlatformHealthService;
+use App\Services\Platform\PlatformLuzmaAssistant;
+use App\Services\Platform\SupportTicketService;
+use App\Services\Platform\SystemLogService;
+use Database\Seeders\PlanCatalogSeeder;
+use Illuminate\Database\QueryException;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
+use PragmaRX\Google2FA\Google2FA;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+
+beforeEach(function () {
+    $this->seed(PlanCatalogSeeder::class);
+    $this->travelTo(now()->setDate(2026, 10, 1)->setTime(10, 0));
+    Http::fake(['*' => Http::response([], 200)]);
+    Notification::fake();
+    $this->withoutMiddleware(ThrottleRequests::class);
+});
+
+test('only active platform staff reach the control center and the two-factor policy is enforced', function () {
+    $tenant = User::factory()->create();
+    $this->actingAs($tenant)->get('/control-center')->assertForbidden();
+
+    $owner = ccStaff('saas_owner');
+    // The policy requires two-factor for staff by default.
+    $this->actingAs($owner)->get('/control-center')->assertRedirect('/settings/security');
+
+    ccRelaxTwoFactor();
+    $this->actingAs($owner)->get('/control-center')->assertOk()->assertInertia(fn (Assert $page) => $page->component('control-center/dashboard'));
+
+    DB::table('platform_staff')->where('user_id', $owner->id)->update(['status' => 'inactive']);
+    app(PlatformAuthorization::class)->forget($owner->id);
+    $this->actingAs($owner)->get('/control-center')->assertForbidden();
+});
+
+test('staff who pass the two-factor challenge land in the control center', function () {
+    $owner = ccStaff('saas_owner');
+    $google2fa = app(Google2FA::class);
+    $secret = $google2fa->generateSecretKey();
+    $owner->forceFill(['two_factor_secret' => encrypt($secret), 'two_factor_recovery_codes' => encrypt(json_encode(['code-1'])), 'two_factor_confirmed_at' => now()])->save();
+
+    $this->post('/login', ['email' => $owner->email, 'password' => 'password'])->assertRedirect('/two-factor-challenge');
+    $this->post('/two-factor-challenge', ['code' => $google2fa->getCurrentOtp($secret)])->assertRedirect('/control-center');
+    $this->get('/control-center')->assertOk();
+});
+
+test('staff without two-factor are sent to security settings flagged as platform staff', function () {
+    $owner = ccStaff('saas_owner');
+    $this->actingAs($owner)->get('/control-center')->assertRedirect('/settings/security');
+    $this->actingAs($owner)->withSession(['auth.password_confirmed_at' => now()->timestamp])->get('/settings/security')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('settings/security')->where('isPlatformStaff', true)->where('twoFactorEnabled', false));
+    $this->actingAs(User::factory()->create())->withSession(['auth.password_confirmed_at' => now()->timestamp])->get('/settings/security')->assertInertia(fn (Assert $page) => $page->where('isPlatformStaff', false));
+});
+
+test('each SaaS role only reaches its own areas', function () {
+    ccRelaxTwoFactor();
+    $support = ccStaff('saas_support');
+    $billing = ccStaff('saas_billing');
+
+    $this->actingAs($support)->get('/control-center/support/tickets')->assertOk();
+    $this->actingAs($support)->get('/control-center/billing')->assertForbidden();
+    $this->actingAs($support)->get('/control-center/settings')->assertForbidden();
+    $this->actingAs($billing)->get('/control-center/billing')->assertOk();
+    $this->actingAs($billing)->get('/control-center/saas-users')->assertForbidden();
+});
+
+test('the dashboard takes MRR from billing, excludes trials and says it is unavailable instead of zero when billing fails', function () {
+    $owner = ccOwner();
+    ccOrganization($owner, 'essential', false, 'Firma Activa');
+    ccOrganization($owner, 'professional', true, 'Firma en Prueba');
+
+    expect(app(BillingMetricsService::class)->mrr()['mrr'])->toEqual(399);
+    $this->actingAs($owner)->get('/control-center')->assertInertia(fn (Assert $page) => $page
+        ->where('dashboard.metrics.monthly_recurring_revenue.mrr', fn ($value) => (float) $value === 399.0)
+        ->where('dashboard.metrics.trials_active', 1));
+
+    $this->mock(BillingMetricsService::class, fn ($mock) => $mock->shouldReceive('mrr')->andThrow(new RuntimeException('billing down')));
+    $this->actingAs($owner)->get('/control-center')->assertInertia(fn (Assert $page) => $page
+        ->where('dashboard.metrics.monthly_recurring_revenue.unavailable', true)
+        ->where('dashboard.metrics.monthly_recurring_revenue.message', 'No disponible'));
+});
+
+test('a service is never reported healthy without a recent real check', function () {
+    expect(collect(app(PlatformHealthService::class)->snapshot())->pluck('status')->unique()->values()->all())->toBe(['unknown']);
+
+    DB::table('service_health_checks')->insert(['service' => 'database', 'status' => 'healthy', 'latency_ms' => 3, 'checked_at' => now()]);
+    $database = collect(app(PlatformHealthService::class)->snapshot())->firstWhere('key', 'database');
+    expect($database['status'])->toBe('healthy');
+
+    $this->travel(20)->minutes();
+    $database = collect(app(PlatformHealthService::class)->snapshot())->firstWhere('key', 'database');
+    expect($database['status'])->toBe('unknown')->and($database['latest_error'])->toContain('Sin chequeos recientes');
+});
+
+test('organizations are onboarded, then suspended with re-authentication, reactivated and archived without ever being deleted', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Contadores Unidos', 'tax_identifier' => '1234567-8', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+        'owner_name' => 'Ana Cliente', 'owner_email' => 'ana@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $organization = DB::table('organizations')->where('name', 'Contadores Unidos')->first();
+    expect($organization->status)->toBe('trial')
+        ->and(DB::table('subscriptions')->where('organization_id', $organization->id)->value('status'))->toBe('trialing')
+        ->and(DB::table('offices')->where('organization_id', $organization->id)->where('is_primary', true)->exists())->toBeTrue()
+        ->and(DB::table('invitations')->where('organization_id', $organization->id)->where('role', 'owner')->value('email'))->toBe('ana@cliente.test');
+    // Staff accounts cannot be the owner of a client organization.
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Otra', 'plan_price_id' => ccPrice('essential'), 'trial' => true,
+        'owner_name' => 'Yo', 'owner_email' => $owner->email, 'office_name' => 'Central'])->assertSessionHasErrors('owner_email');
+
+    $url = '/control-center/organizations/'.$organization->id.'/status/';
+    $this->actingAs($owner)->post($url.'suspend', ['password' => 'incorrecta', 'reason' => 'Revisión de cuenta'])->assertSessionHasErrors('password');
+    $this->actingAs($owner)->post($url.'suspend', ccConfirm(['reason' => 'x']))->assertSessionHasErrors('reason');
+    expect(DB::table('organizations')->where('id', $organization->id)->value('status'))->toBe('trial');
+
+    $this->actingAs($owner)->post($url.'suspend', ccConfirm())->assertSessionHasNoErrors();
+    expect(DB::table('organizations')->where('id', $organization->id)->first())->status->toBe('suspended')->suspended_at->not->toBeNull();
+    $this->actingAs($owner)->post($url.'suspend', ccConfirm())->assertSessionHasErrors('status');
+
+    $this->actingAs($owner)->post($url.'reactivate', ccConfirm())->assertSessionHasNoErrors();
+    expect(DB::table('organizations')->where('id', $organization->id)->value('status'))->toBe('trial');
+
+    // Only a suspended (or cancelled) organization can be archived.
+    $this->actingAs($owner)->post($url.'archive', ccConfirm())->assertSessionHasErrors('status');
+    $this->actingAs($owner)->post($url.'suspend', ccConfirm())->assertSessionHasNoErrors();
+    $this->actingAs($owner)->post($url.'archive', ccConfirm())->assertSessionHasNoErrors();
+    expect(DB::table('organizations')->where('id', $organization->id)->value('status'))->toBe('archived')
+        ->and(DB::table('platform_audit_events')->where('entity_id', (string) $organization->id)->whereIn('action', ['organization.created', 'organization.suspended', 'organization.reactivated', 'organization.archived'])->count())->toBe(5)
+        ->and(DB::table('platform_audit_events')->where('action', 'organization.suspended')->value('sensitive'))->toBeTrue();
+    // There is no delete endpoint for organizations.
+    $this->actingAs($owner)->delete('/control-center/organizations/'.$organization->id)->assertStatus(405);
+});
+
+test('the last SaaS owner is protected and nobody escalates to owner or changes their own role', function () {
+    $owner = ccOwner();
+    $admin = ccStaff('saas_admin');
+    $adminStaff = DB::table('platform_staff')->where('user_id', $admin->id)->value('id');
+    $ownerStaff = DB::table('platform_staff')->where('user_id', $owner->id)->value('id');
+
+    $this->actingAs($admin)->post('/control-center/saas-users/'.$ownerStaff.'/role', ccConfirm(['role' => 'saas_analyst']))->assertSessionHasErrors();
+    $this->actingAs($admin)->post('/control-center/saas-users/'.$ownerStaff.'/deactivate', ccConfirm())->assertSessionHasErrors();
+    $this->actingAs($admin)->post('/control-center/saas-users', ccConfirm(['name' => 'Nuevo', 'email' => 'nuevo@atlantia.test', 'role' => 'saas_owner']))->assertSessionHasErrors('role');
+    $this->actingAs($owner)->post('/control-center/saas-users/'.$ownerStaff.'/role', ccConfirm(['role' => 'saas_admin']))->assertSessionHasErrors('role');
+    expect(DB::table('platform_staff')->where('id', $ownerStaff)->value('role'))->toBe('saas_owner');
+
+    $this->actingAs($owner)->post('/control-center/saas-users/'.$adminStaff.'/role', ccConfirm(['role' => 'saas_analyst']))->assertSessionHasNoErrors();
+    expect(DB::table('platform_staff')->where('id', $adminStaff)->value('role'))->toBe('saas_analyst')
+        ->and(DB::table('platform_audit_events')->where('action', 'saas_role.changed')->where('sensitive', true)->exists())->toBeTrue();
+});
+
+test('support access needs another approver, is limited by scope and time, and every view is audited', function () {
+    $owner = ccOwner();
+    $support = ccStaff('saas_support');
+    $organizationId = ccOrganization($owner, 'professional', false, 'Firma Cliente');
+    $base = '/control-center/support-access';
+
+    $this->actingAs($support)->post($base, ['organization_id' => $organizationId, 'reason' => 'El cliente reporta un error en su estructura', 'scopes' => ['structure'], 'duration_minutes' => 30])
+        ->assertSessionHasNoErrors();
+    $accessId = (int) DB::table('support_access_requests')->value('id');
+    // Without an active access there is nothing to see.
+    $this->actingAs($support)->get($base.'/'.$accessId.'/view/structure')->assertForbidden();
+    // The requester cannot approve their own request.
+    $this->actingAs($support)->post($base.'/'.$accessId.'/approve', ccConfirm())->assertForbidden();
+
+    $this->actingAs($owner)->post($base.'/'.$accessId.'/approve', ccConfirm())->assertSessionHasNoErrors();
+    $this->actingAs($support)->post($base.'/'.$accessId.'/start', ['password' => 'password'])->assertRedirect($base.'/'.$accessId.'/view/structure');
+    $this->actingAs($support)->get($base.'/'.$accessId.'/view/structure')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('control-center/support-viewer')->where('session.organization', 'Firma Cliente'));
+    expect(DB::table('platform_audit_events')->where('action', 'support_access.viewed')->where('organization_id', $organizationId)->count())->toBe(1);
+
+    // Outside the approved scope, or for another staff member, the data stays closed.
+    $this->actingAs($support)->get($base.'/'.$accessId.'/view/payroll')->assertForbidden();
+    $this->actingAs($owner)->get($base.'/'.$accessId.'/view/structure')->assertForbidden();
+
+    $this->travel(31)->minutes();
+    $this->actingAs($support)->get($base.'/'.$accessId.'/view/structure')->assertForbidden();
+    expect(DB::table('support_access_requests')->where('id', $accessId)->value('status'))->toBe('expired')
+        ->and(DB::table('platform_audit_events')->where('action', 'support_access.ended')->exists())->toBeTrue();
+});
+
+test('support access can be revoked before it expires', function () {
+    $owner = ccOwner();
+    $support = ccStaff('saas_support');
+    $organizationId = ccOrganization($owner, 'professional', false, 'Firma Cliente');
+    $base = '/control-center/support-access';
+    $this->actingAs($support)->post($base, ['organization_id' => $organizationId, 'reason' => 'Revisión de configuración FEL', 'scopes' => ['configuration'], 'duration_minutes' => 60]);
+    $accessId = (int) DB::table('support_access_requests')->value('id');
+    $this->actingAs($owner)->post($base.'/'.$accessId.'/approve', ccConfirm());
+    $this->actingAs($support)->post($base.'/'.$accessId.'/start', ['password' => 'password']);
+
+    $this->actingAs($owner)->post($base.'/'.$accessId.'/revoke', ['reason' => 'Diagnóstico terminado'])->assertSessionHasNoErrors();
+    $this->actingAs($support)->get($base.'/'.$accessId.'/view/configuration')->assertForbidden();
+    expect(DB::table('support_access_requests')->where('id', $accessId)->value('status'))->toBe('revoked');
+});
+
+test('tickets keep internal notes away from the customer and do not open tenant data', function () {
+    $owner = ccOwner();
+    $organizationId = ccOrganization($owner, 'professional', false, 'Firma Cliente');
+    $customer = User::factory()->create();
+    DB::table('organization_user')->insert(['organization_id' => $organizationId, 'user_id' => $customer->id, 'role' => 'owner', 'status' => 'active', 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+    $tickets = app(SupportTicketService::class);
+    $ticketId = $tickets->open(Organization::query()->findOrFail($organizationId), $customer, 'No cuadra el balance', 'El balance de septiembre no cuadra.', 'contabilidad', 'high');
+
+    $this->actingAs($owner)->post('/control-center/support/tickets/'.$ticketId.'/reply', ['body' => 'Revisar asientos de ajuste', 'internal' => true])->assertSessionHasNoErrors();
+    $this->actingAs($owner)->post('/control-center/support/tickets/'.$ticketId.'/reply', ['body' => 'Estamos revisando tu caso.', 'internal' => false, 'status' => 'in_progress'])->assertSessionHasNoErrors();
+
+    $customerView = $tickets->detail($ticketId, false, $organizationId);
+    $staffView = $tickets->detail($ticketId, true);
+    expect(collect($customerView['messages'])->pluck('body')->all())->toBe(['El balance de septiembre no cuadra.', 'Estamos revisando tu caso.'])
+        ->and($staffView['messages'])->toHaveCount(3)
+        ->and($staffView['status'])->toBe('in_progress')
+        ->and(DB::table('support_access_requests')->count())->toBe(0);
+    // A ticket of another organization is not reachable from the customer side.
+    expect(fn () => $tickets->detail($ticketId, false, $organizationId + 999))->toThrow(NotFoundHttpException::class);
+});
+
+test('clients open tickets from their workspace and see published incidents of their organization', function () {
+    $staff = ccOwner();
+    $organizationId = ccOrganization($staff, 'professional', false, 'Firma Cliente');
+    $organization = Organization::query()->findOrFail($organizationId);
+    $customer = User::factory()->create();
+    $organization->users()->attach($customer->id, ['role' => 'owner', 'status' => 'active']);
+    DB::table('office_user')->insert(['office_id' => DB::table('offices')->where('organization_id', $organizationId)->value('id'), 'user_id' => $customer->id, 'role' => 'manager', 'status' => 'active',
+        'created_at' => now(), 'updated_at' => now()]);
+
+    $this->actingAs($customer)->post('/support', ['subject' => 'No puedo emitir facturas', 'description' => 'El botón de certificar no responde.', 'module' => 'fiscal', 'priority' => 'urgent'])
+        ->assertSessionHasNoErrors();
+    $ticketId = (int) DB::table('support_tickets')->where('organization_id', $organizationId)->value('id');
+    $this->actingAs($customer)->get('/support?ticket='.$ticketId)->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('support/index')->where('selected.subject', 'No puedo emitir facturas')->count('selected.messages', 1));
+    // Critical priority is reserved to the support team.
+    $this->actingAs($customer)->post('/support', ['subject' => 'x', 'description' => 'y', 'module' => 'otro', 'priority' => 'critical'])->assertSessionHasErrors('priority');
+    // The customer cannot reach the Control Center.
+    $this->actingAs($customer)->get('/control-center/support/tickets')->assertForbidden();
+
+    $incidentId = app(IncidentManagementService::class)->create($staff, 'Correo con demora', 'Los correos salen con retraso.', 'medium', ['mail'], 'affected', [], null);
+    app(IncidentManagementService::class)->update($staff, $incidentId, 'identified', 'Los correos pueden tardar hasta 30 minutos.', true);
+    $this->actingAs($customer)->get('/support')->assertInertia(fn (Assert $page) => $page->where('platformNotices.incidents.0.message', 'Los correos pueden tardar hasta 30 minutos.'));
+});
+
+test('incidents follow their status flow, notify the affected organizations and close with a postmortem', function () {
+    $owner = ccOwner();
+    $affected = ccOrganization($owner, 'professional', false, 'Firma Afectada');
+    $other = ccOrganization($owner, 'essential', false, 'Firma Ajena');
+
+    $this->actingAs($owner)->post('/control-center/incidents', ['title' => 'Demora en certificación FEL', 'description' => 'El certificador responde lento.', 'severity' => 'high',
+        'affected_services' => ['fel'], 'audience' => 'affected', 'organization_ids' => [$affected]])->assertSessionHasNoErrors();
+    $incidentId = (int) DB::table('system_incidents')->value('id');
+    $incidents = app(IncidentManagementService::class);
+    // Internal updates are not shown to clients.
+    expect($incidents->forTenant($affected))->toBe([]);
+
+    $this->actingAs($owner)->put('/control-center/incidents/'.$incidentId, ['status' => 'postmortem', 'message' => 'Saltar pasos'])->assertSessionHasErrors('status');
+    $this->actingAs($owner)->put('/control-center/incidents/'.$incidentId, ['status' => 'identified', 'message' => 'Identificamos la causa y trabajamos en ello.', 'publish' => true])->assertSessionHasNoErrors();
+    expect($incidents->forTenant($affected))->toHaveCount(1)
+        ->and($incidents->forTenant($affected)[0]['message'])->toBe('Identificamos la causa y trabajamos en ello.')
+        ->and($incidents->forTenant($other))->toBe([]);
+
+    $this->actingAs($owner)->put('/control-center/incidents/'.$incidentId, ['postmortem' => 'Causa raíz: certificador lento. Acción: alertas de latencia.'])->assertSessionHasErrors('postmortem');
+    $this->actingAs($owner)->put('/control-center/incidents/'.$incidentId, ['status' => 'resolved', 'message' => 'Servicio normalizado.', 'publish' => true])->assertSessionHasNoErrors();
+    $this->actingAs($owner)->put('/control-center/incidents/'.$incidentId, ['postmortem' => 'Causa raíz: certificador lento. Acción: alertas de latencia.'])->assertSessionHasNoErrors();
+    expect(DB::table('system_incidents')->where('id', $incidentId)->first())->status->toBe('postmortem')->resolved_at->not->toBeNull()
+        ->and($incidents->forTenant($affected))->toBe([]);
+});
+
+test('only idempotent failed jobs are retried from the control center', function () {
+    $owner = ccOwner();
+    $uuid = (string) Str::uuid();
+    DB::table('failed_jobs')->insert(['uuid' => $uuid, 'connection' => 'database', 'queue' => 'default', 'payload' => json_encode(['displayName' => CertifyFelDocumentJob::class, 'job' => 'x', 'data' => []]),
+        'exception' => 'RuntimeException: timeout', 'failed_at' => now()]);
+
+    $this->actingAs($owner)->post('/control-center/jobs/retry', ['uuids' => [$uuid]])->assertSessionHasErrors('uuids');
+    expect(DB::table('failed_jobs')->where('uuid', $uuid)->exists())->toBeTrue()
+        ->and(DB::table('platform_audit_events')->where('action', 'jobs.retried')->exists())->toBeFalse();
+});
+
+test('the platform Luzma only reads: it refuses mutations and tool changes are audited', function () {
+    $owner = ccOwner();
+    $answer = app(PlatformLuzmaAssistant::class)->ask($owner, 'Suspende la organización Firma Cliente por falta de pago');
+    expect($answer['source'])->toBe('policy')->and($answer['tool'])->toBeNull()
+        ->and(DB::table('platform_audit_events')->where('action', 'organization.suspended')->exists())->toBeFalse();
+
+    $this->actingAs($owner)->post('/control-center/luzma/tools/get_my_priorities', ['status' => 'disabled', 'reason' => 'Falla en el cálculo'])->assertSessionHasNoErrors();
+    expect(DB::table('luzma_tool_states')->where('tool_key', 'get_my_priorities')->value('status'))->toBe('disabled')
+        ->and(DB::table('platform_audit_events')->where('action', 'luzma.tool.changed')->exists())->toBeTrue();
+});
+
+test('the audit log masks secrets and cannot be edited, and logs never show credentials', function () {
+    $owner = ccOwner();
+    app(PlatformAuditService::class)->record($owner, 'integration.secret.changed', 'platform_integrations', 'recurrente', null, ['secret' => 'sk_live_supersecreto1234', 'mode' => 'live'], 'Rotación');
+    $event = DB::table('platform_audit_events')->where('action', 'integration.secret.changed')->first();
+    expect($event->after)->not->toContain('supersecreto')->and(json_decode($event->after, true)['mode'])->toBe('live');
+
+    expect(fn () => DB::table('platform_audit_events')->where('id', $event->id)->update(['reason' => 'alterado']))->toThrow(QueryException::class);
+    expect(fn () => DB::table('platform_audit_events')->where('id', $event->id)->delete())->toThrow(QueryException::class);
+
+    $line = SystemLogService::sanitize('Bearer abcdefghijklmnop12345 password=hunter22 sk_live_abcdef123456 tarjeta 4111111111111111');
+    expect($line)->not->toContain('abcdefghijklmnop12345')->not->toContain('hunter22')->not->toContain('abcdef123456')->not->toContain('4111111111111111')
+        ->and(SystemLogService::maskEmail('ana@cliente.test'))->toBe('an•••@cliente.test');
+});
+
+test('sensitive global settings require re-authentication and templates keep their versions', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/settings', ['key' => 'billing.suspend_after_days', 'value' => 20, 'reason' => 'Ajuste de política'])->assertSessionHasErrors('password');
+    $this->actingAs($owner)->post('/control-center/settings', ccConfirm(['key' => 'billing.suspend_after_days', 'value' => 20]))->assertSessionHasNoErrors();
+    expect(json_decode((string) DB::table('platform_settings')->where('key', 'billing.suspend_after_days')->value('value'), true))->toBe(20);
+
+    $this->actingAs($owner)->put('/control-center/settings/templates/trial_ending', ['subject' => 'Tu prueba termina pronto', 'body' => 'Hola {{name}}, tu prueba termina el {{date}}.'])->assertSessionHasNoErrors();
+    $this->actingAs($owner)->put('/control-center/settings/templates/trial_ending', ['subject' => 'Tu prueba termina', 'body' => 'Hola {{name}}, quedan pocos días.'])->assertSessionHasNoErrors();
+    expect(DB::table('notification_templates')->where('key', 'trial_ending')->orderBy('version')->pluck('status')->all())->toBe(['superseded', 'active']);
+});

@@ -1,23 +1,21 @@
 import { Head } from '@inertiajs/react';
+import { Monitor } from 'lucide-react';
 import AppearanceTabs from '@/components/appearance-tabs';
-import Heading from '@/components/heading';
+import { SettingsCard } from '@/components/settings-card';
 import { edit as editAppearance } from '@/routes/appearance';
 
 export default function Appearance() {
     return (
         <>
-            <Head title="Appearance settings" />
+            <Head title="Apariencia" />
 
-            <h1 className="sr-only">Appearance settings</h1>
-
-            <div className="space-y-6">
-                <Heading
-                    variant="small"
-                    title="Appearance settings"
-                    description="Update the appearance settings for your account"
-                />
+            <SettingsCard
+                icon={Monitor}
+                title="Apariencia"
+                description="Personaliza cómo se ve la aplicación en este dispositivo."
+            >
                 <AppearanceTabs />
-            </div>
+            </SettingsCard>
         </>
     );
 }
@@ -25,7 +23,7 @@ export default function Appearance() {
 Appearance.layout = {
     breadcrumbs: [
         {
-            title: 'Appearance settings',
+            title: 'Configuración de apariencia',
             href: editAppearance(),
         },
     ],

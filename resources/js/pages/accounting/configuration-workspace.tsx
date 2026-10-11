@@ -98,7 +98,7 @@ const sections: { label: string; icon: LucideIcon }[] = [
     { label: 'Activos', icon: Tag },
     { label: 'Fiscal', icon: BookOpen },
     { label: 'Seguridad', icon: ShieldCheck },
-    { label: 'Atlantia AI', icon: Bot },
+    { label: 'Luzma', icon: Bot },
 ];
 
 export default function ConfigurationWorkspace({
@@ -106,7 +106,7 @@ export default function ConfigurationWorkspace({
 }: {
     company: { name: string; public_id: string };
 }) {
-    const [activeSection, setActiveSection] = useState('Atlantia AI');
+    const [activeSection, setActiveSection] = useState('Luzma');
     const [enabled, setEnabled] = useState(true);
     const [automaticActions, setAutomaticActions] = useState(false);
     const [humanApproval, setHumanApproval] = useState(true);
@@ -186,7 +186,7 @@ export default function ConfigurationWorkspace({
                     {
                         request_id: crypto.randomUUID(),
                         record_type: 'atlantia_ai',
-                        title: 'Configuración de Atlantia AI',
+                        title: 'Configuración de Luzma',
                         effective_on: new Date().toISOString().slice(0, 10),
                         amount: '0.00',
                         data,
@@ -245,10 +245,10 @@ export default function ConfigurationWorkspace({
                 result.message ??
                     (response.ok
                         ? 'Conexión comprobada correctamente.'
-                        : 'Atlantia AI no respondió.'),
+                        : 'Luzma no respondió.'),
             );
         } catch {
-            showNotice('No fue posible conectar con Atlantia AI.');
+            showNotice('No fue posible conectar con Luzma.');
         }
     };
 
@@ -330,7 +330,7 @@ export default function ConfigurationWorkspace({
                                 onClick={() => {
                                     setActiveSection(label);
 
-                                    if (label !== 'Atlantia AI') {
+                                    if (label !== 'Luzma') {
                                         showNotice(
                                             `Sección ${label} seleccionada.`,
                                         );
@@ -362,7 +362,7 @@ export default function ConfigurationWorkspace({
                                 type="button"
                                 onClick={() =>
                                     showNotice(
-                                        'Documentación de Atlantia AI disponible.',
+                                        'Documentación de Luzma disponible.',
                                     )
                                 }
                                 className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold"
@@ -635,12 +635,12 @@ export default function ConfigurationWorkspace({
                     <div className="flex max-w-5xl items-start gap-3">
                         <Settings2 className="mt-0.5 size-5 text-blue-600" />
                         <div>
-                            <h2 className="font-bold">Acerca de Atlantia AI</h2>
+                            <h2 className="font-bold">Acerca de Luzma</h2>
                             <p className="mt-1 text-xs text-slate-500">
-                                Atlantia AI es tu asistente contable con IA
-                                ejecutándose en tu infraestructura. Procesa
-                                documentos, responde consultas y ayuda a
-                                automatizar tareas de forma segura y privada.
+                                Luzma es tu asistente inteligente ejecutándose
+                                en tu infraestructura. Procesa documentos,
+                                responde consultas y ayuda a automatizar tareas
+                                de forma segura y privada.
                             </p>
                         </div>
                     </div>

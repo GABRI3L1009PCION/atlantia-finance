@@ -146,7 +146,7 @@ class BackupArchiveService
         $connection = config('database.connections.pgsql');
         if ($targetDatabase === null) {
             return array_values(array_filter([
-                $binary, '--format=custom', '--no-owner', '--no-acl', '--file='.$file,
+                $binary, '--format=custom', '--no-owner', '--no-acl', '--enable-row-security', '--file='.$file,
                 filled($connection['host'] ?? null) ? '--host='.$connection['host'] : null,
                 filled($connection['port'] ?? null) ? '--port='.$connection['port'] : null,
                 filled($connection['username'] ?? null) ? '--username='.$connection['username'] : null,
@@ -155,7 +155,7 @@ class BackupArchiveService
         }
 
         return array_values(array_filter([
-            $binary, '--clean', '--if-exists', '--no-owner', '--no-acl', '--exit-on-error',
+            $binary, '--clean', '--if-exists', '--no-owner', '--no-acl', '--exit-on-error', '--enable-row-security',
             filled($connection['host'] ?? null) ? '--host='.$connection['host'] : null,
             filled($connection['port'] ?? null) ? '--port='.$connection['port'] : null,
             filled($connection['username'] ?? null) ? '--username='.$connection['username'] : null,
@@ -163,10 +163,17 @@ class BackupArchiveService
         ]));
     }
 
-    /** @return array<string, string> */
+    /**
+     * Backups run with platform access so forced Row Level Security exposes every organization's rows.
+     *
+     * @return array<string, string>
+     */
     private function databaseEnvironment(): array
     {
-        return ['PGPASSWORD' => (string) config('database.connections.pgsql.password')];
+        return [
+            'PGPASSWORD' => (string) config('database.connections.pgsql.password'),
+            'PGOPTIONS' => '-c atlantia.system=on',
+        ];
     }
 
     /**

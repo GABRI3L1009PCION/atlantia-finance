@@ -13,6 +13,29 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: atlantia_finance_test
+          POSTGRES_USER: atlantia
+          POSTGRES_PASSWORD: atlantia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atlantia -d atlantia_finance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: atlantia_finance_test
+      DB_USERNAME: atlantia
+      DB_PASSWORD: atlantia
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

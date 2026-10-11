@@ -180,22 +180,26 @@ function Metric({
     tone: string;
     negative?: boolean;
 }) {
+    const arrow = label === 'Por pagar' ? '↓' : '↑';
+
     return (
-        <article className={`${panel} flex min-h-28 items-center gap-4 p-5`}>
+        <article
+            className={`${panel} flex min-h-[108px] min-w-0 items-center gap-4 overflow-hidden p-5`}
+        >
             <span
                 className={`grid size-12 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 <Icon className="size-6" />
             </span>
-            <div>
+            <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-600">{label}</p>
-                <strong className="mt-1 block text-2xl text-slate-950">
+                <strong className="mt-1 block truncate text-2xl font-black text-slate-950">
                     {value}
                 </strong>
                 <p
                     className={`mt-1 text-[11px] font-semibold ${negative ? 'text-red-600' : 'text-emerald-600'}`}
                 >
-                    {negative ? '↑' : '↑'} {change}{' '}
+                    {arrow} {change}{' '}
                     <span className="ml-2 font-normal text-slate-500">
                         vs. período anterior
                     </span>
@@ -250,7 +254,7 @@ export default function AccountStatementsWorkspace({
         );
 
     return (
-        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] p-3 text-[#172033] sm:p-5">
+        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] px-4 py-5 text-[#172033] sm:px-6">
             <Head title={`Estados de Cuenta · ${company.name}`} />
             <div className="mx-auto max-w-[1900px] space-y-4">
                 <header className="flex flex-wrap items-start justify-between gap-4">
@@ -259,7 +263,7 @@ export default function AccountStatementsWorkspace({
                             Inicio <span className="px-2">›</span> Estados de
                             Cuenta
                         </p>
-                        <h1 className="text-3xl font-bold text-[#74000a]">
+                        <h1 className="text-[2rem] leading-none font-black tracking-tight text-[#74000a]">
                             Estados de Cuenta
                         </h1>
                         <p className="mt-1 text-sm text-slate-500">
@@ -267,24 +271,12 @@ export default function AccountStatementsWorkspace({
                             proveedor, banco o cuenta
                         </p>
                     </div>
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2.5 text-xs font-semibold"
-                        >
-                            <Building2 className="size-4 text-[#74000a]" />
-                            {company.name}
-                            <ChevronDown className="size-4" />
-                        </button>
-                        <button
-                            type="button"
-                            className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2.5 text-xs font-semibold"
-                        >
-                            <CalendarDays className="size-4 text-[#74000a]" />
-                            Septiembre 2026
-                            <ChevronDown className="size-4" />
-                        </button>
-                    </div>
+                    <blockquote className="max-w-md pt-6 text-right text-sm text-slate-500 italic">
+                        “Información que impulsa relaciones más sólidas.”
+                        <span className="block text-xs">
+                            — Atlantia Finance
+                        </span>
+                    </blockquote>
                 </header>
 
                 {notice && (
@@ -299,7 +291,7 @@ export default function AccountStatementsWorkspace({
                     </div>
                 )}
 
-                <section className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+                <section className="grid grid-cols-4 gap-4">
                     <Metric
                         icon={Users}
                         label="Por cobrar"
@@ -332,83 +324,105 @@ export default function AccountStatementsWorkspace({
                 </section>
 
                 <section
-                    className={`${panel} grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto_auto]`}
+                    className={`${panel} grid gap-3 p-4 xl:grid-cols-[1fr_1fr_1.15fr_1fr_1fr_1fr_1fr_auto_auto]`}
                 >
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        {company.name}
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        {tab}
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <label className="relative">
-                        <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Empresa</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            {company.name}
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Tipo de estado de cuenta</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            {tab}
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Tercero</span>
                         <input
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
-                            placeholder={`Buscar ${tab.toLowerCase()}...`}
-                            className="w-full rounded-lg border py-2.5 pr-3 pl-9 text-xs"
+                            placeholder={`Todos los ${tab.toLowerCase()}`}
+                            className="h-10 w-full rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
                         />
                     </label>
-                    <button
-                        type="button"
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        Quetzales (GTQ)
-                        <ChevronDown className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        <CalendarDays className="size-4" />
-                        01/09/2026
-                    </button>
-                    <button
-                        type="button"
-                        className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs"
-                    >
-                        <CalendarDays className="size-4" />
-                        30/09/2026
-                    </button>
-                    <select
-                        value={status}
-                        onChange={(event) => setStatus(event.target.value)}
-                        className="rounded-lg border bg-white px-3 py-2.5 text-xs"
-                    >
-                        <option>Todos</option>
-                        <option>Vigente</option>
-                        <option>Vencido</option>
-                    </select>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setQuery('');
-                            setStatus('Todos');
-                        }}
-                        className="rounded-lg border px-4 py-2.5 text-xs text-slate-600"
-                    >
-                        Limpiar filtros
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() =>
-                            action(
-                                `${filtered.length} movimientos encontrados para ${tab.toLowerCase()}.`,
-                            )
-                        }
-                        className="flex items-center justify-center gap-2 rounded-lg bg-[#74000a] px-5 py-2.5 text-xs font-semibold text-white"
-                    >
-                        <Search className="size-4" />
-                        Buscar
-                    </button>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Moneda</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center justify-between rounded-lg border border-[#dfe5ef] bg-white px-3 text-left text-xs font-normal text-[#26344d]"
+                        >
+                            Quetzales (GTQ)
+                            <ChevronDown className="size-4" />
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Fecha desde</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center gap-2 rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <CalendarDays className="size-4" />
+                            01/09/2026
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Fecha hasta</span>
+                        <button
+                            type="button"
+                            className="flex h-10 w-full items-center gap-2 rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <CalendarDays className="size-4" />
+                            30/09/2026
+                        </button>
+                    </label>
+                    <label className="space-y-1 text-xs font-semibold text-slate-600">
+                        <span>Estado</span>
+                        <select
+                            value={status}
+                            onChange={(event) => setStatus(event.target.value)}
+                            className="h-10 w-full rounded-lg border border-[#dfe5ef] bg-white px-3 text-xs font-normal text-[#26344d]"
+                        >
+                            <option>Todos</option>
+                            <option>Vigente</option>
+                            <option>Vencido</option>
+                        </select>
+                    </label>
+                    <div className="flex items-end">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setQuery('');
+                                setStatus('Todos');
+                            }}
+                            className="h-10 rounded-lg border border-[#dfe5ef] bg-slate-50 px-6 text-xs font-semibold text-slate-600"
+                        >
+                            Limpiar filtros
+                        </button>
+                    </div>
+                    <div className="flex items-end">
+                        <button
+                            type="button"
+                            onClick={() =>
+                                action(
+                                    `${filtered.length} movimientos encontrados para ${tab.toLowerCase()}.`,
+                                )
+                            }
+                            className="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#74000a] px-7 text-xs font-semibold text-white"
+                        >
+                            <Search className="size-4" />
+                            Buscar
+                        </button>
+                    </div>
                 </section>
 
                 <section className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">

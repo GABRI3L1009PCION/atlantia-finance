@@ -120,17 +120,18 @@ test('accounting modules reject operations in a closed period and invalid transi
     ])->assertUnprocessable()->assertJsonValidationErrors('status');
 });
 
-test('the Atlantia AI health check is tenant scoped and does not expose upstream errors', function () {
+test('the Luzma health check is tenant scoped and does not expose upstream errors', function () {
     $fixture = operationalFixture('Empresa IA');
     Http::fakeSequence()
-        ->push(['status' => 'healthy', 'secret' => 'internal'], 200)
-        ->push(['debug' => 'detalle interno'], 500);
+        ->push(['status' => 'healthy', 'model_loaded' => true, 'secret' => 'internal'], 200)
+        ->push(['debug' => 'detalle interno'], 500)
+        ->push(['status' => 'healthy', 'model_loaded' => false], 200);
 
     $this->actingAs($fixture['owner'])->getJson(route('accounting.configuration.ai.health', $fixture['uuid']))
         ->assertOk()
         ->assertExactJson([
             'status' => 'ok',
-            'message' => 'Atlantia AI está disponible y responde correctamente.',
+            'message' => 'Luzma está disponible y responde correctamente.',
         ]);
 
     $other = operationalFixture('Otra empresa IA');
@@ -138,9 +139,12 @@ test('the Atlantia AI health check is tenant scoped and does not expose upstream
         ->assertNotFound();
 
     $this->actingAs($fixture['owner'])->getJson(route('accounting.configuration.ai.health', $fixture['uuid']))
-        ->assertStatus(502)
+        ->assertStatus(503)
         ->assertJsonMissing(['debug' => 'detalle interno'])
-        ->assertJsonPath('message', 'Atlantia AI respondió con un error.');
+        ->assertJsonPath('message', 'No se pudo conectar con Luzma.');
+    $this->actingAs($fixture['owner'])->getJson(route('accounting.configuration.ai.health', $fixture['uuid']))
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'Luzma responde, pero el modelo local no está cargado.');
 });
 
 test('every advanced dashboard module has a persistent workflow', function (string $module) {

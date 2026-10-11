@@ -36,6 +36,10 @@ import {
     secondary,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
+import {
+    FiscalDocumentFields,
+    TaxTreatmentSelect,
+} from '@/components/fiscal/fiscal-document-fields';
 import * as routes from '@/routes/accounting';
 
 type Supplier = {
@@ -44,6 +48,7 @@ type Supplier = {
     tax_id: string | null;
     email: string | null;
     phone: string | null;
+    payment_terms_days: number | null;
     document_count: number;
 };
 type Account = { id: number; code: string; name: string; type: string };
@@ -182,7 +187,13 @@ export default function Purchases({
     const [selectedId, setSelectedId] = useState<string>(
         documents.data[0]?.public_id ?? '',
     );
-    const supplier = useForm({ name: '', tax_id: '', email: '', phone: '' });
+    const supplier = useForm({
+        name: '',
+        tax_id: '',
+        email: '',
+        phone: '',
+        payment_terms_days: '',
+    });
     const search = useForm({
         search: filters.search,
         status: filters.status,
@@ -198,6 +209,11 @@ export default function Purchases({
         external_reference: '',
         document_date: today,
         due_on: '',
+        currency: 'GTQ',
+        fiscal_document_type: 'FACT',
+        fiscal_series: '',
+        fiscal_number: '',
+        fiscal_authorization: '',
         lines: [
             {
                 account_id: mapping?.default_expense_account_id
@@ -206,6 +222,7 @@ export default function Purchases({
                 description: '',
                 quantity: '1',
                 unit_price: '',
+                tax_treatment: 'goods',
             },
         ],
     });
@@ -953,6 +970,22 @@ export default function Purchases({
                                 }
                             />
                         </label>
+                        <label>
+                            Plazo de pago (días, opcional)
+                            <input
+                                type="number"
+                                min={0}
+                                max={365}
+                                className={field}
+                                value={supplier.data.payment_terms_days}
+                                onChange={(event) =>
+                                    supplier.setData(
+                                        'payment_terms_days',
+                                        event.target.value,
+                                    )
+                                }
+                            />
+                        </label>
                         <div className="sm:col-span-2">
                             <Errors errors={supplier.errors} />
                             <button
@@ -1018,7 +1051,7 @@ export default function Purchases({
                                 </select>
                             </label>
                             <label>
-                                Referencia del proveedor
+                                Referencia interna (opcional)
                                 <input
                                     className={field}
                                     value={draft.data.external_reference}
@@ -1028,10 +1061,18 @@ export default function Purchases({
                                             event.target.value,
                                         )
                                     }
-                                    placeholder="Factura, recibo u orden"
+                                    placeholder="Orden de compra o recibo"
                                 />
                             </label>
                             <span />
+                            <FiscalDocumentFields
+                                data={draft.data}
+                                field={field}
+                                onChange={(key, value) =>
+                                    draft.setData(key, value)
+                                }
+                                hint="Los precios incluyen IVA. El sistema separa el IVA crédito fiscal por línea; las facturas FPEQ no generan crédito."
+                            />
                             <label>
                                 Fecha del documento
                                 <input
@@ -1059,6 +1100,45 @@ export default function Purchases({
                                         )
                                     }
                                 />
+                                <small className="text-xs text-slate-500">
+                                    {(() => {
+                                        const terms = suppliers.find(
+                                            (item) =>
+                                                String(item.id) ===
+                                                draft.data.supplier_id,
+                                        )?.payment_terms_days;
+
+                                        return terms === null ||
+                                            terms === undefined
+                                            ? 'Obligatoria si el proveedor no tiene plazo configurado.'
+                                            : `Si la dejas vacía se calcula con el plazo del proveedor (${terms} días).`;
+                                    })()}
+                                </small>
+                            </label>
+                            <label>
+                                Moneda
+                                <select
+                                    className={field}
+                                    value={draft.data.currency}
+                                    onChange={(event) =>
+                                        draft.setData(
+                                            'currency',
+                                            event.target.value,
+                                        )
+                                    }
+                                >
+                                    <option value="GTQ">GTQ (quetzales)</option>
+                                    <option value="USD">USD</option>
+                                    <option value="EUR">EUR</option>
+                                </select>
+                                {draft.data.currency !== 'GTQ' && (
+                                    <small className="text-xs text-slate-500">
+                                        Los precios se ingresan en{' '}
+                                        {draft.data.currency} y se convierten a
+                                        GTQ con el tipo de cambio registrado
+                                        para la fecha del documento.
+                                    </small>
+                                )}
                             </label>
                         </div>
                         <div className="space-y-3">
@@ -1066,7 +1146,7 @@ export default function Purchases({
                             {draft.data.lines.map((line, index) => (
                                 <div
                                     key={index}
-                                    className="grid gap-3 rounded-xl bg-slate-50 p-4 md:grid-cols-[1fr_1fr_90px_130px_auto]"
+                                    className="grid gap-3 rounded-xl bg-slate-50 p-4 md:grid-cols-[1fr_1fr_110px_90px_130px_auto]"
                                 >
                                     <select
                                         className={field}
@@ -1128,6 +1208,25 @@ export default function Purchases({
                                             )
                                         }
                                         placeholder="Concepto"
+                                    />
+                                    <TaxTreatmentSelect
+                                        field={field}
+                                        value={line.tax_treatment}
+                                        onChange={(value) =>
+                                            draft.setData(
+                                                'lines',
+                                                draft.data.lines.map(
+                                                    (item, position) =>
+                                                        position === index
+                                                            ? {
+                                                                  ...item,
+                                                                  tax_treatment:
+                                                                      value,
+                                                              }
+                                                            : item,
+                                                ),
+                                            )
+                                        }
                                     />
                                     <input
                                         type="number"
@@ -1208,6 +1307,7 @@ export default function Purchases({
                                         description: '',
                                         quantity: '1',
                                         unit_price: '',
+                                        tax_treatment: 'goods',
                                     },
                                 ])
                             }

@@ -21,12 +21,15 @@ class ExecutiveDashboardService
                 'sales_cents' => 0, 'collections_cents' => 0, 'purchases_cents' => 0, 'payments_cents' => 0,
                 'receivable_cents' => 0, 'payable_cents' => 0, 'overdue_receivable_cents' => 0,
                 'overdue_payable_cents' => 0, 'income_cents' => 0, 'expense_cents' => 0,
-                'profit_cents' => 0, 'drafts' => 0, 'trend' => $this->emptyTrend(),
+                'profit_cents' => 0, 'cash_cents' => 0, 'drafts' => 0, 'trend' => $this->emptyTrend(),
                 'receivable_aging' => $this->emptyReceivableAging(), 'recent_invoices' => [], 'recent' => [],
+                'period' => null, 'attention' => [], 'fiscal_obligations' => [], 'period_close' => null,
+                'ai_context' => ['suggestions' => []],
             ];
         }
 
         $range = $this->currentMonth();
+        $period = $this->period($ids->first());
         $sales = DB::table('sales_invoices')->whereIn('company_id', $ids)->where('status', 'issued');
         $purchases = DB::table('purchase_documents')->whereIn('company_id', $ids)->where('status', 'approved');
         $receipts = DB::table('sales_receipts')->join('sales_invoices', 'sales_invoices.id', '=', 'sales_receipts.sales_invoice_id')
@@ -36,6 +39,14 @@ class ExecutiveDashboardService
         $receivable = $this->receivableQuery($ids);
         $payable = $this->payableQuery($ids);
         $results = $this->results($ids, $range['from'], $range['to']);
+        $drafts = DB::table('journal_entries')->join('accounting_periods', 'accounting_periods.id', '=', 'journal_entries.accounting_period_id')
+            ->whereIn('accounting_periods.company_id', $ids)->where('journal_entries.status', 'draft')->count()
+            + DB::table('sales_invoices')->whereIn('company_id', $ids)->where('status', 'draft')->count()
+            + DB::table('purchase_documents')->whereIn('company_id', $ids)->where('status', 'draft')->count();
+        $pendingBank = $this->pendingBankTransactions($ids);
+        $overdueInvoices = $this->overdueInvoiceCount($ids);
+        $overdueBills = $this->overduePayableCount($ids);
+        $periodClose = $this->periodClose($period, $drafts, $pendingBank);
 
         return [
             'sales_cents' => (int) (clone $sales)->whereBetween('issued_on', [$range['from'], $range['to']])->sum('total_cents'),
@@ -47,14 +58,17 @@ class ExecutiveDashboardService
             'overdue_receivable_cents' => (int) (clone $receivable)->whereDate('sales_invoices.due_on', '<', now()->toDateString())->sum(DB::raw('sales_invoices.total_cents - COALESCE(receipt_totals.paid_cents, 0)')),
             'overdue_payable_cents' => (int) (clone $payable)->whereDate('purchase_documents.due_on', '<', now()->toDateString())->sum(DB::raw('purchase_documents.total_cents - COALESCE(payment_totals.paid_cents, 0)')),
             ...$results,
-            'drafts' => DB::table('journal_entries')->join('accounting_periods', 'accounting_periods.id', '=', 'journal_entries.accounting_period_id')
-                ->whereIn('accounting_periods.company_id', $ids)->where('journal_entries.status', 'draft')->count()
-                + DB::table('sales_invoices')->whereIn('company_id', $ids)->where('status', 'draft')->count()
-                + DB::table('purchase_documents')->whereIn('company_id', $ids)->where('status', 'draft')->count(),
+            'cash_cents' => (int) DB::table('bank_accounts')->whereIn('company_id', $ids)->where('status', 'active')->sum('bank_balance_cents'),
+            'drafts' => $drafts,
             'trend' => $this->trend($ids),
             'receivable_aging' => $this->receivableAging($ids),
             'recent_invoices' => $this->recentInvoices($ids),
             'recent' => $this->recent($ids),
+            'period' => $period,
+            'attention' => $this->attention($pendingBank, $overdueInvoices, $overdueBills, $drafts, $periodClose),
+            'fiscal_obligations' => $this->fiscalObligations($ids->first(), $period),
+            'period_close' => $periodClose,
+            'ai_context' => $this->aiContext($pendingBank, $overdueInvoices, $overdueBills, $periodClose),
         ];
     }
 
@@ -68,7 +82,7 @@ class ExecutiveDashboardService
     private function receivableQuery(Collection $companyIds): Builder
     {
         $totals = DB::table('sales_receipts')->select('sales_invoice_id')
-            ->selectRaw('SUM(amount_cents) AS paid_cents')->whereNull('voided_at')->groupBy('sales_invoice_id');
+            ->selectRaw('CAST(SUM(amount_cents) AS BIGINT) AS paid_cents')->whereNull('voided_at')->groupBy('sales_invoice_id');
 
         return DB::table('sales_invoices')->leftJoinSub($totals, 'receipt_totals', 'receipt_totals.sales_invoice_id', '=', 'sales_invoices.id')
             ->whereIn('sales_invoices.company_id', $companyIds)->where('sales_invoices.status', 'issued')
@@ -79,7 +93,7 @@ class ExecutiveDashboardService
     private function payableQuery(Collection $companyIds): Builder
     {
         $totals = DB::table('purchase_payments')->select('purchase_document_id')
-            ->selectRaw('SUM(amount_cents) AS paid_cents')->whereNull('voided_at')->groupBy('purchase_document_id');
+            ->selectRaw('CAST(SUM(amount_cents) AS BIGINT) AS paid_cents')->whereNull('voided_at')->groupBy('purchase_document_id');
 
         return DB::table('purchase_documents')->leftJoinSub($totals, 'payment_totals', 'payment_totals.purchase_document_id', '=', 'purchase_documents.id')
             ->whereIn('purchase_documents.company_id', $companyIds)->where('purchase_documents.status', 'approved')
@@ -97,9 +111,9 @@ class ExecutiveDashboardService
             ->join('accounting_periods as period', 'period.id', '=', 'entry.accounting_period_id')
             ->join('ledger_accounts as account', 'account.id', '=', 'line.ledger_account_id')
             ->whereIn('period.company_id', $companyIds)->whereColumn('account.company_id', 'period.company_id')
-            ->where('entry.status', 'posted')->whereBetween('entry.entry_date', [$from, $to])
+            ->whereIn('entry.status', ['posted', 'reversed'])->whereBetween('entry.entry_date', [$from, $to])
             ->whereIn('account.type', ['income', 'expense'])
-            ->select('account.type')->selectRaw('SUM(line.debit_cents - line.credit_cents) AS net')
+            ->select('account.type')->selectRaw('CAST(SUM(line.debit_cents - line.credit_cents) AS BIGINT) AS net')
             ->groupBy('account.type')->pluck('net', 'account.type');
         $income = -(int) ($rows['income'] ?? 0);
         $expenses = (int) ($rows['expense'] ?? 0);
@@ -239,6 +253,155 @@ class ExecutiveDashboardService
             ->map(fn (object $row): array => ['kind' => 'entry', 'title' => $row->number ? 'Asiento #'.$row->number : 'Asiento en borrador', 'detail' => $row->description.' · '.$row->status, 'date' => (string) $row->updated_at, 'company_id' => (string) $row->public_id]);
 
         return array_values($invoices->concat($purchases)->concat($entries)->sortByDesc('date')->take(8)->all());
+    }
+
+    /** @return array<string, mixed>|null */
+    private function period(int $companyId): ?array
+    {
+        $today = CarbonImmutable::today()->toDateString();
+        $row = DB::table('accounting_periods')->where('company_id', $companyId)
+            ->where('starts_on', '<=', $today)->where('ends_on', '>=', $today)
+            ->orderByDesc('starts_on')->first()
+            ?? DB::table('accounting_periods')->where('company_id', $companyId)
+                ->whereNull('closed_at')->orderByDesc('starts_on')->first();
+
+        if (! $row) {
+            return null;
+        }
+
+        return [
+            'name' => (string) $row->name,
+            'starts_on' => (string) $row->starts_on,
+            'ends_on' => (string) $row->ends_on,
+            'status' => $row->closed_at ? 'closed' : 'open',
+            'closed_at' => $row->closed_at ? (string) $row->closed_at : null,
+        ];
+    }
+
+    /** @param Collection<int, int> $companyIds */
+    private function pendingBankTransactions(Collection $companyIds): int
+    {
+        return DB::table('bank_transactions')->join('bank_accounts', 'bank_accounts.id', '=', 'bank_transactions.bank_account_id')
+            ->whereIn('bank_accounts.company_id', $companyIds)->where('bank_transactions.reconciliation_status', 'pending')->count();
+    }
+
+    /** @param Collection<int, int> $companyIds */
+    private function overdueInvoiceCount(Collection $companyIds): int
+    {
+        return $this->receivableQuery($companyIds)->whereDate('sales_invoices.due_on', '<', now()->toDateString())->count();
+    }
+
+    /** @param Collection<int, int> $companyIds */
+    private function overduePayableCount(Collection $companyIds): int
+    {
+        return $this->payableQuery($companyIds)->whereDate('purchase_documents.due_on', '<', now()->toDateString())->count();
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $period
+     * @return array{label: string, status: string, progress: int, pending: list<string>}|null
+     */
+    private function periodClose(?array $period, int $drafts, int $pendingBank): ?array
+    {
+        if (! $period) {
+            return null;
+        }
+
+        $pending = [];
+        if ($pendingBank > 0) {
+            $pending[] = $pendingBank.' movimiento(s) bancario(s) sin conciliar';
+        }
+        if ($drafts > 0) {
+            $pending[] = $drafts.' documento(s) o asiento(s) en borrador';
+        }
+
+        return [
+            'label' => (string) $period['name'],
+            'status' => (string) $period['status'],
+            'progress' => max(0, min(100, 100 - (count($pending) * 18))),
+            'pending' => $pending,
+        ];
+    }
+
+    /**
+     * @param  array{label: string, status: string, progress: int, pending: list<string>}|null  $periodClose
+     * @return list<array{label: string, detail: string, tone: string, module: string}>
+     */
+    private function attention(int $pendingBank, int $overdueInvoices, int $overdueBills, int $drafts, ?array $periodClose): array
+    {
+        $items = [];
+        if ($pendingBank > 0) {
+            $items[] = ['label' => $pendingBank.' movimientos sin conciliar', 'detail' => 'Revisar conciliación bancaria', 'tone' => 'warning', 'module' => 'conciliacion'];
+        }
+        if ($overdueInvoices > 0) {
+            $items[] = ['label' => $overdueInvoices.' facturas vencidas', 'detail' => 'Gestionar cuentas por cobrar', 'tone' => 'danger', 'module' => 'estados-cuenta'];
+        }
+        if ($overdueBills > 0) {
+            $items[] = ['label' => $overdueBills.' pagos vencidos', 'detail' => 'Revisar cuentas por pagar', 'tone' => 'danger', 'module' => 'estados-cuenta'];
+        }
+        if ($drafts > 0) {
+            $items[] = ['label' => $drafts.' borradores pendientes', 'detail' => 'Completar o descartar operaciones', 'tone' => 'warning', 'module' => 'documentos'];
+        }
+        if ($periodClose) {
+            $items[] = [
+                'label' => 'Cierre de '.$periodClose['label'].' al '.$periodClose['progress'].'%',
+                'detail' => empty($periodClose['pending']) ? 'Período listo para revisión' : implode(' · ', $periodClose['pending']),
+                'tone' => empty($periodClose['pending']) ? 'success' : 'warning',
+                'module' => 'cierre-periodo',
+            ];
+        }
+
+        return $items ?: [['label' => 'Sin alertas críticas', 'detail' => 'La empresa no tiene pendientes relevantes hoy', 'tone' => 'success', 'module' => 'recordatorios']];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $period
+     * @return list<array{label: string, due: string, status: string, module: string}>
+     */
+    private function fiscalObligations(int $companyId, ?array $period): array
+    {
+        $due = $period ? CarbonImmutable::parse((string) $period['ends_on'])->addDays(15)->toDateString() : CarbonImmutable::today()->endOfMonth()->toDateString();
+        $rules = DB::table('fiscal_tax_rules')
+            ->join('fiscal_taxes', 'fiscal_taxes.id', '=', 'fiscal_tax_rules.fiscal_tax_id')
+            ->where('fiscal_tax_rules.company_id', $companyId)->where('fiscal_tax_rules.is_active', true)
+            ->where('fiscal_taxes.status', 'active')
+            ->whereDate('fiscal_tax_rules.valid_from', '<=', $due)->where(function (Builder $query) use ($due): void {
+                $query->whereNull('fiscal_tax_rules.valid_to')->orWhereDate('fiscal_tax_rules.valid_to', '>=', $due);
+            })->orderBy('fiscal_tax_rules.tax_type')->limit(4)->get(['fiscal_tax_rules.name']);
+
+        if ($rules->isEmpty()) {
+            return [['label' => 'Calendario fiscal', 'due' => $due, 'status' => 'Sin reglas activas', 'module' => 'impuestos']];
+        }
+
+        return array_values($rules->map(fn (object $row): array => [
+            'label' => (string) $row->name,
+            'due' => $due,
+            'status' => 'Pendiente',
+            'module' => 'impuestos',
+        ])->all());
+    }
+
+    /**
+     * @param  array{label: string, status: string, progress: int, pending: list<string>}|null  $periodClose
+     * @return array{suggestions: list<string>}
+     */
+    private function aiContext(int $pendingBank, int $overdueInvoices, int $overdueBills, ?array $periodClose): array
+    {
+        $suggestions = [];
+        if ($pendingBank > 0) {
+            $suggestions[] = 'Hay '.$pendingBank.' movimientos bancarios pendientes de conciliación.';
+        }
+        if ($overdueInvoices > 0) {
+            $suggestions[] = 'Existen '.$overdueInvoices.' facturas vencidas que requieren seguimiento.';
+        }
+        if ($overdueBills > 0) {
+            $suggestions[] = 'Hay '.$overdueBills.' pagos vencidos con proveedores.';
+        }
+        if ($periodClose) {
+            $suggestions[] = 'El cierre de '.$periodClose['label'].' está al '.$periodClose['progress'].'%.';
+        }
+
+        return ['suggestions' => $suggestions ?: ['No hay incidencias críticas en el contexto autorizado del dashboard.']];
     }
 
     private function monthLabel(int $month): string

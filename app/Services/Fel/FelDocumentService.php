@@ -26,7 +26,8 @@ class FelDocumentService
     {
         return [
             'issued_on' => ['required', 'date_format:Y-m-d'],
-            'currency' => ['required', 'in:GTQ'], 'document_type' => ['required', 'in:FACT'],
+            'currency' => ['required', 'in:GTQ'], 'document_type' => ['required', 'in:FACT,NCRE'],
+            'sales_invoice_id' => ['nullable', 'required_if:document_type,NCRE', 'integer'],
             'customer_id' => ['required', 'integer'],
             'receiver_name' => ['required', 'string', 'max:150'], 'receiver_nit' => ['required', 'string', 'max:30'],
             'receiver_address' => ['required', 'string', 'max:255'], 'receiver_email' => ['nullable', 'email', 'max:255'],
@@ -51,11 +52,32 @@ class FelDocumentService
             $issuer = $this->issuers->forCompany($company);
             $this->providers->resolve($issuer['provider'], $issuer['environment']);
             DB::table('sales_customers')->where('company_id', $company->id)->where('id', $data['customer_id'])->firstOrFail();
+            $salesInvoiceId = null;
+            if ($data['document_type'] === 'NCRE') {
+                // An FEL credit note always credits an issued internal invoice of the same customer, never more than its balance.
+                $invoice = DB::table('sales_invoices')->where('company_id', $company->id)->where('id', $data['sales_invoice_id'])->where('status', 'issued')->where('sales_customer_id', $data['customer_id'])->first(['id', 'total_cents', 'issued_on']);
+                if ($invoice === null) {
+                    throw ValidationException::withMessages(['sales_invoice_id' => 'Elige una factura emitida del mismo cliente para la nota de crédito.']);
+                }
+                if ($data['issued_on'] < (string) $invoice->issued_on) {
+                    throw ValidationException::withMessages(['issued_on' => 'La nota de crédito no puede ser anterior a la factura que acredita.']);
+                }
+                $salesInvoiceId = (int) $invoice->id;
+            }
             $doc = $uuid ? FelDocument::forCompany($company->id)->where('public_id', $uuid)->lockForUpdate()->firstOrFail() : new FelDocument;
             if ($doc->status !== FelDocumentStatus::Draft) {
                 throw ValidationException::withMessages(['document' => 'Solo se pueden modificar borradores.']);
             }
             $calculated = $this->calculator->calculate($company->id, $data['issued_on'], $data['lines']);
+            if ($salesInvoiceId !== null) {
+                $balance = (int) DB::table('sales_invoices')->where('id', $salesInvoiceId)->value('total_cents')
+                    - (int) DB::table('sales_receipts')->where('sales_invoice_id', $salesInvoiceId)->whereNull('voided_at')->sum('amount_cents')
+                    - (int) DB::table('sales_credit_notes')->where('sales_invoice_id', $salesInvoiceId)->where('status', 'issued')->sum('amount_cents')
+                    - (int) DB::table('receivable_adjustments')->where('sales_invoice_id', $salesInvoiceId)->where('status', 'approved')->sum('amount_cents');
+                if ($calculated['total_cents'] > $balance) {
+                    throw ValidationException::withMessages(['sales_invoice_id' => 'La nota de crédito no puede superar el saldo pendiente de la factura (Q '.number_format(max(0, $balance) / 100, 2).').']);
+                }
+            }
             $new = ! $doc->exists;
             if ($new) {
                 DB::table('fel_sequences')->insertOrIgnore(['company_id' => $company->id, 'next_number' => 1]);
@@ -67,7 +89,7 @@ class FelDocumentService
             }
             $doc->forceFill([
                 'customer_id' => $data['customer_id'], 'issued_on' => $data['issued_on'], 'currency' => $data['currency'],
-                'document_type' => $data['document_type'], 'observations' => $data['observations'] ?? null,
+                'document_type' => $data['document_type'], 'sales_invoice_id' => $salesInvoiceId, 'observations' => $data['observations'] ?? null,
                 'receiver_snapshot' => ['name' => $data['receiver_name'], 'nit' => $data['receiver_nit'],
                     'address' => $data['receiver_address'], 'email' => $data['receiver_email'] ?? null],
                 'fiscal_snapshot' => [...$issuer, 'profile' => $calculated['fiscal_profile']],

@@ -829,7 +829,7 @@ export default function PhysicalInventoryWorkspace({
                             <h2 className="flex items-center justify-between bg-violet-50 px-4 py-3 text-base font-bold">
                                 <span className="flex items-center gap-2">
                                     <Lightbulb className="size-6 text-violet-600" />{' '}
-                                    Atlantia AI
+                                    Luzma
                                 </span>
                                 <span className="rounded bg-violet-100 px-2 py-1 text-[9px] text-violet-700">
                                     BETA
