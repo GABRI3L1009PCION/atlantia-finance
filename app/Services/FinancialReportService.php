@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Accounting\TrialBalanceService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\DB;
  */
 class FinancialReportService
 {
+    public function __construct(private TrialBalanceService $trialBalance) {}
+
     /** Only posted lines, scoped through both the period and account company. No writes. */
     public function lines(int $companyId, string $to, ?string $from = null): Builder
     {
@@ -20,7 +23,7 @@ class FinancialReportService
             ->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
             ->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')
             ->where('p.company_id', $companyId)->where('a.company_id', $companyId)
-            ->where('e.status', 'posted')->where('e.entry_date', '<=', $to)
+            ->whereIn('e.status', ['posted', 'reversed'])->where('e.entry_date', '<=', $to)
             ->when($from, fn ($q) => $q->where('e.entry_date', '>=', $from));
     }
 
@@ -28,7 +31,7 @@ class FinancialReportService
     public function balances(int $companyId, string $to, ?string $from = null): array
     {
         return $this->lines($companyId, $to, $from)->select('a.id', 'a.code', 'a.name', 'a.type')
-            ->selectRaw('SUM(l.debit_cents) as debit, SUM(l.credit_cents) as credit')
+            ->selectRaw('CAST(SUM(l.debit_cents) AS BIGINT) as debit, CAST(SUM(l.credit_cents) AS BIGINT) as credit')
             ->groupBy('a.id', 'a.code', 'a.name', 'a.type')->orderBy('a.code')->get()
             ->map(fn ($row) => ['id' => $row->id, 'code' => $row->code, 'name' => $row->name, 'type' => $row->type,
                 'debit' => (int) $row->debit, 'credit' => (int) $row->credit, 'net' => (int) $row->debit - (int) $row->credit])->all();
@@ -54,9 +57,13 @@ class FinancialReportService
             'accumulated' => $accumulated, 'difference' => $assets - $liabilities - $equity - $accumulated];
     }
 
-    /** Build complete book data (not UI pagination), with a fail-closed export row limit. */
-    /** @return Book */
-    public function book(int $companyId, string $kind, string $from, string $to, int $limit): array
+    /**
+     * Build complete book data (not UI pagination), with a fail-closed export row limit.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return Book
+     */
+    public function book(int $companyId, string $kind, string $from, string $to, int $limit, array $filters = []): array
     {
         if ($kind === 'accounts') {
             $types = ['asset' => 'Activo', 'liability' => 'Pasivo', 'equity' => 'Patrimonio', 'income' => 'Ingreso', 'expense' => 'Gasto'];
@@ -70,23 +77,59 @@ class FinancialReportService
 
         if (in_array($kind, ['journal', 'ledger'])) {
             $query = $this->lines($companyId, $to, $from);
+            if ($kind === 'journal') {
+                $query
+                    ->when(filled($filters['status'] ?? null), fn ($q) => $q->where('e.status', $filters['status']))
+                    ->when(filled($filters['entry_kind'] ?? null), fn ($q) => $q->where('e.kind', $filters['entry_kind']))
+                    ->when(filled($filters['source'] ?? null), fn ($q) => $q->where('e.source_type', $filters['source'] === 'manual' ? null : $filters['source']))
+                    ->when(filled($filters['created_by'] ?? null), fn ($q) => $q->where('e.created_by', (int) $filters['created_by']))
+                    ->when(filled($filters['third_party'] ?? null), fn ($q) => $q->where(fn ($nested) => $nested->where('l.third_party_type', 'like', '%'.$filters['third_party'].'%')->orWhere('l.third_party_id', (int) $filters['third_party'])))
+                    ->when(filled($filters['cost_center'] ?? null), fn ($q) => $q->where('l.cost_center', 'like', '%'.$filters['cost_center'].'%'))
+                    ->when(filled($filters['project'] ?? null), fn ($q) => $q->where('l.project', 'like', '%'.$filters['project'].'%'))
+                    ->when(($filters['support'] ?? null) === 'with', fn ($q) => $q->whereExists(fn ($doc) => $doc->selectRaw('1')->from('journal_entry_documents as export_doc')->whereColumn('export_doc.journal_entry_id', 'e.id')))
+                    ->when(($filters['support'] ?? null) === 'without', fn ($q) => $q->whereNotExists(fn ($doc) => $doc->selectRaw('1')->from('journal_entry_documents as export_doc')->whereColumn('export_doc.journal_entry_id', 'e.id')));
+            }
             if ($kind === 'ledger') {
                 $query->orderBy('a.code');
             }
             $lines = $query->orderBy('e.entry_date')->orderBy('e.id')->orderBy('l.position')
-                ->select('e.entry_date', 'p.name as period', 'e.number', 'a.code', 'a.name', 'e.description', 'l.debit_cents', 'l.credit_cents')->limit($limit + 1)->get();
+                ->select('e.entry_date', 'p.name as period', 'e.number', 'e.status', 'e.kind', 'e.source_type', 'a.code', 'a.name', 'e.description', 'l.debit_cents', 'l.credit_cents')->limit($limit + 1)->get();
             abort_if($lines->count() > $limit, 422, 'Demasiadas líneas para esta descarga. Reduce el rango de fechas.');
-            $rows = $lines->map(fn ($l) => [$l->entry_date, $l->period.' / #'.$l->number, $l->code, $l->name, $l->description, (int) $l->debit_cents, (int) $l->credit_cents])->all();
-            $rows[] = ['', '', '', '', 'TOTALES', (int) $lines->sum('debit_cents'), (int) $lines->sum('credit_cents')];
+            $rows = $lines->map(fn ($l) => [$l->entry_date, $l->period.' / #'.$l->number, $l->code, $l->name, $l->description, $l->kind, $l->source_type ?: 'manual', $l->status, (int) $l->debit_cents, (int) $l->credit_cents])->all();
+            $rows[] = ['', '', '', '', 'TOTALES', '', '', '', (int) $lines->sum('debit_cents'), (int) $lines->sum('credit_cents')];
 
-            return ['title' => $kind === 'journal' ? 'Libro diario' : 'Libro mayor', 'headers' => ['Fecha', 'Período / Asiento', 'Código', 'Cuenta', 'Concepto', 'Debe GTQ', 'Haber GTQ'], 'money' => [5, 6], 'rows' => $rows];
+            return ['title' => $kind === 'journal' ? 'Libro diario' : 'Libro mayor', 'headers' => ['Fecha', 'Período / Asiento', 'Código', 'Cuenta', 'Concepto', 'Tipo', 'Origen', 'Estado', 'Debe GTQ', 'Haber GTQ'], 'money' => [8, 9], 'rows' => $rows];
         }
         if ($kind === 'trial') {
-            $balances = collect($this->balances($companyId, $to, $from));
-            $rows = $balances->map(fn ($b) => [$b['code'], $b['name'], $b['debit'], $b['credit'], max(0, $b['net']), max(0, -$b['net'])])->all();
-            $rows[] = ['', 'TOTALES', $balances->sum('debit'), $balances->sum('credit'), $balances->sum(fn ($b) => max(0, $b['net'])), $balances->sum(fn ($b) => max(0, -$b['net']))];
+            $trial = $this->trialBalance->build($companyId, $from, $to, [
+                'search' => (string) ($filters['trial_search'] ?? ''),
+                'group' => (string) ($filters['trial_group'] ?? ''),
+                'level' => (string) ($filters['trial_level'] ?? ''),
+                'nature' => (string) ($filters['trial_nature'] ?? ''),
+                'account_mode' => (string) ($filters['trial_account_mode'] ?? ''),
+                'accounts' => (string) ($filters['trial_accounts'] ?? 'with'),
+                'balance' => (string) ($filters['trial_balance'] ?? ''),
+                'third_party' => (string) ($filters['trial_third_party'] ?? ''),
+                'cost_center' => (string) ($filters['trial_cost_center'] ?? ''),
+                'project' => (string) ($filters['trial_project'] ?? ''),
+                'source' => (string) ($filters['trial_source'] ?? ''),
+                'kind' => (string) ($filters['trial_kind'] ?? ''),
+            ]);
+            $rows = collect($trial['rows'])->map(fn ($row) => [
+                $row['code'],
+                $row['name'],
+                $row['opening_debit_cents'],
+                $row['opening_credit_cents'],
+                $row['period_debit_cents'],
+                $row['period_credit_cents'],
+                $row['closing_debit_cents'],
+                $row['closing_credit_cents'],
+                $row['alert'],
+            ])->all();
+            $summary = $trial['summary'];
+            $rows[] = ['', 'TOTALES', $summary['opening_debits_cents'], $summary['opening_credits_cents'], $summary['period_debits_cents'], $summary['period_credits_cents'], $summary['closing_debits_cents'], $summary['closing_credits_cents'], $trial['mode'] === 'official' ? 'Balance oficial' : 'Vista analítica filtrada'];
 
-            return ['title' => 'Balance de comprobación', 'headers' => ['Código', 'Cuenta', 'Debe GTQ', 'Haber GTQ', 'Deudor GTQ', 'Acreedor GTQ'], 'money' => [2, 3, 4, 5], 'rows' => $rows];
+            return ['title' => 'Balance de comprobación', 'headers' => ['Código', 'Cuenta', 'SI debe GTQ', 'SI haber GTQ', 'Mov. debe GTQ', 'Mov. haber GTQ', 'SF deudor GTQ', 'SF acreedor GTQ', 'Estado'], 'money' => [2, 3, 4, 5, 6, 7], 'rows' => $rows];
         }
         $s = $this->statements($companyId, $from, $to);
         $types = ['asset' => 'Activo', 'liability' => 'Pasivo', 'equity' => 'Patrimonio', 'income' => 'Ingreso', 'expense' => 'Gasto'];

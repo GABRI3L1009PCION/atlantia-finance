@@ -1,4 +1,4 @@
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import {
     ArrowUpRight,
     Building2,
@@ -43,6 +43,7 @@ export default function AccountingIndex({
     notice,
 }: Props) {
     const [adding, setAdding] = useState(false);
+    const readOnly = Boolean(usePage().props.executiveReadOnly);
     const form = useForm({
         name: '',
         tax_id: '',
@@ -219,19 +220,24 @@ export default function AccountingIndex({
                 {companies.data.length ? (
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         {companies.data.map((company) => (
-                            <Link
+                            <CompanyCard
                                 key={company.public_id}
-                                href={show.url(company.public_id)}
-                                className="group rounded-2xl border border-[#ece3e3] bg-white p-6 shadow-sm transition hover:border-[#b67e7d] hover:shadow-md"
+                                href={
+                                    readOnly
+                                        ? null
+                                        : show.url(company.public_id)
+                                }
                             >
                                 <div className="flex justify-between">
                                     <span className="rounded-xl bg-[#f5e7e7] p-3 text-[#640000]">
                                         <Building2 size={23} />
                                     </span>
-                                    <ArrowUpRight
-                                        size={20}
-                                        className="text-[#b67e7d]"
-                                    />
+                                    {!readOnly && (
+                                        <ArrowUpRight
+                                            size={20}
+                                            className="text-[#b67e7d]"
+                                        />
+                                    )}
                                 </div>
                                 <h2 className="mt-5 text-lg font-semibold">
                                     {company.name}
@@ -245,7 +251,7 @@ export default function AccountingIndex({
                                         {company.currency}
                                     </span>
                                 </div>
-                            </Link>
+                            </CompanyCard>
                         ))}
                     </div>
                 ) : (
@@ -269,5 +275,27 @@ export default function AccountingIndex({
                 <Pager page={companies} />
             </main>
         </>
+    );
+}
+
+/** A company card; the supervising director sees the firm's clients but cannot open their books. */
+function CompanyCard({
+    href,
+    children,
+}: {
+    href: string | null;
+    children: React.ReactNode;
+}) {
+    const base = 'rounded-2xl border border-[#ece3e3] bg-white p-6 shadow-sm';
+
+    return href === null ? (
+        <div className={base}>{children}</div>
+    ) : (
+        <Link
+            href={href}
+            className={`group transition hover:border-[#b67e7d] hover:shadow-md ${base}`}
+        >
+            {children}
+        </Link>
     );
 }

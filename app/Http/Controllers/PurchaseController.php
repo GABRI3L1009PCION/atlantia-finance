@@ -3,8 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Organization;
+use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
+use App\Services\Fiscal\DocumentVatCalculator;
+use App\Services\Fiscal\VatBookService;
+use App\Services\FiscalConfigurationService;
+use App\Services\Payables\PayableService;
+use App\Services\PurchaseCreditNoteService;
+use App\Services\PurchaseDocumentDraftService;
 use App\Services\ReportExportService;
 use App\Services\WorkspaceContext;
 use Carbon\Carbon;
@@ -27,6 +34,8 @@ class PurchaseController extends Controller
         private WorkspaceContext $context,
         private AccountingService $accounting,
         private AccountingAutomationService $automation,
+        private FiscalConfigurationService $fiscal,
+        private VatBookService $vatBooks,
     ) {}
 
     public function index(Request $request, string $company): Response
@@ -97,12 +106,12 @@ class PurchaseController extends Controller
 
         $portfolio = DB::table('purchase_documents')->leftJoinSub($paymentTotals, 'payment_totals', 'payment_totals.purchase_document_id', '=', 'purchase_documents.id')
             ->where('purchase_documents.company_id', $record->id)->where('purchase_documents.status', 'approved')
-            ->selectRaw('COALESCE(SUM(purchase_documents.total_cents), 0) AS accrued')
-            ->selectRaw('COALESCE(SUM(COALESCE(payment_totals.paid_cents, 0)), 0) AS paid')
+            ->selectRaw('CAST(COALESCE(SUM(purchase_documents.total_cents), 0) AS BIGINT) AS accrued')
+            ->selectRaw('CAST(COALESCE(SUM(COALESCE(payment_totals.paid_cents, 0)), 0) AS BIGINT) AS paid')
             ->selectRaw('COUNT(purchase_documents.id) AS document_count')
-            ->selectRaw('COALESCE(SUM(CASE WHEN COALESCE(payment_totals.paid_cents, 0) >= purchase_documents.total_cents THEN 1 ELSE 0 END), 0) AS paid_count')
-            ->selectRaw('COALESCE(SUM(CASE WHEN purchase_documents.due_on < ? AND purchase_documents.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN 1 ELSE 0 END), 0) AS overdue_count', [now()->toDateString()])
-            ->selectRaw('COALESCE(SUM(CASE WHEN purchase_documents.due_on < ? AND purchase_documents.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN purchase_documents.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS overdue', [now()->toDateString()])->first();
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN COALESCE(payment_totals.paid_cents, 0) >= purchase_documents.total_cents THEN 1 ELSE 0 END), 0) AS BIGINT) AS paid_count')
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN purchase_documents.due_on < ? AND purchase_documents.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN 1 ELSE 0 END), 0) AS BIGINT) AS overdue_count', [now()->toDateString()])
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN purchase_documents.due_on < ? AND purchase_documents.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN purchase_documents.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS BIGINT) AS overdue', [now()->toDateString()])->first();
         $suppliers = DB::table('purchase_suppliers')->leftJoin('purchase_documents', 'purchase_documents.purchase_supplier_id', '=', 'purchase_suppliers.id')
             ->where('purchase_suppliers.company_id', $record->id)->groupBy('purchase_suppliers.id')->select('purchase_suppliers.*')
             ->selectRaw('COUNT(purchase_documents.id) AS document_count')->orderBy('purchase_suppliers.name')->get();
@@ -123,10 +132,9 @@ class PurchaseController extends Controller
                 'documents' => (int) $portfolio->document_count, 'paid_documents' => (int) $portfolio->paid_count,
                 'overdue_documents' => (int) $portfolio->overdue_count, 'pending_accounting' => $pendingAccounting],
             'aging' => $this->aging($record->id),
-            'canWrite' => $this->canWrite($org, $record->id, $request->user()->id),
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()),
             'isOwner' => $org->pivot->role === 'owner',
             'today' => now()->toDateString(),
-            'notice' => session('purchase_notice'),
         ]);
     }
 
@@ -147,11 +155,11 @@ class PurchaseController extends Controller
             ->where('document.company_id', $record->id)->where('document.status', 'approved')
             ->groupBy('document.purchase_supplier_id')->select('document.purchase_supplier_id')
             ->selectRaw('COUNT(document.id) AS document_count')
-            ->selectRaw('COALESCE(SUM(document.total_cents), 0) AS purchased_cents')
-            ->selectRaw('COALESCE(SUM(COALESCE(payment_totals.paid_cents, 0)), 0) AS paid_cents')
-            ->selectRaw('COALESCE(SUM(document.total_cents - COALESCE(payment_totals.paid_cents, 0)), 0) AS outstanding_cents')
-            ->selectRaw('COALESCE(SUM(CASE WHEN document.due_on < ? AND document.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN document.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS overdue_cents', [$todayString])
-            ->selectRaw('COALESCE(SUM(CASE WHEN document.due_on BETWEEN ? AND ? AND document.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN document.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS upcoming_cents', [$todayString, $nextWeek])
+            ->selectRaw('CAST(COALESCE(SUM(document.total_cents), 0) AS BIGINT) AS purchased_cents')
+            ->selectRaw('CAST(COALESCE(SUM(COALESCE(payment_totals.paid_cents, 0)), 0) AS BIGINT) AS paid_cents')
+            ->selectRaw('CAST(COALESCE(SUM(document.total_cents - COALESCE(payment_totals.paid_cents, 0)), 0) AS BIGINT) AS outstanding_cents')
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN document.due_on < ? AND document.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN document.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS BIGINT) AS overdue_cents', [$todayString])
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN document.due_on BETWEEN ? AND ? AND document.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN document.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS BIGINT) AS upcoming_cents', [$todayString, $nextWeek])
             ->selectRaw('MIN(CASE WHEN document.due_on >= ? AND document.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN document.due_on ELSE NULL END) AS next_due_on', [$todayString]);
         $portfolio = DB::table('purchase_suppliers as supplier')
             ->leftJoinSub($documentPortfolio, 'portfolio', 'portfolio.purchase_supplier_id', '=', 'supplier.id')
@@ -166,10 +174,10 @@ class PurchaseController extends Controller
             ->addSelect('portfolio.next_due_on');
         $summary = DB::query()->fromSub(clone $portfolio, 'supplier_portfolio')
             ->selectRaw('COUNT(*) AS active_count')
-            ->selectRaw('COALESCE(SUM(CASE WHEN outstanding_cents > 0 THEN 1 ELSE 0 END), 0) AS pending_count')
-            ->selectRaw('COALESCE(SUM(outstanding_cents), 0) AS outstanding_cents')
-            ->selectRaw('COALESCE(SUM(overdue_cents), 0) AS overdue_cents')
-            ->selectRaw('COALESCE(SUM(upcoming_cents), 0) AS upcoming_cents')
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN outstanding_cents > 0 THEN 1 ELSE 0 END), 0) AS BIGINT) AS pending_count')
+            ->selectRaw('CAST(COALESCE(SUM(outstanding_cents), 0) AS BIGINT) AS outstanding_cents')
+            ->selectRaw('CAST(COALESCE(SUM(overdue_cents), 0) AS BIGINT) AS overdue_cents')
+            ->selectRaw('CAST(COALESCE(SUM(upcoming_cents), 0) AS BIGINT) AS upcoming_cents')
             ->first();
 
         $suppliers = DB::query()->fromSub($portfolio, 'supplier_portfolio');
@@ -231,16 +239,16 @@ class PurchaseController extends Controller
                 'upcoming' => (int) ($summary->upcoming_cents ?? 0),
                 'advances' => 0,
             ],
-            'canWrite' => $this->canWrite($org, $record->id, $request->user()->id),
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()),
             'today' => $todayString,
         ]);
     }
 
     public function supplierUpdate(Request $request, string $company, int $supplier): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'purchases.manage');
         $data = $request->validate(['name' => 'required|string|max:150', 'tax_id' => 'nullable|string|max:30',
-            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30']);
+            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30', 'payment_terms_days' => 'nullable|integer|min:0|max:365']);
         DB::transaction(function () use ($request, $org, $record, $supplier, $data): void {
             $this->accounting->lock($record->id);
             $supplierRow = $this->row(DB::table('purchase_suppliers')->where('company_id', $record->id)->where('id', $supplier));
@@ -253,7 +261,7 @@ class PurchaseController extends Controller
 
     public function suppliersExport(Request $request, string $company, ReportExportService $exporter): HttpResponse
     {
-        [, $record] = $this->scope($request, $company);
+        [, $record] = $this->scope($request, $company, 'purchases.export');
         $data = $request->validate(['format' => 'required|in:pdf,xlsx']);
         $paymentTotals = $this->paymentTotals();
         $rows = DB::table('purchase_suppliers as supplier')
@@ -265,8 +273,8 @@ class PurchaseController extends Controller
             ->groupBy('supplier.id', 'supplier.name', 'supplier.tax_id', 'supplier.email', 'supplier.phone')
             ->select('supplier.name', 'supplier.tax_id', 'supplier.email', 'supplier.phone')
             ->selectRaw('COUNT(document.id) AS document_count')
-            ->selectRaw('COALESCE(SUM(document.total_cents), 0) AS purchased_cents')
-            ->selectRaw('COALESCE(SUM(CASE WHEN document.status = ? THEN document.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS outstanding_cents', ['approved'])
+            ->selectRaw('CAST(COALESCE(SUM(document.total_cents), 0) AS BIGINT) AS purchased_cents')
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN document.status = ? THEN document.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END), 0) AS BIGINT) AS outstanding_cents', ['approved'])
             ->orderBy('supplier.name')->get()
             ->map(fn ($supplier): array => [$supplier->name, $supplier->tax_id ?: '', $supplier->email ?: '', $supplier->phone ?: '', (int) $supplier->document_count, (int) $supplier->purchased_cents, (int) $supplier->outstanding_cents])->all();
 
@@ -306,17 +314,17 @@ class PurchaseController extends Controller
             ->selectRaw('CASE WHEN document.status = ? THEN document.total_cents WHEN document.total_cents > COALESCE(payment_totals.paid_cents, 0) THEN document.total_cents - COALESCE(payment_totals.paid_cents, 0) ELSE 0 END AS outstanding_cents', ['draft']);
         $approved = DB::query()->fromSub(clone $portfolio, 'payable')->where('status', 'approved');
         $summary = DB::query()->fromSub(clone $approved, 'approved_payable')
-            ->selectRaw('COALESCE(SUM(outstanding_cents), 0) AS outstanding')
-            ->selectRaw('COALESCE(SUM(CASE WHEN due_on >= ? THEN outstanding_cents ELSE 0 END), 0) AS current_amount', [$dates['today']])
-            ->selectRaw('COALESCE(SUM(CASE WHEN due_on < ? THEN outstanding_cents ELSE 0 END), 0) AS overdue', [$dates['today']])
-            ->selectRaw('COALESCE(SUM(CASE WHEN due_on BETWEEN ? AND ? THEN outstanding_cents ELSE 0 END), 0) AS upcoming', [$dates['today'], $dates['next_week']])
+            ->selectRaw('CAST(COALESCE(SUM(outstanding_cents), 0) AS BIGINT) AS outstanding')
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN due_on >= ? THEN outstanding_cents ELSE 0 END), 0) AS BIGINT) AS current_amount', [$dates['today']])
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN due_on < ? THEN outstanding_cents ELSE 0 END), 0) AS BIGINT) AS overdue', [$dates['today']])
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN due_on BETWEEN ? AND ? THEN outstanding_cents ELSE 0 END), 0) AS BIGINT) AS upcoming', [$dates['today'], $dates['next_week']])
             ->selectRaw('COUNT(*) AS all_count')
-            ->selectRaw('COALESCE(SUM(CASE WHEN outstanding_cents > 0 AND due_on >= ? THEN 1 ELSE 0 END), 0) AS current_count', [$dates['today']])
-            ->selectRaw('COALESCE(SUM(CASE WHEN outstanding_cents > 0 AND due_on < ? THEN 1 ELSE 0 END), 0) AS overdue_count', [$dates['today']])
-            ->selectRaw('COALESCE(SUM(CASE WHEN paid_cents > 0 AND outstanding_cents > 0 THEN 1 ELSE 0 END), 0) AS partial_count')
-            ->selectRaw('COALESCE(SUM(CASE WHEN outstanding_cents <= 0 THEN 1 ELSE 0 END), 0) AS paid_count')
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN outstanding_cents > 0 AND due_on >= ? THEN 1 ELSE 0 END), 0) AS BIGINT) AS current_count', [$dates['today']])
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN outstanding_cents > 0 AND due_on < ? THEN 1 ELSE 0 END), 0) AS BIGINT) AS overdue_count', [$dates['today']])
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN paid_cents > 0 AND outstanding_cents > 0 THEN 1 ELSE 0 END), 0) AS BIGINT) AS partial_count')
+            ->selectRaw('CAST(COALESCE(SUM(CASE WHEN outstanding_cents <= 0 THEN 1 ELSE 0 END), 0) AS BIGINT) AS paid_count')
             ->first();
-        $paidThisMonth = DB::table('purchase_payments as payment')
+        $paidThisMonth = (int) DB::table('purchase_payments as payment')
             ->join('purchase_documents as document', 'document.id', '=', 'payment.purchase_document_id')
             ->where('document.company_id', $record->id)->whereNull('payment.voided_at')
             ->whereDate('payment.paid_on', '>=', $today->copy()->startOfMonth()->toDateString())
@@ -386,15 +394,15 @@ class PurchaseController extends Controller
                 'paid_count' => (int) ($summary->paid_count ?? 0),
             ],
             'today' => $dates['today'],
-            'canWrite' => $this->canWrite($org, $record->id, $request->user()->id),
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()),
         ]);
     }
 
     public function supplier(Request $request, string $company): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'purchases.manage');
         $data = $request->validate(['name' => 'required|string|max:150', 'tax_id' => 'nullable|string|max:30',
-            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30']);
+            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30', 'payment_terms_days' => 'nullable|integer|min:0|max:365']);
         $id = DB::transaction(function () use ($request, $org, $record, $data): int {
             $this->accounting->lock($record->id);
             $id = DB::table('purchase_suppliers')->insertGetId([...$data, 'company_id' => $record->id, 'created_at' => now(), 'updated_at' => now()]);
@@ -406,47 +414,25 @@ class PurchaseController extends Controller
         return back()->with('purchase_notice', 'Proveedor registrado. Ya puedes asociarle compras y consultar su historial.')->with('supplier_id', $id);
     }
 
-    public function store(Request $request, string $company): RedirectResponse
+    public function store(Request $request, string $company, PurchaseDocumentDraftService $drafts): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'purchases.manage');
         $data = $request->validate([
             'request_id' => 'required|uuid', 'supplier_id' => 'required|integer',
             'document_type' => ['required', Rule::in(['purchase', 'expense'])],
             'external_reference' => 'nullable|string|max:100',
-            'document_date' => 'required|date_format:Y-m-d', 'due_on' => 'required|date_format:Y-m-d|after_or_equal:document_date',
+            'document_date' => 'required|date_format:Y-m-d', 'due_on' => 'nullable|date_format:Y-m-d|after_or_equal:document_date',
+            'currency' => ['nullable', Rule::in(['GTQ', 'USD', 'EUR'])],
             'lines' => 'required|array|min:1|max:100', 'lines.*.account_id' => 'required|integer',
             'lines.*.description' => 'required|string|max:250', 'lines.*.quantity' => 'required|integer|min:1|max:10000',
             'lines.*.unit_price' => 'required|string|max:13',
+            'lines.*.tax_treatment' => ['nullable', Rule::in(DocumentVatCalculator::TREATMENTS)],
+            'fiscal_document_type' => ['nullable', Rule::in(DocumentVatCalculator::PURCHASE_TYPES)],
+            'fiscal_series' => 'nullable|string|max:40',
+            'fiscal_number' => 'nullable|string|max:40',
+            'fiscal_authorization' => 'nullable|string|max:64',
         ]);
-        DB::transaction(function () use ($request, $org, $record, $data): void {
-            $this->accounting->lock($record->id);
-            if (DB::table('purchase_documents')->where('company_id', $record->id)->where('public_id', $data['request_id'])->exists()) {
-                return;
-            }
-            $this->ensure(! DB::table('purchase_documents')->where('public_id', $data['request_id'])->exists(), 'Solicitud inválida. Recarga la página.');
-            $supplier = $this->row(DB::table('purchase_suppliers')->where('company_id', $record->id)->where('id', $data['supplier_id']));
-            $accountIds = DB::table('ledger_accounts')->where('company_id', $record->id)->whereIn('type', ['asset', 'expense'])->pluck('id')->all();
-            $total = 0;
-            $lines = [];
-            foreach ($data['lines'] as $position => $line) {
-                $this->ensure(in_array((int) $line['account_id'], $accountIds, true), 'Cada línea debe usar una cuenta de activo o gasto de esta empresa.');
-                $unit = $this->accounting->cents($line['unit_price']);
-                $this->ensure($unit > 0, 'Cada precio debe ser mayor que cero.');
-                $total += $unit * (int) $line['quantity'];
-                $this->ensure($total <= 100000000000, 'El total supera el máximo permitido.');
-                $lines[] = ['ledger_account_id' => (int) $line['account_id'], 'position' => $position + 1,
-                    'description' => $line['description'], 'quantity' => (int) $line['quantity'], 'unit_cents' => $unit];
-            }
-            $id = DB::table('purchase_documents')->insertGetId([
-                'public_id' => $data['request_id'], 'company_id' => $record->id, 'purchase_supplier_id' => $supplier->id,
-                'document_type' => $data['document_type'], 'external_reference' => filled($data['external_reference'] ?? null) ? trim($data['external_reference']) : null,
-                'document_date' => $data['document_date'], 'due_on' => $data['due_on'], 'total_cents' => $total,
-                'supplier_name' => $supplier->name, 'supplier_tax_id' => $supplier->tax_id, 'created_by' => $request->user()->id,
-                'created_at' => now(), 'updated_at' => now(),
-            ]);
-            DB::table('purchase_document_lines')->insert(array_map(fn (array $line): array => [...$line, 'purchase_document_id' => $id], $lines));
-            $this->accounting->audit($org, $request->user(), 'purchase.document.drafted', 'purchase_documents', $id, ['total_cents' => $total]);
-        });
+        $drafts->create($org, $request->user(), $record, $data);
 
         return to_route('accounting.purchaseShow', [$company, $data['request_id']]);
     }
@@ -466,35 +452,50 @@ class PurchaseController extends Controller
             'lines' => DB::table('purchase_document_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')
                 ->where('l.purchase_document_id', $row->id)->select('l.*', 'a.code as account_code', 'a.name as account_name')->orderBy('l.position')->get(),
             'payments' => DB::table('purchase_payments')->where('purchase_document_id', $row->id)->orderByDesc('id')->get(),
+            'creditNotes' => DB::table('purchase_credit_notes')->where('purchase_document_id', $row->id)->orderByDesc('id')->get(['id', 'fiscal_series', 'fiscal_number', 'issued_on', 'amount_cents', 'vat_cents', 'reason', 'status', 'void_reason']),
+            'payable' => app(PayableService::class)->find($row->id),
+            'canCredit' => $this->accounting->canModule($org, $record->id, $request->user(), 'purchases.approve'),
             'files' => DB::table('purchase_document_files')->where('purchase_document_id', $row->id)->orderByDesc('id')->get(),
             'paid' => $this->paid($row->id), 'sourceEntries' => $sourceEntries,
-            'canWrite' => $this->canWrite($org, $record->id, $request->user()->id), 'isOwner' => $org->pivot->role === 'owner',
-            'today' => now()->toDateString(), 'notice' => session('purchase_notice'),
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()), 'isOwner' => $org->pivot->role === 'owner',
+            'today' => now()->toDateString(),
         ]);
     }
 
     public function process(Request $request, string $company, string $document): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true, true);
+        [$org, $record] = $this->scope($request, $company, 'purchases.approve');
         $data = $request->validate(['action' => 'required|in:approve,void', 'reason' => 'required_if:action,void|nullable|string|max:500']);
+        if ($data['action'] === 'void') {
+            $this->accounting->assertModule($org, $record->id, $request->user(), 'purchases.void');
+        }
         DB::transaction(function () use ($request, $org, $record, $document, $data): void {
             $this->accounting->lock($record->id);
             $row = $this->document($record->id, $document);
+            $this->vatBooks->assertOpen($record->id, $row->document_date);
             if ($data['action'] === 'approve') {
                 $this->ensure($row->status === 'draft', 'Solo puedes aprobar borradores.');
                 $mapping = $this->automation->ensureMapping($record->id);
                 $this->ensure($mapping !== null, 'Configura el mapeo contable antes de aprobar.');
-                $debits = DB::table('purchase_document_lines')->where('purchase_document_id', $row->id)->get()
-                    ->map(fn ($line): array => ['account_id' => $line->ledger_account_id, 'debit' => $this->decimal($line->quantity * $line->unit_cents), 'credit' => '0'])->all();
+                // Expenses are booked net of VAT; the VAT itself is a recoverable credit (IVA crédito fiscal).
+                $debits = DB::table('purchase_document_lines')->where('purchase_document_id', $row->id)->orderBy('position')->get()
+                    ->map(fn ($line): array => ['account_id' => $line->ledger_account_id, 'debit' => $this->decimal($line->quantity * $line->unit_cents - $line->vat_cents), 'credit' => '0'])->all();
+                if ((int) $row->vat_cents > 0) {
+                    $this->fiscal->linkDefaultAccounts($record->id);
+                    $vatAccount = $this->fiscal->purchaseVatRule($record->id, $row->document_date)->recoverable_account_id;
+                    $this->ensure($vatAccount !== null, 'Asigna la cuenta de IVA crédito fiscal al impuesto IVA en Parámetros fiscales antes de aprobar.');
+                    $debits[] = ['account_id' => (int) $vatAccount, 'debit' => $this->decimal((int) $row->vat_cents), 'credit' => '0', 'description' => 'IVA crédito fiscal'];
+                }
                 $entry = $this->automation->draft($org, $request->user(), $record->id, 'purchase_document', $row->id, $row->document_date,
                     'Compra interna de '.$row->supplier_name, 'COMPRA-'.$row->public_id,
-                    [...$debits, ['account_id' => $mapping->payable_account_id, 'debit' => '0', 'credit' => $this->decimal($row->total_cents)]]);
+                    [...$debits, ['account_id' => $mapping->payable_account_id, 'debit' => '0', 'credit' => $this->decimal($row->total_cents)]], 'purchase_document.origin');
                 $this->ensure($entry !== null, 'Abre un período contable que incluya la fecha del documento.');
                 $number = (int) DB::table('purchase_documents')->where('company_id', $record->id)->max('number') + 1;
                 DB::table('purchase_documents')->where('id', $row->id)->update(['status' => 'approved', 'number' => $number,
                     'approved_by' => $request->user()->id, 'approved_at' => now(), 'updated_at' => now()]);
             } else {
-                $this->ensure($row->status === 'approved' && $this->paid($row->id) === 0, 'Solo puedes anular documentos aprobados sin pagos vigentes.');
+                $payable = app(PayableService::class)->find($row->id);
+                $this->ensure($row->status === 'approved' && $this->paid($row->id) === 0 && ($payable === null || $payable['credited_cents'] + $payable['advances_cents'] + $payable['adjusted_cents'] + $payable['committed_cents'] === 0), 'Solo puedes anular documentos aprobados sin pagos, notas de crédito, anticipos aplicados ni pagos en proceso.');
                 $this->automation->reverseSource($org, $request->user(), $record->id, 'purchase_document', $row->id, now()->toDateString(), $data['reason']);
                 DB::table('purchase_documents')->where('id', $row->id)->update(['status' => 'void', 'voided_by' => $request->user()->id,
                     'voided_at' => now(), 'void_reason' => $data['reason'], 'updated_at' => now()]);
@@ -509,7 +510,7 @@ class PurchaseController extends Controller
 
     public function payment(Request $request, string $company, string $document): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'purchases.manage');
         $data = $request->validate(['request_id' => 'required|uuid', 'amount' => 'required|string|max:13',
             'paid_on' => 'required|date_format:Y-m-d|before_or_equal:today', 'reference' => 'required|string|max:150']);
         DB::transaction(function () use ($request, $org, $record, $document, $data): void {
@@ -520,17 +521,16 @@ class PurchaseController extends Controller
             }
             $amount = $this->accounting->cents($data['amount']);
             $this->ensure($row->status === 'approved' && $data['paid_on'] >= $row->document_date, 'El pago requiere un documento aprobado y fecha válida.');
-            $this->ensure($amount > 0 && $amount <= (int) $row->total_cents - $this->paid($row->id), 'El pago no puede superar el saldo pendiente.');
+            $payable = app(PayableService::class)->find($row->id);
+            $this->ensure($amount > 0 && $amount <= ($payable['outstanding_cents'] ?? 0) - ($payable['committed_cents'] ?? 0), 'El pago no puede superar el saldo pendiente no comprometido en Tesorería.');
             $mapping = $this->automation->ensureMapping($record->id);
             $this->ensure($mapping !== null, 'Configura el mapeo contable antes de registrar pagos.');
             $id = DB::table('purchase_payments')->insertGetId(['public_id' => $data['request_id'], 'purchase_document_id' => $row->id,
                 'amount_cents' => $amount, 'paid_on' => $data['paid_on'], 'reference' => $data['reference'],
                 'created_by' => $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
-            $entry = $this->automation->draft($org, $request->user(), $record->id, 'purchase_payment', $id, $data['paid_on'],
-                'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], [
-                    ['account_id' => $mapping->payable_account_id, 'debit' => $this->decimal($amount), 'credit' => '0'],
-                    ['account_id' => $mapping->cash_account_id, 'debit' => '0', 'credit' => $this->decimal($amount)],
-                ]);
+            $entry = $this->automation->draftFromRule($org, $request->user(), $record->id, 'purchase_payment', $id, $data['paid_on'],
+                'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $amount,
+                ['third_party_type' => 'supplier', 'third_party_id' => $row->purchase_supplier_id]);
             $this->ensure($entry !== null, 'Abre un período contable que incluya la fecha del pago.');
             $this->accounting->audit($org, $request->user(), 'purchase.payment.created', 'purchase_payments', $id, ['amount_cents' => $amount]);
         });
@@ -540,7 +540,7 @@ class PurchaseController extends Controller
 
     public function voidPayment(Request $request, string $company, string $document, int $payment): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true, true);
+        [$org, $record] = $this->scope($request, $company, 'purchases.void');
         $data = $request->validate(['reason' => 'required|string|max:500']);
         DB::transaction(function () use ($request, $org, $record, $document, $payment, $data): void {
             $this->accounting->lock($record->id);
@@ -556,9 +556,33 @@ class PurchaseController extends Controller
         return back()->with('purchase_notice', 'Pago anulado; el saldo y su reverso contable quedaron actualizados.');
     }
 
+    /** POST credit note: a supplier credit note over an approved purchase; lowers the payable and mirrors the purchase entry. */
+    public function creditNote(Request $request, string $company, string $document, PurchaseCreditNoteService $creditNotes): RedirectResponse
+    {
+        [$org, $record] = $this->scope($request, $company, 'purchases.approve');
+        $data = $request->validate(['amount' => 'required|string|max:13', 'issued_on' => 'required|date_format:Y-m-d|before_or_equal:today', 'reason' => 'required|string|min:5|max:500',
+            'fiscal_series' => 'nullable|string|max:40', 'fiscal_number' => 'nullable|string|max:40']);
+        $row = $this->document($record->id, $document);
+        $creditNotes->issue($org, $request->user(), $record->id, $row->id, ['amount_cents' => $this->accounting->cents($data['amount']), 'issued_on' => $data['issued_on'], 'reason' => $data['reason'],
+            'fiscal_series' => $this->fiscalCode($data['fiscal_series'] ?? null), 'fiscal_number' => $this->fiscalCode($data['fiscal_number'] ?? null)]);
+
+        return back()->with('purchase_notice', 'Nota de crédito del proveedor registrada; el saldo por pagar se redujo y el asiento quedó en borrador.');
+    }
+
+    public function voidCreditNote(Request $request, string $company, string $document, int $creditNote, PurchaseCreditNoteService $creditNotes): RedirectResponse
+    {
+        [$org, $record] = $this->scope($request, $company, 'purchases.void');
+        $data = $request->validate(['reason' => 'required|string|min:5|max:500']);
+        $row = $this->document($record->id, $document);
+        abort_unless(DB::table('purchase_credit_notes')->where('id', $creditNote)->where('purchase_document_id', $row->id)->exists(), 404);
+        $creditNotes->void($org, $request->user(), $record->id, $creditNote, $data['reason']);
+
+        return back()->with('purchase_notice', 'Nota de crédito anulada; el saldo vuelve a estar pendiente.');
+    }
+
     public function mapping(Request $request, string $company): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true, true);
+        [$org, $record] = $this->scope($request, $company, 'accounts.manage');
         $data = $request->validate(['cash_account_id' => 'required|integer', 'receivable_account_id' => 'required|integer',
             'revenue_account_id' => 'required|integer', 'payable_account_id' => 'required|integer', 'default_expense_account_id' => 'required|integer']);
         DB::transaction(function () use ($request, $org, $record, $data): void {
@@ -572,7 +596,7 @@ class PurchaseController extends Controller
 
     public function fileStore(Request $request, string $company, string $document): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'documents.manage');
         $data = $request->validate(['file' => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,webp,xlsx,xls,csv,doc,docx']);
         $row = $this->document($record->id, $document);
         $this->ensure($row->status === 'draft', 'Los respaldos solo se modifican mientras el documento es borrador.');
@@ -602,7 +626,7 @@ class PurchaseController extends Controller
 
     public function fileDownload(Request $request, string $company, string $document, string $file): HttpResponse
     {
-        [, $record] = $this->scope($request, $company);
+        [, $record] = $this->scope($request, $company, 'documents.view');
         $row = $this->document($record->id, $document);
         $stored = $this->row(DB::table('purchase_document_files')->where('purchase_document_id', $row->id)->where('public_id', $file));
 
@@ -611,7 +635,7 @@ class PurchaseController extends Controller
 
     public function fileDestroy(Request $request, string $company, string $document, string $file): RedirectResponse
     {
-        [$org, $record] = $this->scope($request, $company, true);
+        [$org, $record] = $this->scope($request, $company, 'documents.manage');
         $row = $this->document($record->id, $document);
         $this->ensure($row->status === 'draft', 'Los respaldos de documentos aprobados son inmutables.');
         $stored = $this->row(DB::table('purchase_document_files')->where('purchase_document_id', $row->id)->where('public_id', $file));
@@ -627,7 +651,7 @@ class PurchaseController extends Controller
 
     public function documentPdf(Request $request, string $company, string $document, ReportExportService $exporter): HttpResponse
     {
-        [, $record] = $this->scope($request, $company);
+        [, $record] = $this->scope($request, $company, 'purchases.view');
         $row = $this->document($record->id, $document);
         $rows = DB::table('purchase_document_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')
             ->where('l.purchase_document_id', $row->id)->orderBy('l.position')->get()
@@ -645,7 +669,7 @@ class PurchaseController extends Controller
 
     public function export(Request $request, string $company, ReportExportService $exporter): HttpResponse
     {
-        [, $record] = $this->scope($request, $company);
+        [, $record] = $this->scope($request, $company, 'purchases.export');
         $data = $request->validate(['format' => 'required|in:pdf,xlsx']);
         $paymentTotals = $this->paymentTotals();
         $rows = DB::table('purchase_documents')->leftJoinSub($paymentTotals, 'p', 'p.purchase_document_id', '=', 'purchase_documents.id')
@@ -661,12 +685,14 @@ class PurchaseController extends Controller
     }
 
     /** @return array{Organization, stdClass} */
-    private function scope(Request $request, string $company, bool $write = false, bool $owner = false): array
+    private function scope(Request $request, string $company, string $permission = 'purchases.view'): array
     {
-        $org = $this->context->organization($request->user(), $owner);
+        $org = $this->context->organization($request->user());
         $this->context->requireFeature($org, 'basic_accounting');
+        $record = $this->accounting->company($org, $request->user(), $company, ! $this->isReadPermission($permission));
+        $this->accounting->assertModule($org, $record->id, $request->user(), $permission);
 
-        return [$org, $this->accounting->company($org, $request->user(), $company, $write)];
+        return [$org, $record];
     }
 
     private function document(int $companyId, string $uuid): stdClass
@@ -686,7 +712,7 @@ class PurchaseController extends Controller
 
     private function paymentTotals(): Builder
     {
-        return DB::table('purchase_payments')->select('purchase_document_id')->selectRaw('SUM(amount_cents) AS paid_cents')
+        return DB::table('purchase_payments')->select('purchase_document_id')->selectRaw('CAST(SUM(amount_cents) AS BIGINT) AS paid_cents')
             ->whereNull('voided_at')->groupBy('purchase_document_id');
     }
 
@@ -727,9 +753,14 @@ class PurchaseController extends Controller
         return intdiv($cents, 100).'.'.str_pad((string) ($cents % 100), 2, '0', STR_PAD_LEFT);
     }
 
-    private function canWrite(Organization $org, int $companyId, int $userId): bool
+    private function canWrite(Organization $org, int $companyId, User $user): bool
     {
-        return $org->pivot->role === 'owner' || DB::table('company_user')->where('company_id', $companyId)->where('user_id', $userId)->where('permission', 'editor')->exists();
+        return $this->accounting->canModule($org, $companyId, $user, 'purchases.manage');
+    }
+
+    private function isReadPermission(string $permission): bool
+    {
+        return str_ends_with($permission, '.view') || str_ends_with($permission, '.export');
     }
 
     private function ensure(bool $condition, string $message): void
@@ -737,5 +768,13 @@ class PurchaseController extends Controller
         if (! $condition) {
             throw ValidationException::withMessages(['purchases' => $message]);
         }
+    }
+
+    /** Normalizes a FEL series, number or authorization as printed on the document. */
+    private function fiscalCode(?string $value): ?string
+    {
+        $value = $value === null ? '' : Str::upper(preg_replace('/\s+/', '', $value) ?? '');
+
+        return $value === '' ? null : $value;
     }
 }

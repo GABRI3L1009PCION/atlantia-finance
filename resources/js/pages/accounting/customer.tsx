@@ -49,6 +49,7 @@ export default function Customer({
         name: string;
         tax_id: string | null;
         email: string | null;
+        payment_terms_days: number | null;
     };
     invoices: Page<Invoice>;
     receipts: Page<Receipt>;
@@ -65,6 +66,10 @@ export default function Customer({
         name: customer.name,
         tax_id: customer.tax_id || '',
         email: customer.email || '',
+        payment_terms_days:
+            customer.payment_terms_days === null
+                ? ''
+                : String(customer.payment_terms_days),
     });
 
     return (
@@ -158,6 +163,23 @@ export default function Customer({
                                     }
                                 />
                             </label>
+                            <label>
+                                Plazo de pago (días)
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={365}
+                                    className={field}
+                                    placeholder="Vacío = sin plazo"
+                                    value={edit.data.payment_terms_days}
+                                    onChange={(event) =>
+                                        edit.setData(
+                                            'payment_terms_days',
+                                            event.target.value,
+                                        )
+                                    }
+                                />
+                            </label>
                         </div>
                         <Errors errors={edit.errors} />
                         <button
@@ -183,6 +205,12 @@ export default function Customer({
                         <p>
                             <strong>Correo:</strong>{' '}
                             {customer.email || 'No indicado'}
+                        </p>
+                        <p>
+                            <strong>Plazo de pago:</strong>{' '}
+                            {customer.payment_terms_days === null
+                                ? 'Sin plazo configurado'
+                                : `${customer.payment_terms_days} días`}
                         </p>
                     </div>
                 )}

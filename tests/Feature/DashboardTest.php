@@ -67,7 +67,7 @@ test('authenticated users with an active subscription can visit the dashboard', 
     $response->assertOk();
 });
 
-test('dashboard exposes authorized companies for direct customer and billing access', function () {
+test('dashboard redirects to role scope and organization view still exposes authorized companies', function () {
     $user = User::factory()->create();
     $organization = Organization::query()->create(['name' => 'Organización activa', 'status' => 'active']);
     $organization->users()->attach($user->id, ['role' => 'owner', 'status' => 'active', 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
@@ -76,7 +76,7 @@ test('dashboard exposes authorized companies for direct customer and billing acc
     DB::table('companies')->insert(['public_id' => '5a861ed2-88b1-4af1-9eab-13b358d96f93', 'office_id' => $office->id, 'name' => 'Empresa Demo, S.A.', 'tax_id' => '1234567-8', 'currency' => 'GTQ', 'created_at' => now(), 'updated_at' => now()]);
 
     $this->actingAs($user)->get(route('dashboard'))
-        ->assertRedirect(route('accounting.companyDashboard', '5a861ed2-88b1-4af1-9eab-13b358d96f93'));
+        ->assertRedirect(route('office.executive'));
 
     $this->get(route('dashboard', ['organization' => 1]))->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('dashboard')

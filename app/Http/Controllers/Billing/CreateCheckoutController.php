@@ -27,7 +27,7 @@ class CreateCheckoutController extends Controller
             ->latest('organizations.created_at')->first();
         abort_if($organization === null, 403);
 
-        $billing = DB::table('organization_billing_profiles')->where('organization_id', $organization->id)->first();
+        $billing = DB::table('organization_billing_profiles')->where('organization_billing_profiles.organization_id', $organization->id)->first();
         if ($billing === null) {
             throw ValidationException::withMessages(['billing' => 'Completa tus datos fiscales antes de iniciar el pago.']);
         }

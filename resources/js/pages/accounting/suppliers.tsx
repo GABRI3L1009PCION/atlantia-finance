@@ -59,6 +59,7 @@ type Supplier = {
     tax_id: string | null;
     email: string | null;
     phone: string | null;
+    payment_terms_days: number | null;
     created_at: string;
     document_count: number | string;
     purchased_cents: number | string;
@@ -153,6 +154,7 @@ export default function Suppliers({
         tax_id: '',
         email: '',
         phone: '',
+        payment_terms_days: '',
     });
     const selected = useMemo(
         () =>
@@ -187,6 +189,10 @@ export default function Suppliers({
             tax_id: supplier.tax_id ?? '',
             email: supplier.email ?? '',
             phone: supplier.phone ?? '',
+            payment_terms_days:
+                supplier.payment_terms_days === null
+                    ? ''
+                    : String(supplier.payment_terms_days),
         });
         supplierForm.clearErrors();
         setEditor('edit');
@@ -628,6 +634,22 @@ export default function Suppliers({
                                     />
                                 </label>
                             </div>
+                            <label className="block text-sm font-medium">
+                                Plazo de pago (días, opcional)
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={365}
+                                    className={field}
+                                    value={supplierForm.data.payment_terms_days}
+                                    onChange={(event) =>
+                                        supplierForm.setData(
+                                            'payment_terms_days',
+                                            event.target.value,
+                                        )
+                                    }
+                                />
+                            </label>
                             <label className="block text-sm font-medium">
                                 Correo
                                 <input

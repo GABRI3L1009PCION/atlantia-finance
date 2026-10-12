@@ -1,9 +1,9 @@
 import { router } from '@inertiajs/react';
 import { KeyRound } from 'lucide-react';
 import { destroy } from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyRegistrationController';
-import Heading from '@/components/heading';
 import PasskeyItem from '@/components/passkey-item';
 import PasskeyRegistration from '@/components/passkey-register';
+import { SettingsCard } from '@/components/settings-card';
 import type { Passkey } from '@/types/auth';
 
 export type Props = {
@@ -17,9 +17,9 @@ const EmptyState = () => {
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
                 <KeyRound className="h-7 w-7 text-muted-foreground" />
             </div>
-            <p className="font-medium">No passkeys yet</p>
+            <p className="font-medium">Aún no tienes llaves de acceso</p>
             <p className="mt-1 text-sm text-muted-foreground">
-                Add a passkey to sign in without a password
+                Agrega una llave de acceso para iniciar sesión sin contraseña
             </p>
         </div>
     );
@@ -44,14 +44,12 @@ export default function ManagePasskeys(props: Props) {
     }
 
     return (
-        <div className="space-y-6">
-            <Heading
-                variant="small"
-                title="Passkeys"
-                description="Manage your passkeys for passwordless sign-in"
-            />
-
-            <div className="overflow-hidden rounded-lg border border-border">
+        <SettingsCard
+            icon={KeyRound}
+            title="Llaves de acceso"
+            description="Administra tus llaves de acceso para ingresar sin contraseña"
+        >
+            <div className="mb-5 overflow-hidden rounded-lg border border-border">
                 {passkeys.length > 0 ? (
                     passkeys.map((passkey) => (
                         <PasskeyItem
@@ -63,9 +61,8 @@ export default function ManagePasskeys(props: Props) {
                 ) : (
                     <EmptyState />
                 )}
-            </div>
-
+            </div>{' '}
             <PasskeyRegistration onSuccess={handleRegisterSuccess} />
-        </div>
+        </SettingsCard>
     );
 }

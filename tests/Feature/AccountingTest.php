@@ -1,13 +1,19 @@
 <?php
 
+use App\Actions\Accounting\ApproveAccountingPeriodReopening;
+use App\Actions\Accounting\ReopenAccountingPeriod;
+use App\Actions\Accounting\RequestAccountingPeriodReopening;
 use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\User;
+use App\Services\WorkManagement\CompanyAssignmentService;
+use App\Services\WorkManagement\WorkAuthorizationService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
@@ -111,7 +117,25 @@ test('closed posted periods freeze account metadata and do not produce correctio
     $data = accountingDraft($f);
     $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), $data);
     $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'post']);
+    $entryId = DB::table('journal_entries')->where('public_id', $data['request_id'])->value('id');
+    DB::table('journal_entry_documents')->insert([
+        'public_id' => (string) Str::uuid(),
+        'journal_entry_id' => $entryId,
+        'uploaded_by' => $f['owner']->id,
+        'original_name' => 'soporte.pdf',
+        'storage_path' => 'testing/soporte-'.$entryId.'.pdf',
+        'mime_type' => 'application/pdf',
+        'size_bytes' => 128,
+        'sha256' => str_repeat('a', 64),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
     $this->post(route('accounting.close', [$f['uuid'], $f['period']]))->assertRedirect();
+    $this->assertDatabaseHas('accounting_period_close_snapshots', [
+        'company_id' => $f['companyId'],
+        'accounting_period_id' => $f['period'],
+        'closed_by' => $f['owner']->id,
+    ]);
     $this->patch(route('accounting.updateAccount', [$f['uuid'], $f['account2']]), ['code' => '3101', 'name' => 'Cambio tardío', 'type' => 'equity', 'reason' => 'Corrección', 'acknowledged' => true])->assertSessionHasErrors('accounting');
     $this->assertDatabaseHas('ledger_accounts', ['id' => $f['account2'], 'name' => 'Capital']);
     expect(DB::table('audit_logs')->where('action', 'account.updated')->count())->toBe(0);
@@ -154,7 +178,7 @@ test('owner registers scoped company accounts periods and actual company view', 
 test('company quota and duplicate tax id are enforced without creating records', function () {
     $f = accountingFixture();
     $this->actingAs($f['owner'])->post(route('accounting.storeCompany'), ['name' => 'Duplicada', 'tax_id' => '123-k', 'office_id' => $f['office']->id])->assertSessionHasErrors('tax_id');
-    DB::table('plan_limits')->where('metric', 'active_cases')->update(['limit_value' => 1]);
+    DB::statement("UPDATE plan_versions SET limits = jsonb_set(limits, '{active_cases,value}', '1')");
     $this->post(route('accounting.storeCompany'), ['name' => 'Otra', 'tax_id' => '444', 'office_id' => $f['office']->id])->assertSessionHasErrors('tax_id');
     $this->assertDatabaseCount('companies', 1);
 });
@@ -190,6 +214,80 @@ test('unassigned viewer editor and inactive memberships have distinct permission
     $this->get(route('accounting.show', $f['uuid']))->assertNotFound();
     $f['org']->users()->updateExistingPivot($member->id, ['status' => 'inactive']);
     $this->get(route('accounting.index'))->assertForbidden();
+});
+
+test('auditor access is strictly read only even with stale editor access', function () {
+    $f = accountingFixture();
+    $auditor = User::factory()->create();
+    $f['org']->users()->attach($auditor->id, ['role' => 'member', 'status' => 'active']);
+    $f['office']->users()->attach($auditor->id, ['role' => 'member', 'status' => 'active']);
+    DB::table('company_user')->insert(['company_id' => $f['companyId'], 'user_id' => $auditor->id, 'permission' => 'editor']);
+    DB::table('company_assignments')->insert([
+        'organization_id' => $f['org']->id,
+        'office_id' => $f['office']->id,
+        'company_id' => $f['companyId'],
+        'user_id' => $auditor->id,
+        'assignment_role' => 'auditor',
+        'status' => 'active',
+        'starts_at' => now(),
+        'metadata' => json_encode([]),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->actingAs($auditor)
+        ->get(route('accounting.show', $f['uuid']))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('canWrite', false)
+            ->where('journalPermissions.create', false)
+            ->where('journalPermissions.post', false));
+
+    $this->post(route('accounting.entry', $f['uuid']), accountingDraft($f))->assertForbidden();
+    $this->post(route('accounting.bankAccountStore', $f['uuid']), [
+        'ledger_account_id' => $f['account1'],
+        'bank_name' => 'Banco Industrial',
+        'account_name' => 'Monetaria',
+        'account_type' => 'checking',
+        'last_four' => '1234',
+        'bank_balance' => '100.00',
+    ])->assertForbidden();
+    $this->post(route('accounting.account', $f['uuid']), ['code' => '5101', 'name' => 'Gastos', 'type' => 'expense'])->assertForbidden();
+});
+
+test('fine grained operational role grants only its allowed module', function () {
+    $f = accountingFixture();
+    $treasury = User::factory()->create();
+    $f['org']->users()->attach($treasury->id, ['role' => 'member', 'status' => 'active']);
+    $f['office']->users()->attach($treasury->id, ['role' => 'member', 'status' => 'active']);
+    app(WorkAuthorizationService::class)->ensureDefaults($f['org']);
+    app(CompanyAssignmentService::class)->assign($f['org'], $f['owner'], $f['office']->id, $f['companyId'], $treasury->id, 'treasury');
+    app(WorkAuthorizationService::class)->assignRole($f['org'], $f['owner'], $treasury->id, 'treasury', $f['office']->id);
+
+    $this->actingAs($treasury)
+        ->post(route('accounting.bankAccountStore', $f['uuid']), [
+            'ledger_account_id' => $f['account1'],
+            'bank_name' => 'Banco Industrial',
+            'account_name' => 'Monetaria',
+            'account_type' => 'checking',
+            'last_four' => '1234',
+            'bank_balance' => '100.00',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+    $this->assertDatabaseHas('bank_accounts', ['company_id' => $f['companyId'], 'bank_name' => 'Banco Industrial']);
+
+    $this->patch(route('accounting.fiscalSettingsUpdate', $f['uuid']), [
+        'country_code' => 'GT',
+        'base_currency' => 'GTQ',
+        'timezone' => 'America/Guatemala',
+        'vat_regime' => 'general',
+        'income_tax_regime' => 'utilities',
+        'accounting_template' => 'guatemala_general',
+        'exchange_rate_source' => 'BANGUAT',
+        'fiscal_year_starts_in' => 1,
+    ])->assertForbidden();
+    $this->post(route('accounting.account', $f['uuid']), ['code' => '5101', 'name' => 'Gastos', 'type' => 'expense'])->assertForbidden();
 });
 
 test('revocation prevents access and foreign or unassigned office members cannot be granted permission', function () {
@@ -256,6 +354,75 @@ test('drafts do not affect books posting is exact numbered audited and cannot re
     $this->assertDatabaseCount('journal_entries', 1);
 });
 
+test('journal workflow submits reviews approves and posts with formal traceability', function () {
+    $f = accountingFixture();
+    $data = [...accountingDraft($f), 'source_type' => 'sales_invoice', 'source_id' => 125, 'accounting_event' => 'sale.invoice.issued', 'posting_key' => 'sale_invoice:125:issued'];
+    $data['lines'][0]['description'] = 'Cliente Los Pinos';
+    $data['lines'][0]['third_party_type'] = 'customer';
+    $data['lines'][0]['third_party_id'] = 125;
+    $data['lines'][0]['cost_center'] = 'Administración';
+    $data['lines'][0]['project'] = 'Contrato anual';
+
+    $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), $data)->assertRedirect();
+    $this->assertDatabaseHas('journal_entries', [
+        'public_id' => $data['request_id'],
+        'status' => 'draft',
+        'source_type' => 'sales_invoice',
+        'source_id' => 125,
+        'accounting_event' => 'sale.invoice.issued',
+        'posting_key' => 'sale_invoice:125:issued',
+    ]);
+    $this->assertDatabaseHas('journal_lines', [
+        'description' => 'Cliente Los Pinos',
+        'third_party_type' => 'customer',
+        'third_party_id' => 125,
+        'cost_center' => 'Administración',
+        'project' => 'Contrato anual',
+    ]);
+
+    $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'submit'])->assertRedirect();
+    $this->assertDatabaseHas('journal_entries', ['public_id' => $data['request_id'], 'status' => 'pending_review']);
+
+    $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'review'])->assertRedirect();
+    $this->assertDatabaseHas('journal_entries', ['public_id' => $data['request_id'], 'status' => 'reviewed', 'reviewed_by' => $f['owner']->id]);
+
+    $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'approve'])->assertRedirect();
+    $this->assertDatabaseHas('journal_entries', ['public_id' => $data['request_id'], 'status' => 'approved', 'approved_by' => $f['owner']->id]);
+
+    $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'post'])->assertRedirect();
+    $this->assertDatabaseHas('journal_entries', ['public_id' => $data['request_id'], 'status' => 'posted', 'number' => 1, 'posted_by' => $f['owner']->id]);
+    $this->assertDatabaseHas('audit_logs', ['action' => 'journal_entry.review_requested']);
+    $this->assertDatabaseHas('audit_logs', ['action' => 'journal_entry.reviewed']);
+    $this->assertDatabaseHas('audit_logs', ['action' => 'journal_entry.approved']);
+    $this->assertDatabaseHas('audit_logs', ['action' => 'journal_entry.posted']);
+});
+
+test('journal posting key prevents duplicated accounting proposals', function () {
+    $f = accountingFixture();
+    $data = [...accountingDraft($f), 'posting_key' => 'purchase_document:91:approved', 'source_type' => 'purchase_document', 'source_id' => 91, 'accounting_event' => 'purchase.document.approved'];
+    $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), $data)->assertRedirect();
+
+    $second = [...accountingDraft($f), 'posting_key' => 'purchase_document:91:approved', 'source_type' => 'purchase_document', 'source_id' => 91, 'accounting_event' => 'purchase.document.approved'];
+    $this->post(route('accounting.entry', $f['uuid']), $second)->assertSessionHasErrors('accounting');
+
+    $this->assertDatabaseCount('journal_entries', 1);
+});
+
+test('journal rejects inactive grouped or non movement accounts', function () {
+    $f = accountingFixture();
+    DB::table('ledger_accounts')->where('id', $f['account1'])->update(['is_active' => false]);
+
+    $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), accountingDraft($f))->assertSessionHasErrors('accounting');
+    $this->assertDatabaseCount('journal_entries', 0);
+
+    DB::table('ledger_accounts')->where('id', $f['account1'])->update(['is_active' => true, 'accepts_movements' => false]);
+    $this->post(route('accounting.entry', $f['uuid']), accountingDraft($f))->assertSessionHasErrors('accounting');
+
+    DB::table('ledger_accounts')->where('id', $f['account1'])->update(['accepts_movements' => true, 'is_group' => true]);
+    $this->post(route('accounting.entry', $f['uuid']), accountingDraft($f))->assertSessionHasErrors('accounting');
+    $this->assertDatabaseCount('journal_entries', 0);
+});
+
 test('period overlap out of range dates and opening date are enforced', function () {
     $f = accountingFixture();
     $this->actingAs($f['owner'])->post(route('accounting.period', $f['uuid']), ['name' => 'Overlap', 'starts_on' => '2026-08-31', 'ends_on' => '2026-09-15'])->assertSessionHasErrors('starts_on');
@@ -278,6 +445,65 @@ test('period cannot close with drafts and closing blocks later posting', functio
     $this->assertDatabaseCount('journal_lines', 2);
 });
 
+test('formal reopening keeps close snapshot and requires approval before execution', function () {
+    $f = accountingFixture();
+    $data = accountingDraft($f);
+    $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), $data);
+    $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'void', 'reason' => 'No procede']);
+    $this->post(route('accounting.close', [$f['uuid'], $f['period']]))->assertRedirect();
+    $this->assertDatabaseCount('accounting_period_close_snapshots', 1);
+
+    $company = DB::table('companies')->where('id', $f['companyId'])->first();
+    $org = $f['owner']->organizations()->firstOrFail();
+    $request = app(RequestAccountingPeriodReopening::class)->execute($org, $company, $f['period'], $f['owner'], 'Factura recibida posteriormente');
+    expect($request->ok)->toBeTrue();
+    app(ReopenAccountingPeriod::class)->execute($org, $company, $request->payload['request_id'], $f['owner'])
+        ->ok->toBeFalse();
+})->throws(ValidationException::class);
+
+test('approved reopening reopens period without deleting the previous close', function () {
+    $f = accountingFixture();
+    $data = accountingDraft($f);
+    $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), $data);
+    $this->post(route('accounting.process', [$f['uuid'], $data['request_id']]), ['action' => 'void', 'reason' => 'No procede']);
+    $this->post(route('accounting.close', [$f['uuid'], $f['period']]))->assertRedirect();
+
+    $company = DB::table('companies')->where('id', $f['companyId'])->first();
+    $org = $f['owner']->organizations()->firstOrFail();
+    $request = app(RequestAccountingPeriodReopening::class)->execute($org, $company, $f['period'], $f['owner'], 'Factura recibida posteriormente');
+    app(ApproveAccountingPeriodReopening::class)->execute($org, $company, $request->payload['request_id'], $f['owner']);
+    $result = app(ReopenAccountingPeriod::class)->execute($org, $company, $request->payload['request_id'], $f['owner']);
+
+    expect($result->ok)->toBeTrue();
+    $this->assertDatabaseHas('accounting_periods', ['id' => $f['period'], 'status' => 'reopened', 'closed_at' => null]);
+    $this->assertDatabaseHas('accounting_period_reopening_requests', ['id' => $request->payload['request_id'], 'status' => 'executed']);
+    $this->assertDatabaseCount('accounting_period_close_snapshots', 1);
+    $this->assertDatabaseHas('audit_logs', ['action' => 'accounting_period.reopened']);
+});
+
+test('period reopening routes request approve and execute the formal flow', function () {
+    $f = accountingFixture();
+    $this->actingAs($f['owner'])->post(route('accounting.close', [$f['uuid'], $f['period']]))->assertRedirect();
+
+    $this->post(route('accounting.periods.reopen.request', [$f['uuid'], $f['period']]), [
+        'reason' => 'Factura de proveedor recibida posteriormente',
+    ])->assertRedirect();
+
+    $requestId = DB::table('accounting_period_reopening_requests')->value('id');
+
+    $this->assertDatabaseHas('accounting_periods', ['id' => $f['period'], 'status' => 'reopen_requested']);
+    $this->assertDatabaseHas('accounting_period_reopening_requests', ['id' => $requestId, 'status' => 'pending']);
+
+    $this->post(route('accounting.periods.reopen.approve', [$f['uuid'], $requestId]))->assertRedirect();
+    $this->assertDatabaseHas('accounting_periods', ['id' => $f['period'], 'status' => 'reopen_approved']);
+
+    $this->post(route('accounting.periods.reopen.execute', [$f['uuid'], $requestId]))->assertRedirect();
+
+    $this->assertDatabaseHas('accounting_periods', ['id' => $f['period'], 'status' => 'reopened', 'closed_at' => null]);
+    $this->assertDatabaseHas('accounting_period_reopening_requests', ['id' => $requestId, 'status' => 'executed']);
+    $this->assertDatabaseCount('accounting_period_close_snapshots', 1);
+});
+
 test('posted entries cannot be discarded and linked reversal preserves original and zeroes net balances', function () {
     $f = accountingFixture();
     $data = accountingDraft($f);
@@ -289,7 +515,7 @@ test('posted entries cannot be discarded and linked reversal preserves original 
     $reverse = ['action' => 'reverse', 'period_id' => $f['period'], 'entry_date' => '2026-08-02', 'reason' => 'Corrección documentada'];
     $this->post($url, $reverse)->assertRedirect();
     $this->post($url, $reverse)->assertSessionHasErrors('accounting');
-    expect(DB::table('journal_entries')->where('id', $original->id)->first())->toEqual($original);
+    $this->assertDatabaseHas('journal_entries', ['id' => $original->id, 'status' => 'reversed']);
     $this->assertDatabaseHas('journal_entries', ['reversal_of' => $original->id, 'status' => 'posted', 'number' => 2]);
     $this->get(route('accounting.show', $f['uuid']))->assertInertia(fn (Assert $p) => $p->where('balances', fn ($rows) => collect($rows)->every(fn ($row) => $row['debit_cents'] === $row['credit_cents'])));
     $this->assertDatabaseCount('journal_entries', 2);

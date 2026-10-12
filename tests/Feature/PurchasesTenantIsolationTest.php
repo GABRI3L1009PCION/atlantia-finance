@@ -263,11 +263,9 @@ test('a member assigned to another company in the same organization cannot reach
 
     $this->actingAs($member);
     $endpoints = purchaseTenantEndpoints($target);
-    foreach (array_merge($endpoints['read'], $endpoints['write']) as [$method, $url, $payload]) {
+    // Without access to the target company, every endpoint (including owner-only ones) hides it entirely.
+    foreach (array_merge($endpoints['read'], $endpoints['write'], $endpoints['owner']) as [$method, $url, $payload]) {
         $this->{$method}($url, $payload)->assertNotFound();
-    }
-    foreach ($endpoints['owner'] as [$method, $url, $payload]) {
-        $this->{$method}($url, $payload)->assertForbidden();
     }
 
     expect(purchaseTenantDatabaseFingerprint($target))->toBe($before);

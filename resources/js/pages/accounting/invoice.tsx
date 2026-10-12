@@ -96,6 +96,97 @@ function ReceiptRow({
         </div>
     );
 }
+type CreditNote = {
+    id: number;
+    number: number;
+    issued_on: string;
+    amount_cents: number;
+    reason: string;
+    status: string;
+    void_reason: string | null;
+};
+function CreditNoteRow({
+    note,
+    company,
+    invoice,
+    owner,
+}: {
+    note: CreditNote;
+    company: string;
+    invoice: string;
+    owner: boolean;
+}) {
+    const form = useForm({ reason: '' });
+
+    return (
+        <div className="rounded-xl border border-slate-200 p-4">
+            <div className="flex flex-wrap justify-between gap-3">
+                <div>
+                    <strong>
+                        NC {note.number} · {money(note.amount_cents)}
+                    </strong>
+                    <p className="mt-1 text-sm text-slate-500">
+                        {note.issued_on} · {note.reason}
+                    </p>
+                </div>
+                <span
+                    className={
+                        note.status === 'void'
+                            ? 'text-red-700'
+                            : 'text-emerald-700'
+                    }
+                >
+                    {note.status === 'void' ? 'Anulada' : 'Emitida'}
+                </span>
+            </div>
+            {note.void_reason && (
+                <p className="mt-2 text-sm">Motivo: {note.void_reason}</p>
+            )}
+            {owner && note.status === 'issued' && (
+                <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer text-[#640000]">
+                        Anular nota de crédito
+                    </summary>
+                    <form
+                        className="mt-3 flex flex-wrap gap-2"
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            form.post(
+                                routes.voidCreditNote.url([
+                                    company,
+                                    invoice,
+                                    note.id,
+                                ]),
+                                { preserveScroll: true },
+                            );
+                        }}
+                    >
+                        <label className="flex-1">
+                            Motivo obligatorio
+                            <input
+                                required
+                                minLength={5}
+                                maxLength={500}
+                                className={field}
+                                value={form.data.reason}
+                                onChange={(e) =>
+                                    form.setData('reason', e.target.value)
+                                }
+                            />
+                        </label>
+                        <button
+                            className={secondary}
+                            disabled={form.processing}
+                        >
+                            Anular
+                        </button>
+                        <Errors errors={form.errors} />
+                    </form>
+                </details>
+            )}
+        </div>
+    );
+}
 type Props = {
     company: Company;
     invoice: {
@@ -108,6 +199,9 @@ type Props = {
         issued_on: string;
         due_on: string;
         void_reason: string | null;
+        currency: string;
+        exchange_rate: string;
+        foreign_total_cents: number | null;
     };
     lines: {
         id: number;
@@ -116,6 +210,9 @@ type Props = {
         unit_cents: number;
     }[];
     receipts: Receipt[];
+    creditNotes: CreditNote[];
+    credited: number;
+    canCredit: boolean;
     paid: number;
     isOwner: boolean;
     canWrite: boolean;
@@ -126,6 +223,9 @@ export default function Invoice({
     invoice: i,
     lines,
     receipts,
+    creditNotes,
+    credited,
+    canCredit,
     paid,
     isOwner,
     canWrite,
@@ -139,7 +239,8 @@ export default function Invoice({
         received_on: today,
         reference: '',
     });
-    const remaining = Number(i.total_cents) - paid;
+    const credit = useForm({ amount: '', issued_on: today, reason: '' });
+    const remaining = Number(i.total_cents) - paid - credited;
 
     return (
         <AccountingSection
@@ -183,6 +284,16 @@ export default function Invoice({
                 {i.void_reason && (
                     <p className="mt-2">Motivo: {i.void_reason}</p>
                 )}
+                {i.currency !== 'GTQ' && i.foreign_total_cents !== null && (
+                    <p className="mt-2 text-sm text-slate-600">
+                        Documento en {i.currency}: {i.currency}{' '}
+                        {(i.foreign_total_cents / 100).toLocaleString('es-GT', {
+                            minimumFractionDigits: 2,
+                        })}{' '}
+                        al tipo de cambio {Number(i.exchange_rate)} registrado.
+                        Los montos se muestran en GTQ.
+                    </p>
+                )}
                 <div className="mt-5 overflow-x-auto">
                     <table className="w-full text-left text-sm">
                         <thead className="bg-[#faf4f4]">
@@ -218,10 +329,11 @@ export default function Invoice({
                         </tbody>
                     </table>
                 </div>
-                <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="mt-6 grid gap-4 sm:grid-cols-4">
                     {[
                         ['Total', Number(i.total_cents)],
                         ['Cobrado', paid],
+                        ['Notas de crédito y ajustes', credited],
                         [
                             'Saldo pendiente',
                             i.status === 'void' ? 0 : remaining,
@@ -370,7 +482,101 @@ export default function Invoice({
                     )}
                 </div>
             </Card>
-            {isOwner && i.status !== 'void' && paid === 0 && (
+            {canCredit && i.status === 'issued' && remaining > 0 && (
+                <Card title="Emitir nota de crédito">
+                    <p className="mb-3 text-sm text-slate-500">
+                        Reduce el saldo por cobrar y revierte ingreso e IVA en
+                        proporción; el asiento queda en borrador para revisión.
+                    </p>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            credit.post(
+                                routes.creditNote.url([
+                                    company.public_id,
+                                    i.public_id,
+                                ]),
+                                {
+                                    preserveScroll: true,
+                                    onSuccess: () =>
+                                        credit.reset('amount', 'reason'),
+                                },
+                            );
+                        }}
+                    >
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            <label>
+                                Importe Q
+                                <input
+                                    required
+                                    type="number"
+                                    min="0.01"
+                                    max={remaining / 100}
+                                    step="0.01"
+                                    className={field}
+                                    value={credit.data.amount}
+                                    onChange={(e) =>
+                                        credit.setData('amount', e.target.value)
+                                    }
+                                />
+                            </label>
+                            <label>
+                                Fecha
+                                <input
+                                    required
+                                    type="date"
+                                    min={i.issued_on}
+                                    max={today}
+                                    className={field}
+                                    value={credit.data.issued_on}
+                                    onChange={(e) =>
+                                        credit.setData(
+                                            'issued_on',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </label>
+                            <label>
+                                Motivo
+                                <input
+                                    required
+                                    minLength={5}
+                                    maxLength={500}
+                                    className={field}
+                                    value={credit.data.reason}
+                                    onChange={(e) =>
+                                        credit.setData('reason', e.target.value)
+                                    }
+                                />
+                            </label>
+                        </div>
+                        <Errors errors={credit.errors} />
+                        <button
+                            className={`${secondary} mt-4`}
+                            disabled={credit.processing}
+                        >
+                            Emitir nota de crédito
+                        </button>
+                    </form>
+                </Card>
+            )}
+            {creditNotes.length > 0 && (
+                <Card title="Notas de crédito">
+                    <div className="space-y-3">
+                        {creditNotes.map((note) => (
+                            <CreditNoteRow
+                                key={note.id}
+                                note={note}
+                                company={company.public_id}
+                                invoice={i.public_id}
+                                owner={isOwner}
+                            />
+                        ))}
+                    </div>
+                </Card>
+            )}
+            {isOwner && i.status !== 'void' && paid === 0 && credited === 0 && (
                 <Card title="Anular comprobante">
                     <p className="mb-3 text-sm text-slate-500">
                         Se conserva el documento y el motivo en el historial.

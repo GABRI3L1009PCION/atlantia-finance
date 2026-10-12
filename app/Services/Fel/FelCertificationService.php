@@ -6,13 +6,16 @@ namespace App\Services\Fel;
 
 use App\Jobs\GenerateInvoicePdfJob;
 use App\Models\FelDocument;
+use App\Models\Organization;
+use App\Models\User;
+use App\Services\SalesCreditNoteService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
 class FelCertificationService
 {
-    public function __construct(private FelProviderResolver $providers, private FelDocumentBuilder $builder, private FelAudit $audit) {}
+    public function __construct(private FelProviderResolver $providers, private FelDocumentBuilder $builder, private FelAudit $audit, private SalesCreditNoteService $creditNotes) {}
 
     public function certify(int $companyId, string $uuid): void
     {
@@ -58,6 +61,12 @@ class FelCertificationService
                 'certified_at' => $response['certification_timestamp'], 'error_code' => null,
             ])->save();
             $this->audit->record($doc, 'certified');
+            // A certified FEL credit note lowers the receivable of the internal invoice it credits (once).
+            if ($doc->document_type === 'NCRE' && $doc->sales_invoice_id !== null && ! DB::table('sales_credit_notes')->where('fel_document_id', $doc->id)->exists()) {
+                $organization = Organization::findOrFail($doc->organization_id);
+                $creditNote = $this->creditNotes->issue($organization, User::findOrFail($doc->created_by), $doc->company_id, (int) $doc->sales_invoice_id, (int) $doc->total_cents, $doc->issued_on->toDateString(), 'Nota de crédito FEL '.$doc->fel_series.'-'.$doc->fel_number);
+                DB::table('sales_credit_notes')->where('id', $creditNote)->update(['fel_document_id' => $doc->id]);
+            }
             GenerateInvoicePdfJob::dispatch($companyId, $uuid)->afterCommit();
         });
     }

@@ -7,7 +7,9 @@ use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\User;
 use App\Notifications\WorkspaceInvitation;
+use App\Services\WorkManagement\OfficeInvitationService;
 use App\Services\WorkspaceContext;
+use App\Support\PlatformStatus;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -114,7 +116,7 @@ class InvitationController extends Controller
             $organization = Organization::query()->lockForUpdate()->findOrFail($record->organization_id);
             $record = Invitation::query()->lockForUpdate()->findOrFail($record->id);
             abort_unless($record->status === 'pending' && $record->expires_at->isFuture(), 410);
-            abort_unless($organization->status === 'active' && $organization->subscriptions()->where('status', 'active')->exists(), 403);
+            abort_unless(in_array($organization->status, PlatformStatus::ORGANIZATION_ACCESS, true) && $organization->subscriptions()->whereIn('status', PlatformStatus::SUBSCRIPTION_ACCESS)->exists(), 403);
             $occupied = $organization->users()->wherePivot('status', 'active')->count();
             $reserved = $organization->invitations()->where('status', 'pending')->where('expires_at', '>', now())->count();
             if ($occupied + $reserved > $context->limit($organization, 'users')) {
@@ -126,13 +128,23 @@ class InvitationController extends Controller
                 $user->markEmailAsVerified();
                 event(new Verified($user));
             }
-            $organization->users()->attach($user->id, ['role' => 'member', 'status' => 'active', 'joined_at' => now(), 'invited_by' => $record->invited_by]);
-            foreach ($record->offices()->where('organization_id', $organization->id)->where('status', 'active')->get() as $office) {
-                $office->users()->syncWithoutDetaching([$user->id => ['role' => 'member', 'status' => 'active', 'assigned_at' => now()]]);
+            // The initial owner of an organization onboarded from the Control Center is invited with the owner role.
+            $isOwner = $record->role === 'owner';
+            $organization->users()->attach($user->id, ['role' => $isOwner ? 'owner' : 'member', 'status' => 'active', 'joined_at' => now(), 'invited_by' => $record->invited_by]);
+            foreach ($record->offices()->where('offices.organization_id', $organization->id)->where('status', 'active')->get() as $office) {
+                $office->users()->syncWithoutDetaching([$user->id => ['role' => $isOwner ? 'manager' : 'member', 'status' => 'active', 'assigned_at' => now()]]);
             }
+            app(OfficeInvitationService::class)->applyAcceptance($organization, $record, $user);
             $record->update(['status' => 'accepted', 'accepted_at' => now()]);
         });
 
-        return $request->user() ? to_route('dashboard') : to_route('login')->with('status', 'Invitación aceptada. Inicia sesión para acceder a tu equipo.');
+        if ($request->user()) {
+            // An existing user who joins another firm lands directly in it; the switcher lets them go back.
+            $request->user()->forceFill(['current_organization_id' => $record->organization_id])->save();
+
+            return to_route('dashboard');
+        }
+
+        return to_route('login')->with('status', 'Invitación aceptada. Inicia sesión para acceder a tu equipo.');
     }
 }

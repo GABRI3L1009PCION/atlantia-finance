@@ -32,6 +32,10 @@ import {
     secondary,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
+import {
+    FiscalDocumentFields,
+    TaxTreatmentSelect,
+} from '@/components/fiscal/fiscal-document-fields';
 import * as routes from '@/routes/accounting';
 
 type Invoice = {
@@ -59,6 +63,7 @@ type Customer = {
     name: string;
     tax_id: string | null;
     email: string | null;
+    payment_terms_days: number | null;
     invoice_count: number;
 };
 export default function Sales({
@@ -69,6 +74,7 @@ export default function Sales({
     portfolio,
     canWrite,
     today,
+    vatRegime,
 }: {
     company: Company;
     customers: Customer[];
@@ -91,7 +97,9 @@ export default function Sales({
     };
     canWrite: boolean;
     today: string;
+    vatRegime: string;
 }) {
+    const isSmallTaxpayer = vatRegime === 'small_taxpayer';
     const [panel, setPanel] = useState<'guide' | 'customer' | 'invoice' | null>(
         null,
     );
@@ -111,7 +119,19 @@ export default function Sales({
         customer_id: '',
         issued_on: today,
         due_on: '',
-        lines: [{ description: '', quantity: '1', unit_price: '' }],
+        currency: 'GTQ',
+        fiscal_document_type: isSmallTaxpayer ? 'FPEQ' : 'FACT',
+        fiscal_series: '',
+        fiscal_number: '',
+        fiscal_authorization: '',
+        lines: [
+            {
+                description: '',
+                quantity: '1',
+                unit_price: '',
+                tax_treatment: 'goods',
+            },
+        ],
     });
 
     const statusLabel = (invoice: Invoice) => {
@@ -929,7 +949,6 @@ export default function Sales({
                                             <label>
                                                 Vencimiento
                                                 <input
-                                                    required
                                                     type="date"
                                                     min={draft.data.issued_on}
                                                     className={field}
@@ -941,14 +960,84 @@ export default function Sales({
                                                         )
                                                     }
                                                 />
+                                                <span className="text-xs text-slate-500">
+                                                    {(() => {
+                                                        const terms =
+                                                            customers.find(
+                                                                (c) =>
+                                                                    String(
+                                                                        c.id,
+                                                                    ) ===
+                                                                    draft.data
+                                                                        .customer_id,
+                                                            )?.payment_terms_days;
+
+                                                        return terms === null ||
+                                                            terms === undefined
+                                                            ? 'Obligatorio: el cliente no tiene plazo de pago.'
+                                                            : `Vacío = plazo del cliente (${terms} días).`;
+                                                    })()}
+                                                </span>
                                             </label>
+                                            <label>
+                                                Moneda del documento
+                                                <select
+                                                    className={field}
+                                                    value={draft.data.currency}
+                                                    onChange={(e) =>
+                                                        draft.setData(
+                                                            'currency',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                >
+                                                    <option value="GTQ">
+                                                        Quetzales (GTQ)
+                                                    </option>
+                                                    <option value="USD">
+                                                        Dólares (USD)
+                                                    </option>
+                                                    <option value="EUR">
+                                                        Euros (EUR)
+                                                    </option>
+                                                </select>
+                                                {draft.data.currency !==
+                                                    'GTQ' && (
+                                                    <span className="text-xs text-slate-500">
+                                                        Precios en{' '}
+                                                        {draft.data.currency};
+                                                        se convierten a GTQ con
+                                                        el tipo de cambio
+                                                        registrado en Parámetros
+                                                        fiscales para la fecha
+                                                        de emisión.
+                                                    </span>
+                                                )}
+                                            </label>
+                                            <FiscalDocumentFields
+                                                data={draft.data}
+                                                field={field}
+                                                types={
+                                                    isSmallTaxpayer
+                                                        ? ['FPEQ']
+                                                        : ['FACT', 'FCAM']
+                                                }
+                                                onChange={(key, value) =>
+                                                    draft.setData(key, value)
+                                                }
+                                                hint={
+                                                    isSmallTaxpayer
+                                                        ? 'La empresa es pequeño contribuyente: sus ventas no separan IVA débito.'
+                                                        : 'Los precios incluyen IVA. El sistema separa el IVA débito fiscal por línea.'
+                                                }
+                                            />
                                         </div>
                                         <div className="mt-6 space-y-3">
                                             {draft.data.lines.map(
                                                 (line, index) => (
                                                     <div
                                                         key={index}
-                                                        className="grid items-end gap-3 rounded-xl bg-[#faf8f7] p-4 sm:grid-cols-[1fr_110px_150px_auto]"
+                                                        className="grid items-end gap-3 rounded-xl bg-[#faf8f7] p-4 sm:grid-cols-[1fr_110px_150px_130px_auto]"
                                                     >
                                                         {(
                                                             [
@@ -964,7 +1053,7 @@ export default function Sales({
                                                                     : key ===
                                                                         'quantity'
                                                                       ? 'Cantidad'
-                                                                      : 'Precio unitario Q'}
+                                                                      : `Precio unitario ${draft.data.currency}`}
                                                                 <input
                                                                     required
                                                                     type={
@@ -1024,6 +1113,36 @@ export default function Sales({
                                                                 />
                                                             </label>
                                                         ))}
+                                                        <label>
+                                                            Clasificación
+                                                            <TaxTreatmentSelect
+                                                                field={field}
+                                                                value={
+                                                                    line.tax_treatment
+                                                                }
+                                                                onChange={(
+                                                                    value,
+                                                                ) =>
+                                                                    draft.setData(
+                                                                        'lines',
+                                                                        draft.data.lines.map(
+                                                                            (
+                                                                                l,
+                                                                                n,
+                                                                            ) =>
+                                                                                n ===
+                                                                                index
+                                                                                    ? {
+                                                                                          ...l,
+                                                                                          tax_treatment:
+                                                                                              value,
+                                                                                      }
+                                                                                    : l,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                            />
+                                                        </label>
                                                         <button
                                                             type="button"
                                                             aria-label={`Eliminar concepto ${index + 1}`}
@@ -1071,6 +1190,8 @@ export default function Sales({
                                                             description: '',
                                                             quantity: '1',
                                                             unit_price: '',
+                                                            tax_treatment:
+                                                                'goods',
                                                         },
                                                     ])
                                                 }

@@ -8,12 +8,15 @@ use App\Jobs\GenerateInvoicePdfJob;
 use App\Jobs\SendInvoiceEmailJob;
 use App\Models\FelDocument;
 use App\Models\Organization;
+use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\Fel\FelAccountingService;
 use App\Services\Fel\FelCalculator;
 use App\Services\Fel\FelCancellationService;
+use App\Services\Fel\FelCertifiers;
 use App\Services\Fel\FelDocumentService;
 use App\Services\Fel\FelDocumentStatus;
+use App\Services\Fel\FelIssuerSettings;
 use App\Services\Fel\FelPdfService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\JsonResponse;
@@ -28,7 +31,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FelDocumentController extends Controller
 {
-    public function __construct(private WorkspaceContext $context, private AccountingService $accounting, private FelDocumentService $documents) {}
+    public function __construct(
+        private WorkspaceContext $context,
+        private AccountingService $accounting,
+        private FelDocumentService $documents,
+        private FelIssuerSettings $issuers,
+    ) {}
 
     public function index(Request $request, string $company): Response
     {
@@ -72,14 +80,20 @@ class FelDocumentController extends Controller
             'company' => $record, 'companies' => $this->accounting->companies($organization, $request->user())->get(),
             'documents' => $query->latest('id')->paginate(15)->withQueryString(), 'stats' => $stats, 'filters' => $filters,
             'customers' => DB::table('sales_customers')->where('company_id', $record->id)->orderBy('name')->get(),
-            'canWrite' => $this->canWrite($organization, $record->id, $request->user()->id), 'notice' => config('fel.notice'),
-            'canManage' => $organization->pivot->role === 'owner',
+            'canWrite' => $this->canWrite($organization, $record->id, $request->user()), 'notice' => config('fel.notice'),
+            'canManage' => $this->accounting->canModule($organization, $record->id, $request->user(), 'fel.settings'),
+            'issuer' => $this->issuers->forCompany($record),
+            'certification' => $this->issuers->certifierFor($record),
+            'certifiers' => collect(FelCertifiers::CERTIFIERS)->map(fn (array $definition, string $code): array => ['code' => $code, ...$definition])->values()->all(),
+            'vatAffiliations' => FelCertifiers::VAT_AFFILIATIONS,
+            'isPlatform' => $company === $this->issuers->platformCompanyUuid(),
+            'today' => now()->toDateString(),
         ]);
     }
 
     public function quote(Request $request, string $company, FelCalculator $calculator): JsonResponse
     {
-        [, $record] = $this->scope($request, $company, true);
+        [, $record] = $this->scope($request, $company, 'fel.manage');
         $data = $request->validate(FelDocumentService::rules());
         DB::table('sales_customers')->where('company_id', $record->id)->where('id', $data['customer_id'])->firstOrFail();
         $result = $calculator->calculate($record->id, $data['issued_on'], $data['lines']);
@@ -90,14 +104,14 @@ class FelDocumentController extends Controller
 
     public function create(Request $request, string $company): Response
     {
-        [, $record] = $this->scope($request, $company, true);
+        [, $record] = $this->scope($request, $company, 'fel.manage');
 
         return $this->form($record);
     }
 
     public function edit(Request $request, string $company, string $document): Response
     {
-        [, $record] = $this->scope($request, $company, true);
+        [, $record] = $this->scope($request, $company, 'fel.manage');
         $doc = $this->document($record, $document);
         abort_unless($doc->status === FelDocumentStatus::Draft, 422);
 
@@ -106,7 +120,7 @@ class FelDocumentController extends Controller
 
     public function store(Request $request, string $company): RedirectResponse
     {
-        [$organization, $record] = $this->scope($request, $company, true);
+        [$organization, $record] = $this->scope($request, $company, 'fel.manage');
         $doc = $this->documents->save($organization, $request->user(), $record, $request->validate(FelDocumentService::rules()));
 
         return to_route('accounting.fel.show', [$company, $doc->public_id]);
@@ -114,7 +128,7 @@ class FelDocumentController extends Controller
 
     public function update(Request $request, string $company, string $document): RedirectResponse
     {
-        [$organization, $record] = $this->scope($request, $company, true);
+        [$organization, $record] = $this->scope($request, $company, 'fel.manage');
         $doc = $this->documents->save($organization, $request->user(), $record, $request->validate(FelDocumentService::rules()), $document);
 
         return to_route('accounting.fel.show', [$company, $doc->public_id]);
@@ -127,7 +141,7 @@ class FelDocumentController extends Controller
 
         return Inertia::render('accounting/fel/show', [
             'company' => $record, 'document' => $doc, 'notice' => config('fel.notice'),
-            'canWrite' => $this->canWrite($organization, $record->id, $request->user()->id),
+            'canWrite' => $this->canWrite($organization, $record->id, $request->user()),
             'history' => DB::table('audit_logs')->where('organization_id', $organization->id)
                 ->where('auditable_type', 'fel_documents')->where('auditable_id', $doc->id)->orderByDesc('id')
                 ->get(['action', 'user_id', 'occurred_at']),
@@ -138,7 +152,7 @@ class FelDocumentController extends Controller
 
     public function certify(Request $request, string $company, string $document): RedirectResponse
     {
-        [, $record] = $this->scope($request, $company, true);
+        [, $record] = $this->scope($request, $company, 'fel.certify');
         $this->documents->requestCertification($this->document($record, $document), $request->user()->id);
 
         return back();
@@ -159,7 +173,7 @@ class FelDocumentController extends Controller
 
     public function email(Request $request, string $company, string $document): RedirectResponse
     {
-        [, $record] = $this->scope($request, $company, true);
+        [, $record] = $this->scope($request, $company, 'fel.manage');
         $doc = $this->document($record, $document);
         abort_unless($doc->status === FelDocumentStatus::Certified && $doc->pdf_path && ! $doc->email_sent_at, 422);
         SendInvoiceEmailJob::dispatch($record->id, $document)->afterCommit();
@@ -169,7 +183,7 @@ class FelDocumentController extends Controller
 
     public function regeneratePdf(Request $request, string $company, string $document): RedirectResponse
     {
-        [, $record] = $this->scope($request, $company, true);
+        [, $record] = $this->scope($request, $company, 'fel.manage');
         $doc = $this->document($record, $document);
         abort_unless(in_array($doc->status, [FelDocumentStatus::Certified, FelDocumentStatus::Cancelled], true), 422);
         GenerateInvoicePdfJob::dispatch($record->id, $document)->afterCommit();
@@ -179,7 +193,7 @@ class FelDocumentController extends Controller
 
     public function cancel(Request $request, string $company, string $document, FelCancellationService $service): RedirectResponse
     {
-        [$organization, $record] = $this->scope($request, $company, true);
+        [$organization, $record] = $this->scope($request, $company, 'fel.cancel');
         $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:500']]);
         $service->cancel($this->document($record, $document), $organization, $request->user(), $data['reason']);
 
@@ -188,7 +202,7 @@ class FelDocumentController extends Controller
 
     public function accounting(Request $request, string $company, string $document, FelAccountingService $service): RedirectResponse
     {
-        [$organization, $record] = $this->scope($request, $company, true);
+        [$organization, $record] = $this->scope($request, $company, 'fel.accounting');
         $this->context->requireFeature($organization, 'basic_accounting');
         $service->draft($this->document($record, $document), $organization, $request->user());
 
@@ -204,21 +218,28 @@ class FelDocumentController extends Controller
     {
         return Inertia::render('accounting/fel/create', ['company' => $company, 'document' => $document,
             'customers' => DB::table('sales_customers')->where('company_id', $company->id)->orderBy('name')->get(),
+            'invoices' => DB::table('sales_invoices')->where('company_id', $company->id)->where('status', 'issued')->orderByDesc('number')->limit(500)->get(['id', 'number', 'sales_customer_id', 'total_cents', 'issued_on']),
             'today' => now()->toDateString(), 'notice' => config('fel.notice')]);
     }
 
     /** @return array{Organization, stdClass} */
-    private function scope(Request $request, string $company, bool $write = false): array
+    private function scope(Request $request, string $company, string $permission = 'fel.view'): array
     {
         $organization = $this->context->organization($request->user());
         $this->context->requireFeature($organization, 'basic_invoicing');
+        $record = $this->accounting->company($organization, $request->user(), $company, ! $this->isReadPermission($permission));
+        $this->accounting->assertModule($organization, $record->id, $request->user(), $permission);
 
-        return [$organization, $this->accounting->company($organization, $request->user(), $company, $write)];
+        return [$organization, $record];
     }
 
-    private function canWrite(Organization $organization, int $companyId, int $userId): bool
+    private function canWrite(Organization $organization, int $companyId, User $user): bool
     {
-        return $organization->pivot->role === 'owner' || DB::table('company_user')->where('company_id', $companyId)
-            ->where('user_id', $userId)->where('permission', 'editor')->exists();
+        return $this->accounting->canModule($organization, $companyId, $user, 'fel.manage');
+    }
+
+    private function isReadPermission(string $permission): bool
+    {
+        return str_ends_with($permission, '.view') || str_ends_with($permission, '.export');
     }
 }

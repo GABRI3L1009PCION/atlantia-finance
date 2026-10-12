@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Organization;
 use App\Models\User;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -11,6 +13,13 @@ use stdClass;
 
 class AccountingAutomationService
 {
+    private const DEFAULT_RULES = [
+        'sales_invoice.origin' => ['receivable_account_id', 'revenue_account_id'],
+        'sales_receipt.origin' => ['cash_account_id', 'receivable_account_id'],
+        'purchase_document.origin' => ['default_expense_account_id', 'payable_account_id'],
+        'purchase_payment.origin' => ['payable_account_id', 'cash_account_id'],
+    ];
+
     public function __construct(private AccountingService $accounting) {}
 
     /** Create default mappings from the starter chart without overwriting company choices. */
@@ -18,9 +27,12 @@ class AccountingAutomationService
     {
         $mapping = DB::table('company_accounting_mappings')->where('company_id', $companyId)->first();
         if ($mapping) {
+            $this->ensureDefaultRules($companyId);
+
             return $mapping;
         }
 
+        $this->accounting->installDefaultChart($companyId);
         $accounts = DB::table('ledger_accounts')->where('company_id', $companyId)
             ->whereIn('code', ['1102', '1103', '2102', '4101', '5201'])->pluck('id', 'code');
         if ($accounts->count() !== 5) {
@@ -37,8 +49,26 @@ class AccountingAutomationService
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        $this->ensureDefaultRules($companyId);
 
         return DB::table('company_accounting_mappings')->where('company_id', $companyId)->first();
+    }
+
+    public function ensureDefaultRules(int $companyId): void
+    {
+        $now = now();
+        foreach (self::DEFAULT_RULES as $event => [$debit, $credit]) {
+            DB::table('accounting_posting_rules')->insertOrIgnore([
+                'company_id' => $companyId,
+                'event' => $event,
+                'debit_account_key' => $debit,
+                'credit_account_key' => $credit,
+                'is_active' => true,
+                'metadata' => json_encode(['system_default' => true], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
     }
 
     /**
@@ -63,6 +93,89 @@ class AccountingAutomationService
             ['company_id' => $companyId],
             [...$data, 'updated_at' => now(), ...($exists ? [] : ['created_at' => now()])],
         );
+        $this->ensureDefaultRules($companyId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $dimensions
+     * @return list<array{account_id: int, debit: string, credit: string, description?: string, third_party_type?: string, third_party_id?: int, cost_center?: string, project?: string}>
+     */
+    public function ruleLines(int $companyId, string $event, int $amountCents, array $dimensions = []): array
+    {
+        if ($amountCents <= 0) {
+            throw ValidationException::withMessages(['accounting' => 'La regla contable requiere un importe mayor que cero.']);
+        }
+        $mapping = $this->ensureMapping($companyId);
+        if (! $mapping) {
+            throw ValidationException::withMessages(['accounting' => 'Configura el mapeo contable antes de generar asientos automáticos.']);
+        }
+        $this->ensureDefaultRules($companyId);
+        $rule = DB::table('accounting_posting_rules')->where('company_id', $companyId)->where('event', $event)->where('is_active', true)->first();
+        if (! $rule) {
+            throw ValidationException::withMessages(['accounting' => "No existe una regla activa para el evento {$event}."]);
+        }
+        foreach ([$rule->debit_account_key, $rule->credit_account_key] as $key) {
+            if (! isset($mapping->{$key})) {
+                throw ValidationException::withMessages(['accounting' => "La regla {$event} usa una cuenta no configurada."]);
+            }
+        }
+        $amount = $this->decimal($amountCents);
+        $common = array_filter([
+            'description' => $dimensions['description'] ?? null,
+            'third_party_type' => $dimensions['third_party_type'] ?? null,
+            'third_party_id' => $dimensions['third_party_id'] ?? null,
+            'cost_center' => $dimensions['cost_center'] ?? null,
+            'project' => $dimensions['project'] ?? null,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        return [
+            [...$common, 'account_id' => (int) $mapping->{$rule->debit_account_key}, 'debit' => $amount, 'credit' => '0'],
+            [...$common, 'account_id' => (int) $mapping->{$rule->credit_account_key}, 'debit' => '0', 'credit' => $amount],
+        ];
+    }
+
+    /**
+     * Rule lines for a gross amount whose credit side includes a tax: the rule's credit account receives the
+     * net amount and the tax goes to its own liability account (e.g. revenue + IVA débito fiscal).
+     *
+     * @param  array<string, mixed>  $dimensions
+     * @return list<array<string, mixed>>
+     */
+    public function ruleLinesWithTax(int $companyId, string $event, int $grossCents, int $taxCents, int $taxAccountId, array $dimensions = []): array
+    {
+        if ($taxCents <= 0 || $taxCents >= $grossCents) {
+            throw ValidationException::withMessages(['accounting' => 'El impuesto debe ser mayor que cero y menor que el total del documento.']);
+        }
+
+        [$debit, $credit] = $this->ruleLines($companyId, $event, $grossCents, $dimensions);
+        $credit['credit'] = $this->decimal($grossCents - $taxCents);
+
+        return [
+            $debit,
+            $credit,
+            [...Arr::except($credit, ['account_id', 'credit', 'description']), 'account_id' => $taxAccountId, 'debit' => '0',
+                'credit' => $this->decimal($taxCents), 'description' => 'IVA débito fiscal'],
+        ];
+    }
+
+    /** @param array<string, mixed> $dimensions */
+    public function draftFromRule(
+        Organization $organization,
+        User $user,
+        int $companyId,
+        string $sourceType,
+        int $sourceId,
+        string $date,
+        string $description,
+        string $reference,
+        int $amountCents,
+        array $dimensions = [],
+        ?string $event = null,
+    ): ?int {
+        $eventName = $event ?? "{$sourceType}.origin";
+
+        return $this->draft($organization, $user, $companyId, $sourceType, $sourceId, $date, $description, $reference,
+            $this->ruleLines($companyId, $eventName, $amountCents, ['description' => $description, ...$dimensions]), $eventName);
     }
 
     /**
@@ -80,6 +193,7 @@ class AccountingAutomationService
         string $description,
         string $reference,
         array $lines,
+        ?string $event = null,
     ): ?int {
         $existing = DB::table('accounting_source_entries')->where([
             'company_id' => $companyId,
@@ -90,43 +204,55 @@ class AccountingAutomationService
         if ($existing) {
             return (int) $existing;
         }
+        $postingKey = "{$sourceType}:{$sourceId}:origin";
+        $existing = DB::table('journal_entries')->where('posting_key', $postingKey)->value('id');
+        if ($existing) {
+            return (int) $existing;
+        }
 
         $period = DB::table('accounting_periods')->where('company_id', $companyId)
             ->whereNull('closed_at')->whereDate('starts_on', '<=', $date)->whereDate('ends_on', '>=', $date)
             ->orderByDesc('starts_on')->first();
         if (! $period) {
-            return null;
+            $day = Carbon::parse($date)->startOfDay();
+            $day->locale('es');
+            $periodId = DB::table('accounting_periods')->insertGetId([
+                'company_id' => $companyId,
+                'name' => $day->translatedFormat('F Y'),
+                'starts_on' => $day->copy()->startOfMonth()->toDateString(),
+                'ends_on' => $day->copy()->endOfMonth()->toDateString(),
+                'status' => 'open',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $period = DB::table('accounting_periods')->where('id', $periodId)->first();
         }
 
+        $eventName = $event ?? "{$sourceType}.origin";
         $normalized = $this->accounting->lines($companyId, $lines);
-        $entryId = DB::table('journal_entries')->insertGetId([
-            'public_id' => (string) Str::uuid(),
-            'accounting_period_id' => $period->id,
+        $entryId = $this->accounting->createDraft($organization, $user, (object) ['id' => $companyId], [
+            'request_id' => (string) Str::uuid(),
+            'period_id' => $period->id,
             'entry_date' => $date,
             'description' => $description,
             'reference' => $reference,
-            'kind' => 'standard',
-            'status' => 'draft',
-            'created_by' => $user->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-        DB::table('journal_lines')->insert(array_map(fn (array $line): array => [...$line, 'journal_entry_id' => $entryId], $normalized));
-        DB::table('accounting_source_entries')->insert([
-            'company_id' => $companyId,
+            'kind' => 'automatic',
             'source_type' => $sourceType,
             'source_id' => $sourceId,
-            'event' => 'origin',
-            'journal_entry_id' => $entryId,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+            'accounting_event' => $eventName,
+            'posting_key' => $postingKey,
+        ], $normalized);
         $this->accounting->audit($organization, $user, 'entry.automated.drafted', 'journal_entries', $entryId, [
             'source_type' => $sourceType,
             'source_id' => $sourceId,
         ]);
 
         return $entryId;
+    }
+
+    private function decimal(int $cents): string
+    {
+        return number_format($cents / 100, 2, '.', '');
     }
 
     /** Preserve the original movement. Drafts are voided; posted entries receive a draft reversal. */

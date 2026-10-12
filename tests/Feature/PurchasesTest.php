@@ -60,11 +60,28 @@ function projectDatabaseTables(): array
         'subscription_items', 'usage_records', 'payments', 'payment_attempts', 'webhook_events',
         'invitations', 'invitation_office', 'audit_logs', 'companies', 'company_user', 'ledger_accounts',
         'accounting_periods', 'journal_entries', 'journal_lines', 'journal_entry_documents',
+        'accounting_period_close_snapshots', 'accounting_period_reopening_requests',
         'sales_customers', 'sales_invoices', 'sales_invoice_lines', 'sales_receipts',
-        'company_accounting_mappings', 'purchase_suppliers', 'purchase_documents',
+        'company_accounting_mappings', 'accounting_posting_rules', 'purchase_suppliers', 'purchase_documents',
         'purchase_document_lines', 'purchase_payments', 'purchase_document_files',
         'accounting_source_entries', 'bank_accounts', 'bank_transactions',
         'operational_records', 'operational_record_events', 'operational_record_files',
+        'workspace_permissions', 'organization_billing_profiles', 'company_fiscal_profiles', 'fiscal_taxes', 'fiscal_tax_rules',
+        'company_exchange_rates', 'company_fel_settings', 'fel_sequences', 'fel_documents', 'fel_document_lines',
+        'fel_subscription_requests', 'fel_mock_receipts', 'platform_fel_issuer', 'workspace_roles',
+        'workspace_role_permissions', 'user_role_assignments', 'company_assignments', 'task_templates', 'work_tasks',
+        'task_comments', 'company_period_reviews', 'company_period_work_statuses', 'work_notifications', 'vat_book_periods',
+        'operational_incidents', 'communications', 'review_observations', 'fiscal_obligations',
+        'payment_instructions', 'payment_instruction_items', 'payment_approvals', 'treasury_receipts', 'bank_transfers', 'bank_reconciliations', 'cash_counts', 'sales_credit_notes', 'collection_activities', 'promises_to_pay', 'receivable_disputes', 'collection_reminder_templates', 'collection_reminders', 'receivable_adjustments', 'payment_proposals', 'payment_proposal_items', 'supplier_advances', 'supplier_advance_applications', 'purchase_credit_notes', 'payable_disputes', 'payable_adjustments',
+        'luzma_conversations', 'luzma_messages', 'luzma_actions', 'luzma_reminders', 'luzma_reminder_deliveries', 'luzma_insights',
+        'normative_documents', 'normative_sections',
+        'training_courses', 'training_enrollments', 'training_certifications', 'training_needs',
+        'crm_prospects', 'crm_contracts', 'crm_interactions', 'crm_invoices', 'firm_profiles', 'integration_connections', 'integration_events',
+        'payroll_employees', 'payroll_parameters', 'payroll_concepts', 'payroll_account_mappings', 'payroll_periods', 'payroll_novelties', 'payroll_loans',
+        'payroll_results', 'payroll_result_lines', 'payroll_payment_orders', 'payroll_receipts',
+        'audit_controls', 'audit_engagements', 'audit_engagement_members', 'audit_plans', 'audit_risks', 'audit_control_assessments', 'audit_programs', 'audit_procedures',
+        'audit_samples', 'audit_sample_items', 'audit_findings', 'audit_evidence_requests', 'audit_finding_responses', 'audit_working_papers', 'audit_reports', 'audit_access_grants',
+        'client_company_access', 'client_requests', 'client_documents', 'client_document_versions', 'client_approval_requests', 'published_reports', 'client_conversations', 'client_messages', 'company_data_change_requests', 'api_tokens', 'api_request_logs', 'webhook_endpoints', 'webhook_deliveries', 'platform_staff', 'platform_audit_events', 'plan_versions', 'entitlement_overrides', 'feature_flags', 'feature_flag_targets', 'saas_invoices', 'saas_invoice_lines', 'saas_credits', 'usage_snapshots', 'platform_settings', 'notification_templates', 'platform_integrations', 'service_health_checks', 'job_runs', 'scheduled_task_runs', 'luzma_tool_states', 'login_attempts', 'support_tickets', 'support_ticket_messages', 'support_access_requests', 'system_incidents', 'system_incident_updates', 'system_incident_organizations',
     ];
 }
 
@@ -88,6 +105,15 @@ test('database schema contains every operational module and its purchase integri
     expect(Schema::hasColumns('bank_transactions', [
         'public_id', 'bank_account_id', 'matched_journal_entry_id', 'transaction_date',
         'reference', 'description', 'flow', 'amount_cents', 'running_balance_cents', 'reconciliation_status',
+    ]))->toBeTrue();
+    expect(Schema::hasColumns('accounting_periods', ['status']))->toBeTrue();
+    expect(Schema::hasColumns('accounting_period_close_snapshots', [
+        'company_id', 'accounting_period_id', 'closed_by', 'closed_at', 'total_debits_cents',
+        'total_credits_cents', 'checklist_snapshot', 'warnings_snapshot', 'blocking_checks_snapshot',
+    ]))->toBeTrue();
+    expect(Schema::hasColumns('accounting_period_reopening_requests', [
+        'company_id', 'accounting_period_id', 'requested_by', 'reason', 'status',
+        'approved_by', 'approved_at', 'rejected_by', 'rejected_at', 'rejection_reason', 'executed_at',
     ]))->toBeTrue();
 });
 
@@ -161,8 +187,8 @@ test('purchase approval payment and cancellation remain balanced and traceable',
     $this->assertDatabaseHas('purchase_documents', ['public_id' => $documentId, 'status' => 'approved', 'number' => 1]);
     $this->assertDatabaseHas('accounting_source_entries', ['source_type' => 'purchase_document', 'event' => 'origin']);
     $this->assertDatabaseHas('journal_entries', ['status' => 'draft', 'reference' => 'COMPRA-'.$documentId]);
-    expect(DB::table('journal_lines')->sum('debit_cents'))->toBe(25100)
-        ->and(DB::table('journal_lines')->sum('credit_cents'))->toBe(25100);
+    expect((int) DB::table('journal_lines')->sum('debit_cents'))->toBe(25100)
+        ->and((int) DB::table('journal_lines')->sum('credit_cents'))->toBe(25100);
 
     $paymentId = (string) Str::uuid();
     $this->post(route('accounting.purchasePayment', [$fixture['uuid'], $documentId]), [

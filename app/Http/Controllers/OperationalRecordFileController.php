@@ -93,6 +93,7 @@ class OperationalRecordFileController extends Controller
         $definition = $this->workflows->definition($module);
         $this->workspace->requireFeature($organization, $definition['feature']);
         $companyRecord = $this->accounting->company($organization, $request->user(), $company, $write);
+        $this->accounting->assertModule($organization, $companyRecord->id, $request->user(), $write ? 'operations.manage' : 'operations.view');
         $operationalRecord = OperationalRecord::query()->where('company_id', $companyRecord->id)
             ->where('module', $module)->where('public_id', $record)->firstOrFail();
 

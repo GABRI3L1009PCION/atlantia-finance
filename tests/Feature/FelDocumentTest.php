@@ -10,6 +10,7 @@ use App\Models\PlanPrice;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\Fel\FelAccountingService;
+use App\Services\Fel\FelCancellationService;
 use App\Services\Fel\FelCertificationService;
 use App\Services\Fel\FelDocumentBuilder;
 use App\Services\Fel\FelDocumentService;
@@ -22,6 +23,7 @@ use App\Services\Fel\FelProviderResolver;
 use App\Services\Fel\MockFelProvider;
 use App\Services\Fel\SubscriptionFelService;
 use App\Services\FiscalConfigurationService;
+use App\Services\Receivables\ReceivableService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
@@ -105,7 +107,7 @@ test('date effective tax changes use matching rules and missing dates fail', fun
     DB::table('fiscal_tax_rules')->insert([...$new, 'valid_from' => '2026-09-01', 'rate_basis_points' => 1500]);
     expect(felDraft($f, ['issued_on' => '2026-08-31'])->tax_cents)->toBe(2400)
         ->and(felDraft($f, ['issued_on' => '2026-09-01'])->tax_cents)->toBe(3000);
-    expect(fn () => felDraft($f, ['issued_on' => '2025-01-01']))->toThrow(ValidationException::class);
+    expect(fn () => felDraft($f, ['issued_on' => '2012-12-31']))->toThrow(ValidationException::class);
 });
 
 test('small taxpayer gross income rule is not added as VAT', function () {
@@ -289,6 +291,26 @@ test('document pages do not expose provider payloads or private paths', function
         ->where('document.provider', 'mock')->where('document.environment', 'test'));
 });
 
+test('a certified FEL credit note credits its internal invoice once and cancelling it restores the balance', function () {
+    $f = felFixture();
+    $invoice = DB::table('sales_invoices')->insertGetId(['public_id' => (string) Str::uuid(), 'company_id' => $f['companyId'], 'sales_customer_id' => $f['customerId'], 'number' => 1, 'status' => 'issued',
+        'issued_on' => '2026-09-01', 'due_on' => '2026-10-01', 'total_cents' => 100000, 'customer_name' => 'Cliente de prueba', 'created_by' => $f['owner']->id, 'issued_by' => $f['owner']->id, 'issued_at' => now()]);
+    expect(fn () => felDraft($f, ['document_type' => 'NCRE']))->toThrow(ValidationException::class);
+    $doc = felDraft($f, ['document_type' => 'NCRE', 'sales_invoice_id' => $invoice]);
+    expect($doc->sales_invoice_id)->toBe($invoice);
+    app(FelDocumentService::class)->requestCertification($doc, $f['owner']->id);
+    app(FelCertificationService::class)->certify($f['companyId'], $doc->public_id);
+    app(FelCertificationService::class)->certify($f['companyId'], $doc->public_id);
+    $notes = DB::table('sales_credit_notes')->where('fel_document_id', $doc->id)->get();
+    expect($notes)->toHaveCount(1)->and((int) $notes[0]->amount_cents)->toBe((int) $doc->fresh()->total_cents)
+        ->and(app(ReceivableService::class)->find($invoice)['outstanding_cents'])->toBe(100000 - (int) $doc->fresh()->total_cents);
+    expect(fn () => app(FelAccountingService::class)->draft($doc->fresh(), $f['organization'], $f['owner']))->toThrow(ValidationException::class);
+
+    app(FelCancellationService::class)->cancel($doc->fresh(), $f['organization'], $f['owner'], 'Emitida por error');
+    expect(DB::table('sales_credit_notes')->where('fel_document_id', $doc->id)->value('status'))->toBe('void')
+        ->and(app(ReceivableService::class)->find($invoice)['outstanding_cents'])->toBe(100000);
+});
+
 function felFixture(): array
 {
     $owner = User::factory()->create();
@@ -415,7 +437,8 @@ test('tenant issuer settings are isolated and cannot enable a real provider', fu
     $this->assertDatabaseCount('platform_fel_issuer', 0);
     $member = User::factory()->create();
     $f['organization']->users()->attach($member, ['role' => 'member', 'status' => 'active']);
-    $this->actingAs($member)->post(route('accounting.fel.settings.update', $f['uuid']), $input)->assertForbidden();
+    // A member without access to the company cannot even confirm it exists.
+    $this->actingAs($member)->post(route('accounting.fel.settings.update', $f['uuid']), $input)->assertNotFound();
 });
 
 test('logo uploads are restricted and emitted issuer snapshots stay unchanged', function () {

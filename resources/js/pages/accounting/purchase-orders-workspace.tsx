@@ -124,7 +124,8 @@ const items = [
         '0',
     ],
 ];
-const panel = 'rounded-xl border border-slate-200 bg-white shadow-sm';
+const panel =
+    'rounded-xl border border-[#dfe5ef] bg-white shadow-[0_18px_50px_-38px_rgba(15,23,42,0.72)]';
 const statusStyle: Record<OrderStatus, string> = {
     Emitida: 'bg-blue-100 text-blue-700',
     Recibida: 'bg-emerald-100 text-emerald-700',
@@ -145,24 +146,34 @@ function Metric({
     detail: string;
     tone: string;
 }) {
+    const trendTone = detail.includes('2%')
+        ? 'text-orange-600'
+        : 'text-emerald-600';
+
     return (
         <article
-            className={`${panel} flex min-h-28 min-w-0 items-center gap-4 overflow-hidden p-5`}
+            className={`${panel} flex min-h-[84px] min-w-0 items-center gap-3 overflow-hidden px-4 py-3`}
         >
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-full ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-full ${tone}`}
             >
-                <Icon className="size-7" />
+                <Icon className="size-5" />
             </span>
             <div className="min-w-0">
-                <p className="text-sm text-slate-600">{label}</p>
-                <div className="flex flex-wrap items-end gap-3">
-                    <strong className="text-3xl text-slate-950">{value}</strong>
-                    <span className="pb-1 text-xs font-semibold text-emerald-600">
+                <p className="truncate text-xs text-[#3d4a60]">{label}</p>
+                <div className="mt-1 flex flex-wrap items-end gap-2">
+                    <strong className="text-[1.45rem] leading-none font-black text-[#050b18]">
+                        {value}
+                    </strong>
+                    <span
+                        className={`pb-0.5 text-[11px] font-semibold ${trendTone}`}
+                    >
                         {detail}
                     </span>
                 </div>
-                <p className="text-[10px] text-slate-500">vs. mes anterior</p>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                    vs. mes anterior
+                </p>
             </div>
         </article>
     );
@@ -204,15 +215,15 @@ export default function PurchaseOrdersWorkspace({
     ] as const;
 
     return (
-        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] p-3 text-[#172033] sm:p-5">
+        <main className="min-h-full overflow-x-hidden bg-[#f6f8fb] px-4 py-5 text-[#14213d] sm:px-6">
             <Head title={`Órdenes de Compra · ${company.name}`} />
             <div className="mx-auto max-w-[1900px] space-y-4">
                 <header className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold">
+                        <h1 className="text-[2rem] leading-none font-black tracking-tight text-[#071029]">
                             Órdenes de Compra
                         </h1>
-                        <p className="mt-1 text-base text-slate-500">
+                        <p className="mt-1 text-sm text-[#536077]">
                             Control y aprobación previa de adquisiciones
                         </p>
                     </div>
@@ -223,24 +234,13 @@ export default function PurchaseOrdersWorkspace({
                                 'Formulario de nueva orden de compra preparado.',
                             )
                         }
-                        className="flex items-center gap-2 rounded-lg bg-[#74000a] px-5 py-3 text-sm font-semibold text-white"
+                        className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#730009] px-5 text-sm font-extrabold text-white shadow-[0_16px_28px_-22px_#730009] hover:bg-[#5d0007]"
                     >
                         <Plus className="size-5" />
                         Nueva Orden de Compra
                     </button>
                 </header>
-                {notice && (
-                    <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-800">
-                        <span className="flex items-center gap-2">
-                            <Check className="size-4" />
-                            {notice}
-                        </span>
-                        <button type="button" onClick={() => setNotice('')}>
-                            <X className="size-4" />
-                        </button>
-                    </div>
-                )}
-                <section className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+                <section className="grid grid-cols-4 gap-3">
                     <Metric
                         icon={ClipboardList}
                         label="Órdenes activas"
@@ -265,11 +265,22 @@ export default function PurchaseOrdersWorkspace({
                     <Metric
                         icon={CircleDollarSign}
                         label="Comprometido presupuestario"
-                        value="Q 487,320"
+                        value="Q 487,320.00"
                         detail="▲ 11%"
                         tone="bg-rose-50 text-[#74000a]"
                     />
                 </section>
+                {notice && (
+                    <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs text-emerald-800">
+                        <span className="flex items-center gap-2">
+                            <Check className="size-4" />
+                            {notice}
+                        </span>
+                        <button type="button" onClick={() => setNotice('')}>
+                            <X className="size-4" />
+                        </button>
+                    </div>
+                )}
                 <section
                     className={`${panel} grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-5`}
                 >

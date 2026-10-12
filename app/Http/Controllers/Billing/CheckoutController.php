@@ -49,7 +49,7 @@ class CheckoutController extends Controller
             return redirect()->route('dashboard');
         }
 
-        if (! DB::table('organization_billing_profiles')->where('organization_id', $organization->id)->exists()) {
+        if (! DB::table('organization_billing_profiles')->where('organization_billing_profiles.organization_id', $organization->id)->exists()) {
             return to_route('billing.details.edit');
         }
 

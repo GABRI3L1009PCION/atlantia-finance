@@ -46,8 +46,11 @@ test('statements separate range results from accumulated position and ignore dra
         $accounts[$type] = DB::table('ledger_accounts')->insertGetId(['company_id' => $f['company'], 'code' => (string) $n, 'name' => $type, 'type' => $type]);
     }
     foreach ([['2026-07-01', 'asset', 'equity', 100000, 'posted'], ['2026-08-01', 'asset', 'income', 50000, 'posted'], ['2026-08-02', 'expense', 'asset', 20000, 'posted'], ['2026-08-03', 'asset', 'income', 900000, 'draft'], ['2026-09-01', 'asset', 'income', 800000, 'posted']] as $n => [$date, $debit, $credit, $amount, $status]) {
-        $id = DB::table('journal_entries')->insertGetId(['public_id' => (string) Str::uuid(), 'accounting_period_id' => $period, 'entry_date' => $date, 'description' => '=HYPERLINK("https://example.com")', 'kind' => 'standard', 'status' => $status, 'number' => $status === 'posted' ? $n + 1 : null, 'created_by' => $f['owner']->id]);
+        $id = DB::table('journal_entries')->insertGetId(['public_id' => (string) Str::uuid(), 'accounting_period_id' => $period, 'entry_date' => $date, 'description' => '=HYPERLINK("https://example.com")', 'kind' => 'standard', 'status' => 'draft', 'created_by' => $f['owner']->id]);
         DB::table('journal_lines')->insert([['journal_entry_id' => $id, 'ledger_account_id' => $accounts[$debit], 'position' => 1, 'debit_cents' => $amount, 'credit_cents' => 0], ['journal_entry_id' => $id, 'ledger_account_id' => $accounts[$credit], 'position' => 2, 'debit_cents' => 0, 'credit_cents' => $amount]]);
+        if ($status === 'posted') {
+            DB::table('journal_entries')->where('id', $id)->update(['status' => 'posted', 'number' => $n + 1, 'posted_by' => $f['owner']->id, 'posted_at' => now()]);
+        }
     }
     $this->actingAs($f['owner'])->get(route('accounting.reports', [$f['uuid'], 'from' => '2026-08-01', 'to' => '2026-08-31']))
         ->assertOk()->assertInertia(fn (Assert $p) => $p->component('accounting/reports')->where('statements.income', 50000)->where('statements.expenses', 20000)->where('statements.profit', 30000)->where('statements.assets', 130000)->where('statements.equity', 100000)->where('statements.accumulated', 30000)->where('statements.difference', 0));
@@ -62,7 +65,8 @@ test('statements separate range results from accumulated position and ignore dra
         file_put_contents($file, $response->streamedContent());
         $workbook = IOFactory::load($file);
         expect($workbook->getActiveSheet()->getCell('E7')->getDataType())->toBe('s');
-        expect($workbook->getActiveSheet()->getCell('F7')->getValue())->toEqual(500);
+        expect($workbook->getActiveSheet()->getCell('F7')->getValue())->toBe('standard');
+        expect($workbook->getActiveSheet()->getCell('I7')->getValue())->toEqual(500);
         $workbook->disconnectWorksheets();
     } finally {
         unlink($file);
@@ -113,7 +117,9 @@ test('invoice lifecycle uses exact server totals prevents duplicate and excessiv
     $this->get(route('accounting.invoice', $args))->assertInertia(fn (Assert $p) => $p->where('paid', 0)->has('receipts', 1));
     $this->post(route('accounting.invoiceProcess', $args), ['action' => 'void', 'reason' => 'Documento de prueba'])->assertSessionHasNoErrors();
     $this->assertDatabaseHas('sales_invoices', ['status' => 'void', 'void_reason' => 'Documento de prueba']);
-    expect(DB::table('journal_entries')->count())->toBe(0);
+    expect(DB::table('journal_entries')->count())->toBe(2);
+    expect(DB::table('journal_entries')->where('source_type', 'sales_invoice')->where('status', 'void')->exists())->toBeTrue();
+    expect(DB::table('journal_entries')->where('source_type', 'sales_receipt')->where('status', 'void')->exists())->toBeTrue();
     expect(DB::table('audit_logs')->where('action', 'like', 'sales.%')->count())->toBe(5);
 });
 
@@ -131,7 +137,8 @@ test('reports and sales reject other tenants viewers writes and missing plan ent
     $this->actingAs($viewer)->get(route('accounting.sales', $f['uuid']))->assertOk();
     $this->post(route('accounting.salesCustomer', $f['uuid']), ['name' => 'No permitido'])->assertForbidden();
     $this->post(route('accounting.salesStore', $f['uuid']), invoicePayload($f))->assertForbidden();
-    $f['price']->plan->features()->detach();
+    // The organization's plan version no longer includes the entitlements.
+    DB::table('plan_versions')->where('plan_id', $f['price']->plan_id)->update(['entitlements' => '[]']);
     $this->actingAs($f['owner'])->get(route('accounting.reports', $f['uuid']))->assertForbidden();
     $this->get(route('accounting.sales', $f['uuid']))->assertForbidden();
 });

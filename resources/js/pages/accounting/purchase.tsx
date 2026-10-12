@@ -4,6 +4,7 @@ import {
     CheckCircle2,
     Download,
     FileCheck2,
+    FileMinus2,
     FileText,
     Link2,
     Paperclip,
@@ -54,6 +55,27 @@ type Payment = {
     voided_at: string | null;
     void_reason: string | null;
 };
+type CreditNoteRow = {
+    id: number;
+    fiscal_series: string | null;
+    fiscal_number: string | null;
+    issued_on: string;
+    amount_cents: number;
+    vat_cents: number;
+    reason: string;
+    status: string;
+    void_reason: string | null;
+};
+type PayableSummary = {
+    currency: string;
+    exchange_rate: string;
+    foreign_original_cents: number | null;
+    credited_cents: number;
+    advances_cents: number;
+    adjusted_cents: number;
+    outstanding_cents: number;
+    committed_cents: number;
+};
 type FileRow = {
     public_id: string;
     original_name: string;
@@ -74,6 +96,9 @@ export default function Purchase({
     document,
     lines,
     payments,
+    creditNotes,
+    payable,
+    canCredit,
     files,
     paid,
     sourceEntries,
@@ -86,6 +111,9 @@ export default function Purchase({
     document: PurchaseDocument;
     lines: Line[];
     payments: Payment[];
+    creditNotes: CreditNoteRow[];
+    payable: PayableSummary | null;
+    canCredit: boolean;
     files: FileRow[];
     paid: number;
     sourceEntries: SourceEntry[];
@@ -97,7 +125,33 @@ export default function Purchase({
     const balance =
         document.status === 'void'
             ? 0
-            : Math.max(0, Number(document.total_cents) - Number(paid));
+            : (payable?.outstanding_cents ??
+              Math.max(0, Number(document.total_cents) - Number(paid)));
+    const creditable = payable
+        ? payable.outstanding_cents - payable.committed_cents
+        : 0;
+    const creditNote = useForm({
+        amount: '',
+        issued_on: today,
+        reason: '',
+        fiscal_series: '',
+        fiscal_number: '',
+    });
+    const voidCreditNote = (id: number) => {
+        const reason = window.prompt('Motivo de la anulación de la nota:');
+
+        if (reason) {
+            router.post(
+                routes.purchaseVoidCreditNote.url([
+                    company.public_id,
+                    document.public_id,
+                    id,
+                ]),
+                { reason },
+                { preserveScroll: true },
+            );
+        }
+    };
     const payment = useForm({
         request_id: crypto.randomUUID(),
         amount: '',
@@ -218,6 +272,20 @@ export default function Purchase({
                                 <p className="text-sm text-slate-500">
                                     Vence: {document.due_on}
                                 </p>
+                                {payable &&
+                                    payable.currency !== 'GTQ' &&
+                                    payable.foreign_original_cents !== null && (
+                                        <p className="text-xs text-slate-500">
+                                            {payable.currency}{' '}
+                                            {(
+                                                payable.foreign_original_cents /
+                                                100
+                                            ).toFixed(2)}{' '}
+                                            a tipo de cambio{' '}
+                                            {Number(payable.exchange_rate)}{' '}
+                                            (montos en GTQ)
+                                        </p>
+                                    )}
                             </div>
                         </div>
                         <div className="overflow-x-auto rounded-xl border">
@@ -519,6 +587,178 @@ export default function Purchase({
                         </div>
                     </Card>
 
+                    {document.status !== 'draft' && (
+                        <Card title="Notas de crédito del proveedor">
+                            {document.status === 'approved' &&
+                                canCredit &&
+                                creditable > 0 && (
+                                    <form
+                                        onSubmit={(event) => {
+                                            event.preventDefault();
+                                            creditNote.post(
+                                                routes.purchaseCreditNote.url([
+                                                    company.public_id,
+                                                    document.public_id,
+                                                ]),
+                                                {
+                                                    preserveScroll: true,
+                                                    onSuccess: () =>
+                                                        creditNote.reset(
+                                                            'amount',
+                                                            'reason',
+                                                            'fiscal_series',
+                                                            'fiscal_number',
+                                                        ),
+                                                },
+                                            );
+                                        }}
+                                        className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-3"
+                                    >
+                                        <label>
+                                            Monto (máx. {money(creditable)})
+                                            <input
+                                                inputMode="decimal"
+                                                className={field}
+                                                value={creditNote.data.amount}
+                                                onChange={(event) =>
+                                                    creditNote.setData(
+                                                        'amount',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </label>
+                                        <label>
+                                            Fecha
+                                            <input
+                                                type="date"
+                                                className={field}
+                                                value={
+                                                    creditNote.data.issued_on
+                                                }
+                                                onChange={(event) =>
+                                                    creditNote.setData(
+                                                        'issued_on',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </label>
+                                        <label>
+                                            Serie / número fiscal
+                                            <span className="flex gap-2">
+                                                <input
+                                                    className={field}
+                                                    placeholder="Serie"
+                                                    value={
+                                                        creditNote.data
+                                                            .fiscal_series
+                                                    }
+                                                    onChange={(event) =>
+                                                        creditNote.setData(
+                                                            'fiscal_series',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                                <input
+                                                    className={field}
+                                                    placeholder="Número"
+                                                    value={
+                                                        creditNote.data
+                                                            .fiscal_number
+                                                    }
+                                                    onChange={(event) =>
+                                                        creditNote.setData(
+                                                            'fiscal_number',
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            </span>
+                                        </label>
+                                        <label className="sm:col-span-3">
+                                            Motivo
+                                            <input
+                                                className={field}
+                                                value={creditNote.data.reason}
+                                                onChange={(event) =>
+                                                    creditNote.setData(
+                                                        'reason',
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                placeholder="Devolución, descuento, error de precio…"
+                                            />
+                                        </label>
+                                        <div className="sm:col-span-3">
+                                            <Errors
+                                                errors={creditNote.errors}
+                                            />
+                                            <button
+                                                className={primary}
+                                                disabled={creditNote.processing}
+                                            >
+                                                <FileMinus2 className="size-4" />{' '}
+                                                Registrar nota de crédito
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+                            <div className="mt-4 space-y-2">
+                                {creditNotes.map((note) => (
+                                    <div
+                                        key={note.id}
+                                        className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 ${note.status !== 'issued' ? 'bg-slate-50 opacity-70' : ''}`}
+                                    >
+                                        <div>
+                                            <strong>
+                                                {money(note.amount_cents)}
+                                            </strong>{' '}
+                                            <span className="text-sm text-slate-500">
+                                                (IVA {money(note.vat_cents)})
+                                            </span>
+                                            <p className="text-sm text-slate-500">
+                                                {note.issued_on} ·{' '}
+                                                {[
+                                                    note.fiscal_series,
+                                                    note.fiscal_number,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join('-') ||
+                                                    `NC #${note.id}`}{' '}
+                                                · {note.reason}
+                                            </p>
+                                            {note.status !== 'issued' && (
+                                                <p className="text-xs text-red-600">
+                                                    Anulada: {note.void_reason}
+                                                </p>
+                                            )}
+                                        </div>
+                                        {note.status === 'issued' &&
+                                            isOwner && (
+                                                <button
+                                                    type="button"
+                                                    className={secondary}
+                                                    onClick={() =>
+                                                        voidCreditNote(note.id)
+                                                    }
+                                                >
+                                                    <RotateCcw className="size-4" />{' '}
+                                                    Anular nota
+                                                </button>
+                                            )}
+                                    </div>
+                                ))}
+                                {!creditNotes.length && (
+                                    <p className="rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-500">
+                                        Sin notas de crédito del proveedor.
+                                    </p>
+                                )}
+                            </div>
+                        </Card>
+                    )}
+
                     <Card title="Trazabilidad contable">
                         <p className="mb-4 text-sm text-slate-500">
                             Cada evento financiero queda vinculado al asiento
@@ -588,6 +828,30 @@ export default function Purchase({
                                 <span>Pagado</span>
                                 <strong>{money(paid)}</strong>
                             </div>
+                            {payable &&
+                                payable.credited_cents +
+                                    payable.advances_cents +
+                                    payable.adjusted_cents >
+                                    0 && (
+                                    <div className="flex justify-between text-sm text-slate-600">
+                                        <span>NC, anticipos y ajustes</span>
+                                        <strong>
+                                            {money(
+                                                payable.credited_cents +
+                                                    payable.advances_cents +
+                                                    payable.adjusted_cents,
+                                            )}
+                                        </strong>
+                                    </div>
+                                )}
+                            {payable && payable.committed_cents > 0 && (
+                                <div className="flex justify-between text-sm text-amber-700">
+                                    <span>En proceso en Tesorería</span>
+                                    <strong>
+                                        {money(payable.committed_cents)}
+                                    </strong>
+                                </div>
+                            )}
                             <div className="flex justify-between text-lg text-[#640000]">
                                 <span>Pendiente</span>
                                 <strong>{money(balance)}</strong>
@@ -627,7 +891,13 @@ export default function Purchase({
                     )}
                     {document.status === 'approved' &&
                         isOwner &&
-                        paid === 0 && (
+                        paid === 0 &&
+                        (payable === null ||
+                            payable.credited_cents +
+                                payable.advances_cents +
+                                payable.adjusted_cents +
+                                payable.committed_cents ===
+                                0) && (
                             <button
                                 type="button"
                                 className={`${secondary} w-full`}

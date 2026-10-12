@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\PaymentAttempt;
 use App\Models\WebhookEvent;
 use App\Services\Payments\RecurrenteWebhookVerifier;
+use App\Services\Platform\Billing\SaaSBillingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,9 @@ class RecurrenteWebhookController extends Controller
                 }
                 if (in_array($eventType, ['intent.succeeded', 'payment_intent.succeeded'], true)) {
                     $this->activatePaidSubscription($payload);
+                }
+                if (in_array($eventType, ['intent.failed', 'payment_intent.failed', 'payment_intent.payment_failed'], true)) {
+                    $this->recordFailedPayment($payload);
                 }
                 $event->update(['status' => 'processed', 'processed_at' => now()]);
             });
@@ -89,10 +93,28 @@ class RecurrenteWebhookController extends Controller
             'current_period_starts_at' => now(),
             'current_period_ends_at' => $billingPeriod === 'annual' ? now()->addYear() : now()->addMonth(),
         ]);
-        $subscription->organization->update(['status' => 'active']);
+        if (! in_array($subscription->organization->status, ['suspended', 'archived'], true)) {
+            $subscription->organization->update(['status' => 'active']);
+        }
         DB::table('fel_subscription_requests')->insertOrIgnore([
             'payment_id' => $payment->id, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),
         ]);
         GenerateSubscriptionFelInvoiceJob::dispatch($payment->id)->afterCommit();
+        app(SaaSBillingService::class)->settleProviderPayment((int) $payment->id);
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function recordFailedPayment(array $payload): void
+    {
+        $checkoutId = data_get($payload, 'checkout.id') ?? data_get($payload, 'data.checkout.id');
+        if (! is_string($checkoutId)) {
+            return;
+        }
+        $attempt = PaymentAttempt::query()->where('provider_attempt_id', $checkoutId)->first();
+        if ($attempt === null) {
+            return;
+        }
+        app(SaaSBillingService::class)->failProviderPayment((int) $attempt->payment_id, (string) (data_get($payload, 'failure_code') ?? data_get($payload, 'data.failure_code') ?? 'payment_failed'),
+            (string) (data_get($payload, 'failure_message') ?? data_get($payload, 'data.failure_message') ?? 'El proveedor rechazó el cobro.'));
     }
 }

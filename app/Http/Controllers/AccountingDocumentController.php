@@ -24,6 +24,7 @@ class AccountingDocumentController extends Controller
     {
         $org = $this->context->organization($request->user());
         $companyRecord = $this->accounting->company($org, $request->user(), $company, true);
+        abort_unless($this->accounting->canJournal($org, $companyRecord->id, $request->user(), 'attach_support'), 403);
         $request->validate([
             'document' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ], [
@@ -34,7 +35,7 @@ class AccountingDocumentController extends Controller
         $file = $request->file('document');
         abort_unless($file instanceof UploadedFile, 422);
         $entryRecord = $this->entry($companyRecord->id, $entry);
-        if ($entryRecord->status !== 'draft') {
+        if (! in_array($entryRecord->status, ['draft', 'pending_review', 'reviewed', 'approved'], true)) {
             throw ValidationException::withMessages(['document' => 'Los respaldos de un asiento contabilizado son inmutables.']);
         }
         $this->accounting->openPeriod($companyRecord->id, $entryRecord->accounting_period_id, $entryRecord->entry_date);
@@ -51,7 +52,7 @@ class AccountingDocumentController extends Controller
             DB::transaction(function () use ($companyRecord, $entryRecord, $file, $org, $path, $request, $uuid): void {
                 $this->accounting->lock($companyRecord->id);
                 $locked = $this->entry($companyRecord->id, $entryRecord->public_id);
-                if ($locked->status !== 'draft') {
+                if (! in_array($locked->status, ['draft', 'pending_review', 'reviewed', 'approved'], true)) {
                     throw ValidationException::withMessages(['document' => 'El asiento cambió de estado. Recarga la página.']);
                 }
                 $id = DB::table('journal_entry_documents')->insertGetId([
@@ -94,8 +95,9 @@ class AccountingDocumentController extends Controller
     {
         $org = $this->context->organization($request->user());
         $companyRecord = $this->accounting->company($org, $request->user(), $company, true);
+        abort_unless($this->accounting->canJournal($org, $companyRecord->id, $request->user(), 'attach_support'), 403);
         $entryRecord = $this->entry($companyRecord->id, $entry);
-        if ($entryRecord->status !== 'draft') {
+        if (! in_array($entryRecord->status, ['draft', 'pending_review', 'reviewed', 'approved'], true)) {
             throw ValidationException::withMessages(['document' => 'Los respaldos de un asiento contabilizado son inmutables.']);
         }
         $this->accounting->openPeriod($companyRecord->id, $entryRecord->accounting_period_id, $entryRecord->entry_date);
@@ -103,7 +105,7 @@ class AccountingDocumentController extends Controller
 
         DB::transaction(function () use ($companyRecord, $entryRecord, $org, $record, $request): void {
             $this->accounting->lock($companyRecord->id);
-            abort_unless($this->entry($companyRecord->id, $entryRecord->public_id)->status === 'draft', 409);
+            abort_unless(in_array($this->entry($companyRecord->id, $entryRecord->public_id)->status, ['draft', 'pending_review', 'reviewed', 'approved'], true), 409);
             DB::table('journal_entry_documents')->where('id', $record->id)->delete();
             $this->accounting->audit($org, $request->user(), 'entry.document.removed', 'journal_entry_documents', $record->id, ['entry_id' => $entryRecord->id]);
         });

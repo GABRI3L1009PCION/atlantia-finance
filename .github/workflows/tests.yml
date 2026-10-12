@@ -13,6 +13,29 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: atlantia_finance_test
+      # The application role is neither SUPERUSER nor BYPASSRLS, as in production: Row Level Security must apply.
+      DB_USERNAME: atlantia_finance_user
+      DB_PASSWORD: atlantia
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,8 +54,21 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Provision database roles
+        env:
+          PGPASSWORD: postgres
+        run: psql -h 127.0.0.1 -U postgres -d postgres -v app_password="'atlantia'" -f database/postgres/provision.sql
+
       - name: Setup Application
         run: composer setup
 
       - name: Run CI Checks
-        run: composer ci:check
+        shell: bash
+        run: composer ci:check 2>&1 | tee ci.log
+
+      - name: Summarize failures
+        if: failure()
+        run: |
+          msg=$(grep -E -A12 'FAILED|Exception|Error' ci.log | head -150 | tr -d '\r' | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=CI failures::$msg"
+

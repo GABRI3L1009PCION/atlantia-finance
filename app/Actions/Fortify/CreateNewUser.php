@@ -11,6 +11,7 @@ use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -62,7 +63,8 @@ class CreateNewUser implements CreatesNewUsers
             ]);
         }
 
-        $user = DB::transaction(
+        // A brand-new organization has no tenant scope yet, so onboarding runs with platform access.
+        $user = app(TenantDatabaseContext::class)->runAsSystem(fn (): User => DB::transaction(
             function () use ($input, $planPrice): User {
                 $user = User::query()->create([
                     'name' => $input['name'],
@@ -121,7 +123,7 @@ class CreateNewUser implements CreatesNewUsers
                 return $user;
             },
             attempts: 3,
-        );
+        ));
 
         request()->session()->put('onboarding.selected_plan', [
             'code' => $planPrice->plan->code,

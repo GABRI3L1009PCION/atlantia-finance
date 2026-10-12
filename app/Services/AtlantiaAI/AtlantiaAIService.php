@@ -2,37 +2,29 @@
 
 namespace App\Services\AtlantiaAI;
 
-use Illuminate\Support\Facades\Http;
+use App\Services\Luzma\Contracts\LuzmaModelProvider;
+use App\Services\Luzma\LuzmaUnavailableException;
 use RuntimeException;
 
+/**
+ * @deprecated Temporary alias from the Atlantia AI era: it delegates to Luzma's model provider. New code must use
+ * App\Services\Luzma\LuzmaService (questions with context) or LuzmaModelProvider directly.
+ */
 class AtlantiaAIService
 {
-    private string $baseUrl;
-
-    public function __construct()
-    {
-        $this->baseUrl = rtrim(
-            config('services.atlantia_ai.url'),
-            '/'
-        );
-    }
+    public function __construct(private LuzmaModelProvider $provider) {}
 
     /**
      * @return array<string, mixed>
      */
     public function health(): array
     {
-        $response = Http::timeout(10)
-            ->acceptJson()
-            ->get($this->baseUrl.'/health');
-
-        if (! $response->successful()) {
-            throw new RuntimeException(
-                'Atlantia AI no respondió correctamente.'
-            );
+        $health = $this->provider->health();
+        if (! $health['gateway']) {
+            throw new RuntimeException('Luzma no respondió correctamente.');
         }
 
-        return $response->json();
+        return $health;
     }
 
     /**
@@ -40,19 +32,10 @@ class AtlantiaAIService
      */
     public function chat(string $message): array
     {
-        $response = Http::timeout(120)
-            ->acceptJson()
-            ->post($this->baseUrl.'/ai/chat', [
-                'message' => $message,
-            ]);
-
-        if (! $response->successful()) {
-            throw new RuntimeException(
-                'No fue posible obtener una respuesta de Atlantia AI. '
-                .'HTTP '.$response->status()
-            );
+        try {
+            return ['status' => 'ok', 'response' => $this->provider->answer('Eres Luzma, el asistente de Atlantia Finance. No inventes datos.', [['role' => 'user', 'content' => $message]])];
+        } catch (LuzmaUnavailableException $exception) {
+            throw new RuntimeException('No fue posible obtener una respuesta de Luzma.', 0, $exception);
         }
-
-        return $response->json();
     }
 }

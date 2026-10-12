@@ -12,12 +12,15 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use stdClass;
 
 class FiscalSettingsController extends Controller
 {
+    private const TAX_TYPES = ['vat', 'income_tax', 'withholding', 'stamp', 'specific', 'other'];
+
     public function __construct(
         private WorkspaceContext $context,
         private AccountingService $accounting,
@@ -28,21 +31,114 @@ class FiscalSettingsController extends Controller
     {
         [$organization, $record] = $this->scope($request, $company);
         $profile = $this->fiscal->ensureDefaults($record->id, $request->user()->id);
+        $today = now()->toDateString();
 
         return Inertia::render('accounting/fiscal-settings', [
             'company' => $record,
             'profile' => $profile,
-            'rules' => $this->fiscal->rules($record->id)->get(),
+            'today' => $today,
+            'taxes' => $this->fiscal->taxes($record->id, $today),
+            'accounts' => DB::table('ledger_accounts')->where('company_id', $record->id)->where('is_active', true)
+                ->where('is_group', false)->orderBy('code')->get(['id', 'code', 'name', 'type']),
             'exchangeRates' => DB::table('company_exchange_rates')->where('company_id', $record->id)
                 ->orderByDesc('effective_on')->orderBy('currency')->limit(40)->get(),
-            'canManage' => $organization->pivot->role === 'owner',
-            'notice' => session('accounting_notice'),
+            'canManage' => $this->accounting->canModule($organization, $record->id, $request->user(), 'fiscal.manage'),
         ]);
+    }
+
+    public function storeTax(Request $request, string $company): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
+        $data = $request->validate([
+            ...$this->taxRules(),
+            'code' => ['required', 'string', 'max:60', 'regex:/^[A-Z0-9_]+$/'],
+            'tax_type' => ['required', Rule::in(self::TAX_TYPES)],
+            'regime' => ['required', 'string', 'max:50', 'regex:/^[a-z0-9_]+$/'],
+            'calculation' => ['required', Rule::in(['percentage', 'fixed_amount'])],
+            ...$this->versionRules(),
+        ], $this->messages());
+
+        DB::transaction(function () use ($request, $organization, $record, $data): void {
+            $this->accounting->lock($record->id);
+            $taxId = $this->fiscal->createTax($record->id, $request->user()->id, [
+                ...$this->taxAttributes($data),
+                'code' => $data['code'],
+                'tax_type' => $data['tax_type'],
+                'regime' => $data['regime'],
+                'calculation' => $data['calculation'],
+            ], $this->versionAttributes($data));
+            $this->accounting->audit($organization, $request->user(), 'fiscal.tax.created', 'fiscal_taxes', $taxId, [
+                'code' => $data['code'], 'tax_type' => $data['tax_type'], 'valid_from' => $data['valid_from'],
+            ]);
+        });
+
+        return back()->with('accounting_notice', 'Impuesto creado con su primera vigencia.');
+    }
+
+    public function updateTax(Request $request, string $company, int $tax): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
+        $data = $request->validate($this->taxRules(), $this->messages());
+
+        DB::transaction(function () use ($request, $organization, $record, $tax, $data): void {
+            $this->accounting->lock($record->id);
+            $before = $this->fiscal->updateTax($record->id, $tax, $this->taxAttributes($data));
+            $this->accounting->audit($organization, $request->user(), 'fiscal.tax.updated', 'fiscal_taxes', $tax, [
+                'before' => array_intersect_key((array) $before, $data),
+                'after' => $data,
+            ]);
+        });
+
+        return back()->with('accounting_notice', 'Impuesto actualizado. Las vigencias históricas no cambiaron.');
+    }
+
+    public function storeTaxVersion(Request $request, string $company, int $tax): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
+        $data = $request->validate($this->versionRules(), $this->messages());
+
+        DB::transaction(function () use ($request, $organization, $record, $tax, $data): void {
+            $this->accounting->lock($record->id);
+            $ruleId = $this->fiscal->addVersion($record->id, $tax, $request->user()->id, $this->versionAttributes($data));
+            $this->accounting->audit($organization, $request->user(), 'fiscal.tax_rule.created', 'fiscal_tax_rules', $ruleId, [
+                'fiscal_tax_id' => $tax, 'valid_from' => $data['valid_from'], 'legal_reference' => $data['legal_reference'] ?? null,
+            ]);
+        });
+
+        return back()->with('accounting_notice', 'Nueva vigencia registrada. La anterior se cerró el día previo.');
+    }
+
+    public function updateTaxStatus(Request $request, string $company, int $tax): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
+        $data = $request->validate(['status' => ['required', Rule::in(['active', 'inactive'])]]);
+
+        DB::transaction(function () use ($request, $organization, $record, $tax, $data): void {
+            $this->accounting->lock($record->id);
+            $this->fiscal->setTaxStatus($record->id, $tax, $data['status']);
+            $this->accounting->audit($organization, $request->user(), 'fiscal.tax.'.($data['status'] === 'active' ? 'activated' : 'deactivated'), 'fiscal_taxes', $tax);
+        });
+
+        return back()->with('accounting_notice', $data['status'] === 'active' ? 'Impuesto activado.' : 'Impuesto desactivado. Deja de aplicarse en nuevos cálculos.');
+    }
+
+    public function cancelTaxVersion(Request $request, string $company, int $rule): RedirectResponse
+    {
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
+        $data = $request->validate(['reason' => ['required', 'string', 'min:5', 'max:500']]);
+
+        DB::transaction(function () use ($request, $organization, $record, $rule, $data): void {
+            $this->accounting->lock($record->id);
+            $this->fiscal->cancelVersion($record->id, $rule, now()->toDateString());
+            $this->accounting->audit($organization, $request->user(), 'fiscal.tax_rule.cancelled', 'fiscal_tax_rules', $rule, ['reason' => $data['reason']]);
+        });
+
+        return back()->with('accounting_notice', 'Vigencia futura anulada. La vigencia anterior quedó abierta nuevamente.');
     }
 
     public function update(Request $request, string $company): RedirectResponse
     {
-        [$organization, $record] = $this->scope($request, $company, true);
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
         $data = $request->validate([
             'country_code' => ['required', 'string', 'size:2', 'regex:/^[A-Z]{2}$/'],
             'base_currency' => ['required', Rule::in(['GTQ', 'USD', 'EUR'])],
@@ -75,41 +171,33 @@ class FiscalSettingsController extends Controller
         return back()->with('accounting_notice', 'Configuración fiscal actualizada y registrada en auditoría.');
     }
 
+    /**
+     * Quick entry by code: adds a version when the tax exists, otherwise creates a percentage tax with it.
+     */
     public function storeRule(Request $request, string $company): RedirectResponse
     {
-        [$organization, $record] = $this->scope($request, $company, true);
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
         $data = $request->validate([
             'code' => ['required', 'string', 'max:60', 'regex:/^[A-Z0-9_]+$/'],
             'name' => ['required', 'string', 'max:150'],
-            'tax_type' => ['required', Rule::in(['vat', 'income_tax', 'withholding'])],
+            'tax_type' => ['required', Rule::in(self::TAX_TYPES)],
             'regime' => ['required', 'string', 'max:50', 'regex:/^[a-z0-9_]+$/'],
-            'rate' => ['required', 'string', 'max:6'],
-            'threshold' => ['nullable', 'string', 'max:15'],
             'recoverable' => ['required', 'boolean'],
-            'valid_from' => ['required', 'date_format:Y-m-d'],
-            'valid_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:valid_from'],
-            'is_active' => ['required', 'boolean'],
-        ]);
+            ...$this->versionRules(),
+        ], $this->messages());
 
         DB::transaction(function () use ($request, $organization, $record, $data): void {
             $this->accounting->lock($record->id);
-            $id = DB::table('fiscal_tax_rules')->insertGetId([
-                'company_id' => $record->id,
-                'code' => $data['code'],
-                'name' => $data['name'],
-                'tax_type' => $data['tax_type'],
-                'regime' => $data['regime'],
-                'rate_basis_points' => $this->fiscal->basisPoints($data['rate']),
-                'threshold_cents' => filled($data['threshold'] ?? null) ? $this->accounting->cents($data['threshold']) : null,
-                'recoverable' => $data['recoverable'],
-                'valid_from' => $data['valid_from'],
-                'valid_to' => $data['valid_to'] ?? null,
-                'is_active' => $data['is_active'],
-                'metadata' => json_encode(['configured_by' => 'company_owner'], JSON_THROW_ON_ERROR),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            $this->accounting->audit($organization, $request->user(), 'fiscal.tax_rule.created', 'fiscal_tax_rules', $id);
+            $this->fiscal->ensureDefaults($record->id, $request->user()->id);
+            $taxId = DB::table('fiscal_taxes')->where('company_id', $record->id)->where('code', $data['code'])->value('id');
+            $ruleId = $taxId !== null
+                ? $this->fiscal->addVersion($record->id, (int) $taxId, $request->user()->id, $this->versionAttributes($data))
+                : (int) DB::table('fiscal_tax_rules')->where('fiscal_tax_id', $this->fiscal->createTax($record->id, $request->user()->id, [
+                    'code' => $data['code'], 'name' => $data['name'], 'tax_type' => $data['tax_type'], 'regime' => $data['regime'],
+                    'applies_to' => $data['tax_type'] === 'income_tax' ? 'income' : 'both', 'calculation' => 'percentage',
+                    'price_includes_tax' => $data['tax_type'] === 'vat', 'recoverable' => $data['recoverable'],
+                ], $this->versionAttributes($data)))->value('id');
+            $this->accounting->audit($organization, $request->user(), 'fiscal.tax_rule.created', 'fiscal_tax_rules', $ruleId);
         });
 
         return back()->with('accounting_notice', 'Nueva vigencia fiscal registrada sin alterar el historial anterior.');
@@ -117,7 +205,7 @@ class FiscalSettingsController extends Controller
 
     public function storeExchangeRate(Request $request, string $company): RedirectResponse
     {
-        [$organization, $record] = $this->scope($request, $company, true);
+        [$organization, $record] = $this->scope($request, $company, 'fiscal.manage');
         $data = $request->validate([
             'currency' => ['required', Rule::in(['USD', 'EUR'])],
             'rate' => ['required', 'regex:/^\d{1,6}(?:\.\d{1,8})?$/'],
@@ -149,12 +237,93 @@ class FiscalSettingsController extends Controller
         return back()->with('accounting_notice', 'Tipo de cambio registrado con fecha, fuente y trazabilidad.');
     }
 
-    /** @return array{0: Organization, 1: stdClass} */
-    private function scope(Request $request, string $company, bool $owner = false): array
+    /** @return array<string, list<mixed>> */
+    private function taxRules(): array
     {
-        $organization = $this->context->organization($request->user(), $owner);
-        $this->context->requireFeature($organization, 'basic_accounting');
+        return [
+            'name' => ['required', 'string', 'max:150'],
+            'applies_to' => ['required', Rule::in(['sales', 'purchases', 'both', 'income', 'payroll', 'other'])],
+            'price_includes_tax' => ['required', 'boolean'],
+            'recoverable' => ['required', 'boolean'],
+            'recoverable_account_id' => ['nullable', 'integer'],
+            'payable_account_id' => ['nullable', 'integer'],
+            'legal_basis' => ['nullable', 'string', 'max:255'],
+            'sat_form' => ['nullable', 'string', 'max:40'],
+        ];
+    }
 
-        return [$organization, $this->accounting->company($organization, $request->user(), $company)];
+    /** @return array<string, list<mixed>> */
+    private function versionRules(): array
+    {
+        return [
+            'rate' => ['nullable', 'string', 'max:6'],
+            'amount' => ['nullable', 'string', 'max:15'],
+            'threshold' => ['nullable', 'string', 'max:15'],
+            'valid_from' => ['required', 'date_format:Y-m-d'],
+            'legal_reference' => ['nullable', 'string', 'max:255'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{name: string, applies_to: string, price_includes_tax: bool, recoverable: bool, recoverable_account_id: int|null, payable_account_id: int|null, legal_basis: string|null, sat_form: string|null}
+     */
+    private function taxAttributes(array $data): array
+    {
+        return [
+            'name' => (string) $data['name'],
+            'applies_to' => (string) $data['applies_to'],
+            'price_includes_tax' => (bool) $data['price_includes_tax'],
+            'recoverable' => (bool) $data['recoverable'],
+            'recoverable_account_id' => filled($data['recoverable_account_id'] ?? null) ? (int) $data['recoverable_account_id'] : null,
+            'payable_account_id' => filled($data['payable_account_id'] ?? null) ? (int) $data['payable_account_id'] : null,
+            'legal_basis' => filled($data['legal_basis'] ?? null) ? trim((string) $data['legal_basis']) : null,
+            'sat_form' => filled($data['sat_form'] ?? null) ? trim((string) $data['sat_form']) : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{rate_basis_points: int, amount_cents: int|null, threshold_cents: int|null, valid_from: string, legal_reference: string|null}
+     */
+    private function versionAttributes(array $data): array
+    {
+        if (! filled($data['rate'] ?? null) && ! filled($data['amount'] ?? null)) {
+            throw ValidationException::withMessages(['rate' => 'Indica la tasa (porcentaje) o el monto fijo de la vigencia.']);
+        }
+
+        return [
+            'rate_basis_points' => filled($data['rate'] ?? null) ? $this->fiscal->basisPoints((string) $data['rate']) : 0,
+            'amount_cents' => filled($data['amount'] ?? null) ? $this->accounting->cents((string) $data['amount']) : null,
+            'threshold_cents' => filled($data['threshold'] ?? null) ? $this->accounting->cents((string) $data['threshold']) : null,
+            'valid_from' => (string) $data['valid_from'],
+            'legal_reference' => filled($data['legal_reference'] ?? null) ? trim((string) $data['legal_reference']) : null,
+        ];
+    }
+
+    /** @return array<string, string> */
+    private function messages(): array
+    {
+        return [
+            'code.regex' => 'El código solo admite mayúsculas, números y guion bajo (ej. IMPUESTO_TIMBRE).',
+            'regime.regex' => 'El régimen solo admite minúsculas, números y guion bajo (ej. general).',
+            'valid_from.required' => 'Indica desde qué fecha rige la vigencia.',
+        ];
+    }
+
+    /** @return array{0: Organization, 1: stdClass} */
+    private function scope(Request $request, string $company, string $permission = 'fiscal.view'): array
+    {
+        $organization = $this->context->organization($request->user());
+        $this->context->requireFeature($organization, 'basic_accounting');
+        $record = $this->accounting->company($organization, $request->user(), $company, ! $this->isReadPermission($permission));
+        $this->accounting->assertModule($organization, $record->id, $request->user(), $permission);
+
+        return [$organization, $record];
+    }
+
+    private function isReadPermission(string $permission): bool
+    {
+        return str_ends_with($permission, '.view') || str_ends_with($permission, '.export');
     }
 }

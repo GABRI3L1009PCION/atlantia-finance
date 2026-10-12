@@ -1,13 +1,14 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, Link, usePage } from '@inertiajs/react';
+import { Lock } from 'lucide-react';
 import { useRef } from 'react';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import type { Props as ManagePasskeysProps } from '@/components/manage-passkeys';
 import ManagePasskeys from '@/components/manage-passkeys';
 import type { Props as ManageTwoFactorProps } from '@/components/manage-two-factor';
 import ManageTwoFactor from '@/components/manage-two-factor';
 import PasswordInput from '@/components/password-input';
+import { SettingsCard } from '@/components/settings-card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/security';
@@ -20,20 +21,45 @@ type Props = {
 export default function Security(props: Props) {
     const passwordInput = useRef<HTMLInputElement>(null);
     const currentPasswordInput = useRef<HTMLInputElement>(null);
+    const isPlatformStaff = usePage().props.isPlatformStaff === true;
 
     return (
         <>
-            <Head title="Security settings" />
+            <Head title="Seguridad" />
 
-            <h1 className="sr-only">Security settings</h1>
+            {isPlatformStaff &&
+                (props.twoFactorEnabled ? (
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+                        <span>
+                            La autenticación de dos factores está activa. Ya
+                            puedes entrar al Control Center.
+                        </span>
+                        <Button asChild>
+                            <Link href="/control-center">
+                                Ir al Control Center
+                            </Link>
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                        <p className="font-semibold">
+                            El Control Center exige autenticación de dos
+                            factores.
+                        </p>
+                        <p className="mt-1">
+                            Pulsa «Activar 2FA» más abajo, escanea el código QR
+                            con tu app (Google Authenticator, Microsoft
+                            Authenticator o Authy) y confirma el código de 6
+                            dígitos. Después entrarás al Control Center.
+                        </p>
+                    </div>
+                ))}
 
-            <div className="space-y-6">
-                <Heading
-                    variant="small"
-                    title="Update password"
-                    description="Ensure your account is using a long, random password to stay secure"
-                />
-
+            <SettingsCard
+                icon={Lock}
+                title="Contraseña"
+                description="Usa una contraseña larga y aleatoria para mantener tu cuenta segura."
+            >
                 <Form
                     {...SecurityController.update.form()}
                     options={{
@@ -60,7 +86,7 @@ export default function Security(props: Props) {
                         <>
                             <div className="grid gap-2">
                                 <Label htmlFor="current_password">
-                                    Current password
+                                    Contraseña actual
                                 </Label>
 
                                 <PasswordInput
@@ -69,14 +95,16 @@ export default function Security(props: Props) {
                                     name="current_password"
                                     className="mt-1 block w-full"
                                     autoComplete="current-password"
-                                    placeholder="Current password"
+                                    placeholder="Contraseña actual"
                                 />
 
                                 <InputError message={errors.current_password} />
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="password">New password</Label>
+                                <Label htmlFor="password">
+                                    Nueva contraseña
+                                </Label>
 
                                 <PasswordInput
                                     id="password"
@@ -84,7 +112,7 @@ export default function Security(props: Props) {
                                     name="password"
                                     className="mt-1 block w-full"
                                     autoComplete="new-password"
-                                    placeholder="New password"
+                                    placeholder="Nueva contraseña"
                                     passwordrules={props.passwordRules}
                                 />
 
@@ -93,7 +121,7 @@ export default function Security(props: Props) {
 
                             <div className="grid gap-2">
                                 <Label htmlFor="password_confirmation">
-                                    Confirm password
+                                    Confirmar contraseña
                                 </Label>
 
                                 <PasswordInput
@@ -101,7 +129,7 @@ export default function Security(props: Props) {
                                     name="password_confirmation"
                                     className="mt-1 block w-full"
                                     autoComplete="new-password"
-                                    placeholder="Confirm password"
+                                    placeholder="Confirmar contraseña"
                                     passwordrules={props.passwordRules}
                                 />
 
@@ -115,13 +143,13 @@ export default function Security(props: Props) {
                                     disabled={processing}
                                     data-test="update-password-button"
                                 >
-                                    Save
+                                    Guardar contraseña
                                 </Button>
                             </div>
                         </>
                     )}
                 </Form>
-            </div>
+            </SettingsCard>
 
             <ManageTwoFactor
                 canManageTwoFactor={props.canManageTwoFactor}
@@ -140,7 +168,7 @@ export default function Security(props: Props) {
 Security.layout = {
     breadcrumbs: [
         {
-            title: 'Security settings',
+            title: 'Configuración de seguridad',
             href: edit(),
         },
     ],

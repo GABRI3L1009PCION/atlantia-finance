@@ -1,6 +1,11 @@
 <?php
 
+use App\Models\User;
+use App\Services\Platform\GlobalConfigurationService;
+use App\Services\Platform\OrganizationManagementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /*
@@ -47,4 +52,52 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/** Active Atlantia Control Center staff member with the given SaaS role. */
+function ccStaff(string $role = 'saas_owner'): User
+{
+    $user = User::factory()->create();
+    DB::table('platform_staff')->insert(['user_id' => $user->id, 'role' => $role, 'status' => 'active', 'require_two_factor' => false, 'created_at' => now(), 'updated_at' => now()]);
+
+    return $user;
+}
+
+/** Turns off the staff two-factor policy so tests can reach the Control Center without a TOTP device. */
+function ccRelaxTwoFactor(): void
+{
+    DB::table('platform_settings')->updateOrInsert(['key' => 'security.require_two_factor_for_staff'],
+        ['group' => 'security', 'value' => json_encode(false), 'sensitive' => true, 'created_at' => now(), 'updated_at' => now()]);
+    app()->forgetInstance(GlobalConfigurationService::class);
+}
+
+function ccOwner(): User
+{
+    ccRelaxTwoFactor();
+
+    return ccStaff('saas_owner');
+}
+
+/**
+ * Re-authentication payload of a sensitive Control Center action (factory password).
+ *
+ * @param  array<string, mixed>  $extra
+ * @return array<string, mixed>
+ */
+function ccConfirm(array $extra = []): array
+{
+    return ['password' => 'password', 'reason' => 'Motivo de la prueba', ...$extra];
+}
+
+function ccPrice(string $planCode, string $period = 'monthly'): int
+{
+    return (int) DB::table('plan_prices')->join('plans', 'plans.id', '=', 'plan_prices.plan_id')
+        ->where('plans.code', $planCode)->where('plan_prices.billing_period', $period)->value('plan_prices.id');
+}
+
+/** Client organization onboarded through the Control Center service; returns its id. */
+function ccOrganization(User $actor, string $planCode = 'professional', bool $trial = false, string $name = 'Firma Cliente'): int
+{
+    return app(OrganizationManagementService::class)->onboard($actor, ['name' => $name, 'plan_price_id' => ccPrice($planCode), 'trial' => $trial,
+        'owner_name' => 'Dueño '.$name, 'owner_email' => Str::slug($name).'@cliente.test', 'office_name' => 'Central'])['organization_id'];
 }
