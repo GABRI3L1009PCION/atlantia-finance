@@ -63,6 +63,7 @@ jobs:
         run: composer setup
 
       - name: Run CI Checks
+        shell: bash
         run: composer ci:check 2>&1 | tee ci.log
 
       - name: Summarize failures
