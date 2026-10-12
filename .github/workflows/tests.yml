@@ -63,4 +63,11 @@ jobs:
         run: composer setup
 
       - name: Run CI Checks
-        run: composer ci:check
+        run: composer ci:check 2>&1 | tee ci.log
+
+      - name: Summarize failures
+        if: failure()
+        run: |
+          msg=$(grep -E -A12 'FAILED|Exception|Error' ci.log | head -150 | tr -d '\r' | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=CI failures::$msg"
+
