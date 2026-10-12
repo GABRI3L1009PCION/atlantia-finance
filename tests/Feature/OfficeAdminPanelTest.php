@@ -180,7 +180,7 @@ test('office administrators cannot escalate privileges or post accounting by def
 
     $this->post(route('office.admin.users.role', $f['assistantA']->id), ['role_code' => 'accountant_in_charge', 'office_id' => $f['officeA']->id])->assertRedirect();
     $codes = DB::table('user_role_assignments')->join('workspace_roles', 'workspace_roles.id', '=', 'user_role_assignments.workspace_role_id')
-        ->where('user_role_assignments.user_id', $f['assistantA']->id)->pluck('user_role_assignments.status', 'workspace_roles.code')->all();
+        ->where('user_role_assignments.user_id', $f['assistantA']->id)->orderBy('user_role_assignments.id')->pluck('user_role_assignments.status', 'workspace_roles.code')->all();
     expect($codes)->toBe(['accounting_assistant' => 'inactive', 'accountant_in_charge' => 'active']);
 });
 

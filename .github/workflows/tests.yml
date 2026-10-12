@@ -17,13 +17,12 @@ jobs:
       postgres:
         image: postgres:18
         env:
-          POSTGRES_DB: atlantia_finance_test
-          POSTGRES_USER: atlantia
-          POSTGRES_PASSWORD: atlantia
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U atlantia -d atlantia_finance_test"
+          --health-cmd "pg_isready -U postgres"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -33,7 +32,8 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: 5432
       DB_DATABASE: atlantia_finance_test
-      DB_USERNAME: atlantia
+      # The application role is neither SUPERUSER nor BYPASSRLS, as in production: Row Level Security must apply.
+      DB_USERNAME: atlantia_finance_user
       DB_PASSWORD: atlantia
 
     steps:
@@ -53,6 +53,11 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
+
+      - name: Provision database roles
+        env:
+          PGPASSWORD: postgres
+        run: psql -h 127.0.0.1 -U postgres -d postgres -v app_password="'atlantia'" -f database/postgres/provision.sql
 
       - name: Setup Application
         run: composer setup
