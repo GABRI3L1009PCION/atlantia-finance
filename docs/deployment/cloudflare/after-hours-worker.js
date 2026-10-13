@@ -84,8 +84,8 @@ footer{border-top:1px solid rgba(255,255,255,.1);padding-top:16px;text-align:cen
 .scene{position:relative;height:620px;perspective:1300px;--rx:0deg;--ry:0deg}
 .moon{position:absolute;top:2%;right:6%;width:92px;height:92px;border-radius:50%;box-shadow:inset -20px 7px 0 0 #f7dccb,0 0 70px 6px rgba(255,205,175,.28);animation:bob 9s ease-in-out infinite}
 .star{position:absolute;width:3px;height:3px;border-radius:50%;background:#ffd9d0;animation:twinkle 3s ease-in-out infinite}
-.palms{position:absolute;bottom:4%;width:100%;height:78%;pointer-events:none}.palms.back{opacity:.55;transform:translateX(calc(var(--ry)*-1.2))}.palms.front{opacity:.9;transform:translateX(calc(var(--ry)*-2.2))}
-.palm{fill:#150408;stroke:none}
+.palms{position:absolute;bottom:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible}.palms.back{opacity:.9;transform:translateX(calc(var(--ry)*-1.2))}.palms.front{opacity:.9;transform:translateX(calc(var(--ry)*-2.2))}
+.palm{fill:#0f0307;stroke:none;filter:drop-shadow(0 0 7px rgba(255,70,100,.38))}.palms.back .palm{fill:#3a0f1b}.scene::before{content:"";position:absolute;left:-6%;right:-6%;bottom:0;height:62%;background:radial-gradient(ellipse at 50% 100%,rgba(235,60,95,.42),rgba(150,20,45,.18) 45%,transparent 70%);pointer-events:none}
 .world{position:absolute;inset:0;transform-style:preserve-3d;transform:rotateX(calc(var(--rx)*-1)) rotateY(var(--ry));transition:transform .25s ease-out}
 .sway{position:absolute;inset:0;transform-style:preserve-3d;animation:sway 11s ease-in-out infinite}
 .podium{position:absolute;left:50%;bottom:5%;width:480px;height:130px;margin-left:-240px;transform:translateZ(-60px)}
@@ -121,7 +121,17 @@ footer{border-top:1px solid rgba(255,255,255,.1);padding-top:16px;text-align:cen
 @media(prefers-reduced-motion:reduce){*{animation:none!important}.world{transition:none}}
 `;
 
-const PALM = '<g class="palm"><path d="M-6 0C-4 -90 2 -170 18 -250l8 2C14 -170 8 -90 8 0Z"/><path d="M20 -250C-10 -262 -60 -250 -96 -214c34-10 66-8 100 6C-30 -222 -52 -196 -62 -168c26-16 52-22 86-30-22 12-34 30-42 52 24-22 46-30 72-32l8-10Z"/><path d="M22 -250C58 -270 112 -268 150 -230c-36-8-66-4-98 12 34-2 58 8 78 30-30-14-56-14-84-8Z"/></g>';
+const LEAF = 'M0 0C22 -30 72 -48 138 -14C102 -26 66 -22 40 -8C70 -2 100 6 126 28C88 8 44 4 0 0Z';
+const FRONDS = [-165, -138, -112, -86, -60, -34, -10, 14, 38, 150, 178, 206];
+
+function palm(x, ground, height, size, lean, flip) {
+    const cx = lean;
+    const cy = -height;
+    const trunk = `M-8 0Q${cx * 0.15 - 6} ${cy * 0.5} ${cx - 3} ${cy}L${cx + 5} ${cy}Q${cx * 0.15 + 12} ${cy * 0.5} 9 0Z`;
+    const fronds = FRONDS.map((angle, i) => `<path d="${LEAF}" transform="translate(${cx} ${cy}) rotate(${angle}) scale(${(size * (0.86 + (i % 3) * 0.1)).toFixed(2)})"/>`).join('');
+
+    return `<g class="palm" transform="translate(${x} ${ground}) scale(${flip} 1)"><path d="${trunk}"/>${fronds}</g>`;
+}
 
 function scene(info, mode) {
     const glassTop = mode === 'down' ? 'Estamos trabajando' : `Próxima apertura`;
@@ -137,8 +147,8 @@ function scene(info, mode) {
 
     return `<section class="scene" id="scene" aria-hidden="true">
 <span class="moon"></span>${stars}
-<svg class="palms back" viewBox="0 0 640 520" preserveAspectRatio="xMidYMax slice"><g transform="translate(70 520) scale(.8)">${PALM}</g><g transform="translate(560 520) scale(.7)">${PALM}</g></svg>
-<svg class="palms front" viewBox="0 0 640 520" preserveAspectRatio="xMidYMax slice"><g transform="translate(-10 540) scale(1.25)">${PALM}</g><g transform="translate(650 540) scale(1.3) scale(-1 1)">${PALM}</g></svg>
+<svg class="palms back" viewBox="0 0 640 620">${palm(120, 620, 250, 0.85, -22, 1)}${palm(520, 620, 270, 0.9, 20, -1)}</svg>
+<svg class="palms front" viewBox="0 0 640 620">${palm(36, 640, 340, 1.18, 40, 1)}${palm(606, 640, 310, 1.12, 34, -1)}</svg>
 <div class="dust">${dust}</div>
 <div class="world"><div class="sway">
 <div class="podium"><i></i><i></i><i></i></div>
