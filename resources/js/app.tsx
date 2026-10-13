@@ -14,6 +14,7 @@ createInertiaApp({
     layout: (name) => {
         switch (true) {
             case name === 'welcome':
+            case name === 'service-hours':
                 return null;
             case name === 'billing/checkout':
             case name === 'billing/embedded-checkout':

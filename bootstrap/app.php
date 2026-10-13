@@ -3,6 +3,7 @@
 use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\AuthenticateApiToken;
 use App\Http\Middleware\EnforceOfficeTwoFactor;
+use App\Http\Middleware\EnforceServiceHours;
 use App\Http\Middleware\EnsureActiveSubscription;
 use App\Http\Middleware\EnsurePlatformStaff;
 use App\Http\Middleware\HandleAppearance;
@@ -44,6 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             SetTenantDatabaseContext::class,
+            EnforceServiceHours::class,
             EnforceOfficeTwoFactor::class,
             RestrictSupervisingDirector::class,
             HandleAppearance::class,
