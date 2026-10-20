@@ -237,7 +237,9 @@ function highlight(text: string, term: string): ReactNode {
     }
 
     if (cursor < text.length) {
-        parts.push(<Fragment key={`t${cursor}`}>{text.slice(cursor)}</Fragment>);
+        parts.push(
+            <Fragment key={`t${cursor}`}>{text.slice(cursor)}</Fragment>,
+        );
     }
 
     return parts;
