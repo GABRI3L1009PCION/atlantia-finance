@@ -397,7 +397,7 @@ class OfficeAdminService
             ->when($onlyPending, fn (Builder $query) => $query->where('invitations.status', 'pending'))
             ->orderByDesc('invitations.created_at')
             ->when($limit !== null, fn (Builder $query) => $query->limit((int) $limit))
-            ->get(['invitations.public_id', 'invitations.email', 'invitations.name', 'invitations.status', 'invitations.expires_at', 'invitations.created_at', 'invitations.last_sent_at', 'invitations.sent_count', 'invitations.accepted_at', 'workspace_roles.name as role_name', 'offices.name as office_name', 'inviter.name as invited_by_name'])
+            ->get(['invitations.public_id', 'invitations.email', 'invitations.name', 'invitations.status', 'invitations.expires_at', 'invitations.created_at', 'invitations.last_sent_at', 'invitations.sent_count', 'invitations.accepted_at', 'invitations.canceled_at', 'workspace_roles.name as role_name', 'offices.name as office_name', 'inviter.name as invited_by_name'])
             ->map(function (object $invitation): array {
                 $expired = $invitation->status === 'pending' && Carbon::parse($invitation->expires_at)->isPast();
 
@@ -411,6 +411,8 @@ class OfficeAdminService
                     'sent_at' => (string) ($invitation->last_sent_at ?? $invitation->created_at),
                     'sent_count' => (int) $invitation->sent_count,
                     'expires_at' => (string) $invitation->expires_at,
+                    'accepted_at' => $invitation->accepted_at === null ? null : (string) $invitation->accepted_at,
+                    'canceled_at' => $invitation->canceled_at === null ? null : (string) $invitation->canceled_at,
                     'status' => $expired ? 'expired' : (string) $invitation->status,
                 ];
             })
@@ -421,7 +423,7 @@ class OfficeAdminService
      * Administrative events of the offices, newest first, each pointing to the record it touched.
      *
      * @param  list<int>  $officeIds
-     * @return list<array{event_id: int, actor: string, action: string, description: string, entity_type: string, entity_name: string|null, created_at: string, destination: string|null}>
+     * @return list<array{event_id: int, actor: string, action: string, action_label: string, description: string, entity_type: string, entity_name: string|null, created_at: string, destination: string|null}>
      */
     public function activity(int $organizationId, array $officeIds, bool $organizationWide, int $limit = 8, ?string $group = null): array
     {
@@ -456,6 +458,7 @@ class OfficeAdminService
                 'event_id' => (int) $event->id,
                 'actor' => $actor,
                 'action' => (string) $event->action,
+                'action_label' => (string) (self::ADMIN_ACTIONS[$event->action] ?? $event->action),
                 'description' => trim($actor.' '.(self::ADMIN_ACTIONS[$event->action] ?? $event->action).' '.($name ?? '')),
                 'entity_type' => (string) $event->auditable_type,
                 'entity_name' => $name,
@@ -558,6 +561,7 @@ class OfficeAdminService
             ->orderBy('name')
             ->get(['code', 'name'])
             ->filter(fn (object $role): bool => $highPrivilege || ! $this->authorization->isHighPrivilegeRole($organization, (string) $role->code))
+            ->filter(fn (object $role): bool => $this->authorization->roleAllowedByPlan($organization, (string) $role->code))
             ->map(fn (object $role): array => ['code' => (string) $role->code, 'name' => (string) $role->name])
             ->values()
             ->all();
@@ -682,6 +686,39 @@ class OfficeAdminService
             'successors' => $this->activeMembers($organization->id, $officeIds)->where('users.id', '!=', $userId)->orderBy('users.name')->get(['users.id', 'users.name'])
                 ->map(fn (object $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])->all(),
         ];
+    }
+
+    /**
+     * Open tasks of every collaborator of the offices, grouped by user and ordered by due date.
+     *
+     * @param  list<int>  $officeIds
+     * @return array<int, array<int, array{id: int, title: string, company_name: string|null, priority: string, status: string, due_at: string|null, is_overdue: bool}>>
+     */
+    public function openTasksByUser(int $organizationId, array $officeIds): array
+    {
+        return DB::table('work_tasks')
+            ->leftJoin('companies', 'companies.id', '=', 'work_tasks.company_id')
+            ->where('work_tasks.organization_id', $organizationId)
+            ->whereIn('work_tasks.office_id', $officeIds === [] ? [-1] : $officeIds)
+            ->whereNotNull('work_tasks.assigned_to')
+            ->whereNull('work_tasks.deleted_at')
+            ->whereNotIn('work_tasks.status', ['completed', 'approved', 'cancelled'])
+            ->orderByRaw('CASE WHEN work_tasks.due_at IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('work_tasks.due_at')
+            ->limit(1500)
+            ->get(['work_tasks.id', 'work_tasks.assigned_to', 'work_tasks.title', 'work_tasks.priority', 'work_tasks.status', 'work_tasks.due_at', 'companies.name as company_name'])
+            ->groupBy('assigned_to')
+            ->map(fn ($tasks): array => $tasks->map(fn (object $task): array => [
+                'id' => (int) $task->id,
+                'title' => (string) $task->title,
+                'company_name' => $task->company_name === null ? null : (string) $task->company_name,
+                'priority' => (string) $task->priority,
+                'status' => (string) $task->status,
+                'due_at' => $task->due_at === null ? null : (string) $task->due_at,
+                'is_overdue' => $task->due_at !== null && Carbon::parse($task->due_at)->isPast(),
+            ])->values()->all())
+            ->mapWithKeys(fn (array $tasks, $userId): array => [(int) $userId => $tasks])
+            ->all();
     }
 
     /**

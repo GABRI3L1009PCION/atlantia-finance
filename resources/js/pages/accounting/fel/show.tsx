@@ -11,7 +11,8 @@ import {
 } from '@/components/accounting-ui';
 import * as accounting from '@/routes/accounting';
 import * as fel from '@/routes/accounting/fel';
-import { labels, TestNotice } from './types';
+import { SatPanel } from './sat-panel';
+import { statusLabel, TestNotice } from './types';
 import type { Document } from './types';
 
 export default function FelShow({
@@ -19,6 +20,9 @@ export default function FelShow({
     document: doc,
     history,
     canWrite,
+    canCertify,
+    satPortalUrl,
+    assignees,
     notice,
     entry,
 }: {
@@ -26,12 +30,16 @@ export default function FelShow({
     document: Document;
     history: { action: string; user_id: number; occurred_at: string }[];
     canWrite: boolean;
-    notice: string;
+    canCertify: boolean;
+    satPortalUrl: string;
+    assignees: { id: number; name: string }[];
+    notice: string | null;
     entry: number | null;
 }) {
     const action = useForm({});
     const cancellation = useForm({ reason: '' });
     const args: [string, string] = [company.public_id, doc.public_id];
+    const satManual = doc.provider === 'sat_manual';
     usePoll(5000, { only: ['document', 'history', 'entry'] });
 
     return (
@@ -47,9 +55,19 @@ export default function FelShow({
             <TestNotice notice={notice} />
             <Errors errors={action.errors} />
             <Errors errors={cancellation.errors} />
+            {doc.status === 'awaiting_sat' && (
+                <SatPanel
+                    companyId={company.public_id}
+                    doc={doc}
+                    canWrite={canWrite}
+                    canCertify={canCertify}
+                    portalUrl={satPortalUrl}
+                    assignees={assignees}
+                />
+            )}
             <div className="flex flex-wrap items-center gap-3">
                 <span className="rounded-full bg-white px-4 py-2 font-semibold">
-                    {labels[doc.status]}
+                    {statusLabel(doc.status, doc.provider)}
                 </span>
                 {doc.pdf_status === 'ready' && (
                     <a className={secondary} href={fel.pdf.url(args)}>
@@ -69,7 +87,9 @@ export default function FelShow({
                     >
                         {doc.status === 'failed'
                             ? 'Reintentar certificación'
-                            : 'Certificar en prueba'}
+                            : satManual
+                              ? 'Preparar para emitir en SAT'
+                              : 'Certificar en prueba'}
                     </button>
                 )}
                 {canWrite &&
@@ -127,10 +147,18 @@ export default function FelShow({
                         Emisión: {doc.issued_on.slice(0, 10)} · GTQ
                     </p>
                 </Card>
-                <Card title="Resultado de certificación">
+                <Card
+                    title={
+                        satManual
+                            ? 'Resultado de la emisión en la SAT'
+                            : 'Resultado de certificación'
+                    }
+                >
                     <p className="break-all">
-                        Autorización simulada:{' '}
-                        {doc.authorization_number ?? 'Pendiente'}
+                        {satManual
+                            ? 'Autorización SAT'
+                            : 'Autorización simulada'}
+                        : {doc.authorization_number ?? 'Pendiente'}
                     </p>
                     <p className="mt-3">
                         Serie FEL: {doc.fel_series ?? '—'} · Número FEL:{' '}
@@ -226,7 +254,15 @@ export default function FelShow({
                 <p className="mt-4 text-sm">{doc.observations}</p>
             </Card>
             {canWrite && doc.status === 'certified' && (
-                <Card title="Anulación de prueba">
+                <Card title={satManual ? 'Anulación' : 'Anulación de prueba'}>
+                    {satManual && (
+                        <p className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+                            Primero anula el documento en el portal de la SAT.
+                            Aquí solo registras que ya se anuló: Atlantia
+                            revierte el asiento contable y deja el motivo en la
+                            auditoría.
+                        </p>
+                    )}
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -253,7 +289,9 @@ export default function FelShow({
                             className={secondary + ' mt-3'}
                             disabled={cancellation.processing}
                         >
-                            Anular documento simulado
+                            {satManual
+                                ? 'Registrar anulación'
+                                : 'Anular documento simulado'}
                         </button>
                     </form>
                 </Card>

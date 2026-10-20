@@ -39,6 +39,7 @@ test('each branch administrator only sees and manages their own office', functio
             ->where('panel.permissions.canCreateOffice', false));
 
     $this->get(route('office.dashboard', ['office_id' => $f['officeB']->id]))->assertForbidden();
+    $this->get(route('office.subscription'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('work/subscription'));
     $this->get(route('office.admin.users'))->assertOk()
         ->assertInertia(fn (Assert $page) => $page->where('users', fn ($users) => collect($users)->pluck('id')->doesntContain($f['memberB']->id)));
 
@@ -134,6 +135,16 @@ test('invitations are created, resent, cancelled and applied on acceptance', fun
     $pedro = DB::table('invitations')->where('email', 'pedro@example.com')->value('public_id');
     $this->post(route('office.admin.invitations.cancel', $pedro))->assertRedirect();
     $this->assertDatabaseHas('invitations', ['public_id' => $pedro, 'status' => 'canceled', 'canceled_by' => $f['adminA']->id]);
+
+    $this->get(route('office.admin.invitations'))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('office/invitations')
+            ->has('invitations', 2)
+            ->where('invitations', fn ($rows) => collect($rows)->pluck('status', 'email')->sortKeys()->all() === ['maria@example.com' => 'accepted', 'pedro@example.com' => 'canceled'])
+            ->where('invitations', fn ($rows) => collect($rows)->firstWhere('email', 'maria@example.com')['accepted_at'] !== null)
+            ->where('permissions.canInvite', true));
+
+    $this->actingAs($f['memberB'])->get(route('office.admin.invitations'))->assertForbidden();
 });
 
 test('deactivating a collaborator requires handing over their work and keeps history', function () {
@@ -162,6 +173,16 @@ test('deactivating a collaborator requires handing over their work and keeps his
     $this->post(route('office.admin.users.deactivate', $f['owner']->id), ['leave_pending' => true])->assertForbidden();
     $this->post(route('office.admin.users.deactivate', $f['memberB']->id), ['leave_pending' => true])->assertForbidden();
     $this->actingAs($f['owner'])->post(route('office.admin.users.deactivate', $f['owner']->id), ['leave_pending' => true])->assertStatus(422);
+});
+
+test('the people offered for a responsibility are judged by their own role, not by the role of whoever is looking', function () {
+    $f = officeAdminFixture();
+
+    foreach ([$f['owner'], $f['adminA']] as $viewer) {
+        $names = $this->actingAs($viewer)->getJson('/office/assignable-users?office_id='.$f['officeA']->id.'&role=accountant_in_charge')->assertOk()->json('users');
+        $ids = collect($names)->pluck('id')->all();
+        expect($ids)->toContain($f['accountantA']->id)->not->toContain($f['assistantA']->id)->not->toContain($f['adminA']->id);
+    }
 });
 
 test('office administrators cannot escalate privileges or post accounting by default', function () {
@@ -203,8 +224,9 @@ test('branches cannot be switched off with clients and companies can move with t
     $this->assertDatabaseHas('work_tasks', ['id' => $taskId, 'office_id' => $f['officeB']->id, 'assigned_to' => null]);
     $this->assertDatabaseHas('audit_logs', ['action' => 'company.office_changed', 'auditable_id' => $f['mayaId']]);
 
-    $this->actingAs($f['adminA'])->get(route('office.admin.unassignedTasks'))->assertOk()->assertInertia(fn (Assert $page) => $page->has('tasks', 0));
-    $this->actingAs($f['adminB'])->get(route('office.admin.unassignedTasks'))->assertOk()->assertInertia(fn (Assert $page) => $page->where('tasks.0.id', $taskId));
+    $this->actingAs($f['adminA'])->get(route('office.admin.unassignedTasks'))->assertRedirect(route('office.admin.teamWorkload'));
+    $this->get(route('office.admin.teamWorkload'))->assertOk()->assertInertia(fn (Assert $page) => $page->has('unassignedTasks', 0));
+    $this->actingAs($f['adminB'])->get(route('office.admin.teamWorkload'))->assertOk()->assertInertia(fn (Assert $page) => $page->where('unassignedTasks.0.id', $taskId));
     $this->post(route('office.admin.tasks.assign', $taskId), ['assigned_to' => $f['memberB']->id])->assertRedirect();
     $this->assertDatabaseHas('work_tasks', ['id' => $taskId, 'assigned_to' => $f['memberB']->id]);
 });
@@ -317,7 +339,7 @@ test('team, assignments and workload have their own screens limited to the admin
             ->where('assignments.history.0.description', fn ($text) => str_contains((string) $text, 'responsable')));
 
     $this->get(route('office.admin.teamWorkload'))->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('office/team-workload')->has('team.unassigned_tasks')->has('team.workload'));
+        ->assertInertia(fn (Assert $page) => $page->component('office/team-workload')->has('team.unassigned_tasks')->has('team.workload')->has('unassignedTasks')->has('tasksByUser'));
 
     $this->get(route('office.admin.assignments', ['office_id' => $f['officeB']->id]))->assertForbidden();
     $this->actingAs($f['accountantA'])->get(route('office.admin.team'))->assertForbidden();
@@ -382,7 +404,7 @@ test('each company chooses its FEL certifier and keeps the credentials encrypted
     $this->get(route('accounting.fel.settings.edit', $maya))->assertInertia(fn (Assert $page) => $page
         ->where('certification.certifier', 'infile')->where('certification.credentials.user', 'maya-fel')
         ->where('certification.credentials.api_key', '••••1234')->where('certification.credentials.sign_key', '••••9876')
-        ->has('certifiers', 3)->where('issuer.provider', 'mock'));
+        ->has('certifiers', 4)->where('issuer.provider', 'mock'));
 
     $this->post(route('accounting.fel.settings.update', $maya), [...$base, 'certifier' => 'infile', 'credentials' => ['user' => 'maya-fel-2', 'api_key' => '••••1234', 'sign_key' => '']])->assertSessionHasNoErrors();
     $stored = app(FelCertifiers::class)->decode(DB::table('company_fel_settings')->where('company_id', $f['mayaId'])->value('certifier_credentials'));

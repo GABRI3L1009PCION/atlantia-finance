@@ -21,6 +21,8 @@ use App\Services\Fel\FelPdfService;
 use App\Services\Fel\FelProviderInterface;
 use App\Services\Fel\FelProviderResolver;
 use App\Services\Fel\MockFelProvider;
+use App\Services\Fel\SatRegistrationService;
+use App\Services\Fel\SatXmlReader;
 use App\Services\Fel\SubscriptionFelService;
 use App\Services\FiscalConfigurationService;
 use App\Services\Receivables\ReceivableService;
@@ -484,7 +486,9 @@ test('platform invoices subscriptions with Atlantia identity and the original bu
         ->and($doc->fiscal_snapshot['logo_data_uri'])->toStartWith('data:image/png;base64,')
         ->and($doc->receiver_snapshot['name'])->toBe('Comprador original')
         ->and($doc->receiver_snapshot['email'])->toBe('buyer@example.test')->and($doc->total_cents)->toBe(79900);
-    app(FelCertificationService::class)->certify($issuer->id, $doc->public_id);
+    // Atlantia emits its own subscription invoices in the SAT portal and registers what the SAT returned.
+    expect($doc->status)->toBe(FelDocumentStatus::AwaitingSat)->and($doc->provider)->toBe('sat_manual');
+    app(SatRegistrationService::class)->register($doc, $admin, ['authorization_number' => 'PLAT-AUTH-1', 'fel_series' => 'AB12', 'fel_number' => '501', 'certified_at' => now()->toDateTimeString()]);
     app(FelPdfService::class)->generate($issuer->id, $doc->public_id);
     app(FelEmailService::class)->send($issuer->id, $doc->public_id);
     app(FelEmailService::class)->send($issuer->id, $doc->public_id);
@@ -514,4 +518,134 @@ test('PDF supports long multiple-page detail without removing test disclaimer', 
     if ($path = getenv('FEL_PDF_QA_PATH')) {
         file_put_contents($path, $pdf);
     }
+});
+
+function satIssuerMode(array $f): void
+{
+    test()->actingAs($f['owner'])->post(route('accounting.fel.settings.update', $f['uuid']), [
+        'name' => 'Empresa FEL', 'nit' => $f['nit'], 'address' => 'Guatemala', 'certifier' => 'sat_manual',
+        'certifier_environment' => 'test', 'establishment_code' => '1', 'vat_affiliation' => 'GEN',
+        // The screen used to send these two; a company that issues in the SAT portal already shows "production".
+        'provider' => 'sat_manual', 'environment' => 'production',
+    ])->assertSessionHasNoErrors();
+}
+
+function satXml(string $nit, string $total, string $authorization, string $receiver = 'CF'): string
+{
+    return '<?xml version="1.0" encoding="UTF-8"?><dte:GTDocumento xmlns:dte="http://www.sat.gob.gt/dte/fel/0.2.0" Version="0.1"><dte:SAT ClaseDocumento="dte"><dte:DTE ID="DatosCertificados"><dte:DatosEmision ID="DatosEmision">'
+        .'<dte:DatosGenerales CodigoMoneda="GTQ" FechaHoraEmision="2026-09-05T10:00:00-06:00" Tipo="FACT"/>'
+        .'<dte:Emisor AfiliacionIVA="GEN" CodigoEstablecimiento="1" NITEmisor="'.$nit.'" NombreEmisor="Empresa FEL"/>'
+        .'<dte:Receptor IDReceptor="'.$receiver.'" NombreReceptor="Cliente de prueba"/>'
+        .'<dte:Totales><dte:GranTotal>'.$total.'</dte:GranTotal></dte:Totales></dte:DatosEmision></dte:DTE>'
+        .'<dte:Certificacion><dte:NITCertificador>1</dte:NITCertificador><dte:NumeroAutorizacion Numero="4501" Serie="AB12CD34">'.$authorization.'</dte:NumeroAutorizacion>'
+        .'<dte:FechaHoraCertificacion>2026-09-05T10:00:05-06:00</dte:FechaHoraCertificacion></dte:Certificacion></dte:SAT></dte:GTDocumento>';
+}
+
+test('a company that issues in the SAT portal keeps the draft waiting and registers the XML the SAT gave back', function () {
+    $f = felFixture();
+    satIssuerMode($f);
+    $doc = felDraft($f, ['intent' => 'issue']);
+
+    expect($doc->status)->toBe(FelDocumentStatus::AwaitingSat)->and($doc->provider)->toBe('sat_manual')->and($doc->environment)->toBe('production')
+        ->and($doc->awaiting_sat_at)->not->toBeNull();
+    Queue::assertNotPushed(CertifyFelDocumentJob::class);
+    $this->assertDatabaseCount('fel_mock_receipts', 0);
+
+    $this->actingAs($f['owner'])->get(route('accounting.fel.show', [$f['uuid'], $doc->public_id]))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('accounting/fel/show')->where('notice', null)->where('document.status', 'awaiting_sat')->has('satPortalUrl'));
+
+    $wrong = UploadedFile::fake()->createWithContent('fel.xml', satXml($f['nit'], '999.00', 'AAAA-1'));
+    $this->post(route('accounting.fel.sat.register', [$f['uuid'], $doc->public_id]), ['sat_xml' => $wrong])->assertSessionHasErrors('sat_xml');
+    $otherNit = UploadedFile::fake()->createWithContent('fel.xml', satXml('ZZZ999', '224.00', 'AAAA-1'));
+    $this->post(route('accounting.fel.sat.register', [$f['uuid'], $doc->public_id]), ['sat_xml' => $otherNit])->assertSessionHasErrors('sat_xml');
+    expect($doc->fresh()->status)->toBe(FelDocumentStatus::AwaitingSat);
+
+    $good = UploadedFile::fake()->createWithContent('fel.xml', satXml($f['nit'], '224.00', 'AAAA-1'));
+    $this->post(route('accounting.fel.sat.register', [$f['uuid'], $doc->public_id]), ['sat_xml' => $good])->assertSessionHasNoErrors();
+    $registered = $doc->fresh();
+    expect($registered->status)->toBe(FelDocumentStatus::Certified)->and($registered->authorization_number)->toBe('AAAA-1')
+        ->and($registered->fel_series)->toBe('AB12CD34')->and($registered->fel_number)->toBe('4501')->and($registered->sat_source)->toBe('xml')
+        ->and($registered->sat_registered_by)->toBe($f['owner']->id)->and($registered->sat_xml_path)->not->toBeNull();
+    Storage::disk('local')->assertExists($registered->sat_xml_path);
+    Queue::assertPushed(GenerateInvoicePdfJob::class);
+    $this->assertDatabaseHas('audit_logs', ['action' => 'fel.sat_registered', 'auditable_id' => $doc->id]);
+});
+
+test('without the XML the four key data register the document and duplicates are refused', function () {
+    $f = felFixture();
+    satIssuerMode($f);
+    $first = felDraft($f, ['intent' => 'issue']);
+    $second = felDraft($f, ['intent' => 'issue']);
+    $data = ['authorization_number' => 'MANUAL-1', 'fel_series' => 'ZZ99', 'fel_number' => '77', 'certified_at' => '2026-09-05 10:00:00'];
+
+    $this->actingAs($f['owner'])->post(route('accounting.fel.sat.register', [$f['uuid'], $first->public_id]), [...$data, 'authorization_number' => ''])->assertSessionHasErrors('authorization_number');
+    $this->post(route('accounting.fel.sat.register', [$f['uuid'], $first->public_id]), $data)->assertSessionHasNoErrors();
+    expect($first->fresh()->status)->toBe(FelDocumentStatus::Certified)->and($first->fresh()->sat_source)->toBe('manual');
+
+    $this->post(route('accounting.fel.sat.register', [$f['uuid'], $second->public_id]), $data)->assertSessionHasErrors('authorization_number');
+    $this->post(route('accounting.fel.sat.register', [$f['uuid'], $first->public_id]), [...$data, 'authorization_number' => 'OTRO'])->assertSessionHasErrors('document');
+
+    $this->post(route('accounting.fel.sat.return', [$f['uuid'], $second->public_id]))->assertSessionHasNoErrors();
+    expect($second->fresh()->status)->toBe(FelDocumentStatus::Draft)->and($second->fresh()->awaiting_sat_at)->toBeNull();
+    $this->get(route('accounting.fel.edit', [$f['uuid'], $second->public_id]))->assertOk();
+});
+
+test('the accountant hands the portal step to an assistant, stale documents raise a warning once a day and the registered ones can be cancelled', function () {
+    $f = felFixture();
+    satIssuerMode($f);
+    $f['office']->users()->attach($f['owner'], ['role' => 'member', 'status' => 'active']);
+    $doc = felDraft($f, ['intent' => 'issue']);
+
+    $taskId = app(SatRegistrationService::class)->assignTask($doc->fresh(), $f['organization'], $f['owner'], $f['owner']->id);
+    $this->assertDatabaseHas('work_tasks', ['id' => $taskId, 'task_type' => 'fel_sat_issue', 'assigned_to' => $f['owner']->id, 'source_type' => 'fel_documents', 'source_id' => $doc->id]);
+    expect(app(SatRegistrationService::class)->assignTask($doc->fresh(), $f['organization'], $f['owner'], $f['owner']->id))->toBe($taskId);
+
+    $this->artisan('fel:sat-alerts')->assertSuccessful();
+    $this->assertDatabaseMissing('work_notifications', ['type' => 'fel.sat_pending']);
+    DB::table('fel_documents')->where('id', $doc->id)->update(['awaiting_sat_at' => now()->subDays(3)]);
+    $this->artisan('fel:sat-alerts')->assertSuccessful();
+    $this->assertDatabaseHas('work_notifications', ['user_id' => $f['owner']->id, 'type' => 'fel.sat_pending', 'related_type' => 'fel_documents', 'related_id' => $doc->id]);
+    $this->artisan('fel:sat-alerts')->assertSuccessful();
+    expect(DB::table('work_notifications')->where('type', 'fel.sat_pending')->count())->toBe(1);
+
+    app(SatRegistrationService::class)->register($doc->fresh(), $f['owner'], ['authorization_number' => 'CANCEL-1', 'fel_series' => 'S1', 'fel_number' => '1', 'certified_at' => '2026-09-05 10:00:00']);
+    app(FelCancellationService::class)->cancel($doc->fresh(), $f['organization'], $f['owner'], 'Anulada también en el portal de la SAT');
+    expect($doc->fresh()->status)->toBe(FelDocumentStatus::Cancelled)->and($doc->fresh()->cancellation_response['source'])->toBe('manual');
+});
+
+test('the reader understands the DTE layout of the SAT and refuses the emission XML that has no certification', function () {
+    $emission = <<<'XML'
+<dte:GTDocumento xmlns:dte="http://www.sat.gob.gt/dte/fel/0.2.0" Version="0.1">
+  <dte:SAT ClaseDocumento="dte">
+    <dte:DTE ID="DatosCertificados">
+      <dte:DatosEmision ID="DatosEmision">
+        <dte:DatosGenerales CodigoMoneda="GTQ" FechaHoraEmision="2026-10-13T11:26:10.000-06:00" Tipo="FACT"/>
+        <dte:Emisor AfiliacionIVA="GEN" CodigoEstablecimiento="1" NITEmisor="123456789" NombreComercial="NOMBRE COMERCIAL, S.A." NombreEmisor="RAZÓN SOCIAL, SOCIEDAD ANÓNIMA">
+          <dte:DireccionEmisor><dte:Direccion>3 Calle 6-11 Zona 9, Ciudad de Guatemala</dte:Direccion><dte:CodigoPostal>01009</dte:CodigoPostal><dte:Municipio>Guatemala</dte:Municipio><dte:Departamento>GUATEMALA</dte:Departamento></dte:DireccionEmisor>
+        </dte:Emisor>
+        <dte:Receptor CorreoReceptor="cliente@correo.com" IDReceptor="98765432" NombreReceptor="NOMBRE DEL CLIENTE">
+          <dte:DireccionReceptor><dte:Direccion>10 Avenida 12-00 Zona 1, Ciudad de Guatemala</dte:Direccion><dte:CodigoPostal>01001</dte:CodigoPostal><dte:Municipio>Guatemala</dte:Municipio><dte:Departamento>GUATEMALA</dte:Departamento></dte:DireccionReceptor>
+        </dte:Receptor>
+        <dte:Frases><dte:Frase CodigoEscenario="1" TipoFrase="1"/></dte:Frases>
+        <dte:Items><dte:Item BienOServicio="S" NumeroLinea="1"><dte:Cantidad>1.00</dte:Cantidad><dte:UnidadMedida>UNI</dte:UnidadMedida><dte:Descripcion>Servicio de consultoría profesional</dte:Descripcion><dte:PrecioUnitario>1000.00</dte:PrecioUnitario><dte:Precio>1000.00</dte:Precio><dte:Descuento>0.00</dte:Descuento><dte:Impuestos><dte:Impuesto><dte:NombreCorto>IVA</dte:NombreCorto><dte:CodigoUnidadGravable>1</dte:CodigoUnidadGravable><dte:MontoGravable>892.86</dte:MontoGravable><dte:MontoImpuesto>107.14</dte:MontoImpuesto></dte:Impuesto></dte:Impuestos><dte:Total>1000.00</dte:Total></dte:Item></dte:Items>
+        <dte:Totales><dte:TotalImpuestos><dte:TotalImpuesto NombreCorto="IVA" TotalMontoImpuesto="107.14"/></dte:TotalImpuestos><dte:GranTotal>1000.00</dte:GranTotal></dte:Totales>
+      </dte:DatosEmision>
+    </dte:DTE>
+  </dte:SAT>
+</dte:GTDocumento>
+XML;
+    $reader = app(SatXmlReader::class);
+
+    expect(fn () => $reader->read($emission))->toThrow(ValidationException::class, 'no trae la certificación');
+
+    $certified = str_replace('</dte:SAT>', '<dte:Certificacion><dte:NITCertificador>12521337</dte:NITCertificador><dte:NombreCertificador>SAT</dte:NombreCertificador><dte:NumeroAutorizacion Numero="1234567" Serie="A1B2C3D4">9F8E7D6C-0000-4000-8000-ABCDEF123456</dte:NumeroAutorizacion><dte:FechaHoraCertificacion>2026-10-13T11:26:12.000-06:00</dte:FechaHoraCertificacion></dte:Certificacion></dte:SAT>', $emission);
+    $read = $reader->read($certified);
+
+    expect($read)->toMatchArray([
+        'authorization_number' => '9F8E7D6C-0000-4000-8000-ABCDEF123456', 'series' => 'A1B2C3D4', 'number' => '1234567',
+        'issuer_nit' => '123456789', 'receiver_id' => '98765432', 'total_cents' => 100000, 'document_type' => 'FACT',
+    ])->and($read['certified_at'])->toBe('2026-10-13T11:26:12.000-06:00');
+
+    expect(fn () => $reader->read('<!DOCTYPE x [<!ENTITY a "b">]><x/>'))->toThrow(ValidationException::class)
+        ->and(fn () => $reader->read('esto no es xml'))->toThrow(ValidationException::class);
 });

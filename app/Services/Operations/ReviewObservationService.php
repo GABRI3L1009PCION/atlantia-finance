@@ -48,7 +48,7 @@ class ReviewObservationService
     ) {}
 
     /**
-     * @param  array{company_id: int, accounting_period_id?: int|null, company_period_review_id?: int|null, related_type?: string|null, related_id?: int|null, related_label?: string|null, severity: string, message: string, assigned_to?: int|null, due_at?: string|null}  $data
+     * @param  array{company_id: int, accounting_period_id?: int|null, company_period_review_id?: int|null, related_type?: string|null, related_id?: int|null, related_label?: string|null, origin_type?: string|null, origin_id?: int|null, severity: string, message: string, assigned_to?: int|null, due_at?: string|null}  $data
      */
     public function create(Organization $organization, User $actor, array $data): int
     {
@@ -69,6 +69,8 @@ class ReviewObservationService
             'related_type' => $data['related_type'] ?? 'general',
             'related_id' => $data['related_id'] ?? null,
             'related_label' => $data['related_label'] ?? null,
+            'origin_type' => $data['origin_type'] ?? null,
+            'origin_id' => $data['origin_id'] ?? null,
             'severity' => $data['severity'],
             'status' => 'open',
             'message' => $data['message'],

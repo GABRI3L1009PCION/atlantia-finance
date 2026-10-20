@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnforceOfficeTwoFactor
 {
-    private const ALLOWED = ['settings/*', 'user/*', 'two-factor-challenge', 'logout', 'email/*', 'invitations/*', 'workspace/organization'];
+    private const ALLOWED = ['settings/*', 'user/*', 'two-factor-challenge', 'logout', 'email/*', 'invitations/*', 'workspace/organization', 'password/change'];
 
     public function __construct(private TenantDatabaseContext $context) {}
 
@@ -29,12 +29,24 @@ class EnforceOfficeTwoFactor
             return $next($request);
         }
 
-        $required = DB::table('office_user')
+        // Accounts created with a temporary password must enroll two-step verification on their own.
+        $required = $user->must_enroll_two_factor || DB::table('office_user')
             ->join('offices', 'offices.id', '=', 'office_user.office_id')
             ->where('offices.organization_id', $organizationId)
             ->where('office_user.user_id', $user->id)
             ->where('office_user.status', 'active')
             ->where('offices.require_two_factor', true)
+            ->whereNull('offices.deleted_at')
+            ->exists();
+
+        // Client contacts answer to the policy of the office that serves their companies, not to a team membership.
+        $required = $required || DB::table('client_company_access')
+            ->join('companies', 'companies.id', '=', 'client_company_access.company_id')
+            ->join('offices', 'offices.id', '=', 'companies.office_id')
+            ->where('client_company_access.organization_id', $organizationId)
+            ->where('client_company_access.user_id', $user->id)
+            ->where('client_company_access.status', 'active')
+            ->where('offices.client_require_two_factor', true)
             ->whereNull('offices.deleted_at')
             ->exists();
 

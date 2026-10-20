@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Payroll;
 
+use App\Events\Work\SourceChanged;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingAutomationService;
@@ -92,6 +93,7 @@ class PayrollPaymentService
         $open = DB::table('payroll_payment_orders')->where('payroll_period_id', $period->id)->whereNotIn('status', ['paid', 'cancelled'])->exists();
         if (! $open) {
             DB::table('payroll_periods')->where('id', $period->id)->update(['status' => 'paid', 'paid_at' => now(), 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payroll_periods', (int) $period->id));
             $this->accounting->audit($organization, $actor, 'payroll.paid', 'payroll_periods', (int) $period->id, ['net_cents' => (int) $period->net_cents], (int) $period->office_id);
             $this->notifications->notify($organization->id, (int) ($period->submitted_by ?? $period->calculated_by), $actor->id, 'payroll.payment', 'Nómina pagada: '.$period->name, 'Tesorería ejecutó todos los pagos de la nómina.', 'payroll_periods', (int) $period->id);
         }

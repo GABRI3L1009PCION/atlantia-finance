@@ -36,6 +36,8 @@ class GlobalConfigurationService
         'mail.from_name' => ['group' => 'email', 'label' => 'Remitente de los correos', 'type' => 'string', 'default' => 'Atlantia Finance'],
         'mail.notifications_enabled' => ['group' => 'email', 'label' => 'Enviar correos de la plataforma', 'type' => 'bool', 'default' => true],
         'features.new_organizations_beta' => ['group' => 'features', 'label' => 'Nuevas organizaciones entran al grupo beta', 'type' => 'bool', 'default' => false],
+        'luzma.enabled' => ['group' => 'features', 'label' => 'Luzma IA encendida para todas las firmas', 'type' => 'bool', 'default' => true, 'sensitive' => true, 'help' => 'Único interruptor que apaga Luzma. Mientras esté encendida, Luzma sigue respondiendo aunque el modelo falle (modo básico).'],
+        'luzma.disabled_message' => ['group' => 'features', 'label' => 'Mensaje cuando Luzma está apagada', 'type' => 'string', 'default' => 'Luzma IA está en mantenimiento. Volverá a estar disponible pronto.'],
         'retention.api_logs_days' => ['group' => 'retention', 'label' => 'Conservar logs de API (días)', 'type' => 'int', 'default' => 90, 'min' => 7, 'max' => 730],
         'retention.health_checks_days' => ['group' => 'retention', 'label' => 'Conservar chequeos de salud (días)', 'type' => 'int', 'default' => 30, 'min' => 1, 'max' => 365],
         'retention.job_runs_days' => ['group' => 'retention', 'label' => 'Conservar historial de jobs (días)', 'type' => 'int', 'default' => 30, 'min' => 1, 'max' => 365],

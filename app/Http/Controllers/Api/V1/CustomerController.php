@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
@@ -58,6 +60,26 @@ class CustomerController extends ApiController
         }
 
         return $this->item($this->resources->customer($this->find((int) $record->id, $customer)));
+    }
+
+    /** A customer is removed only while it has no history; with invoices it must be kept (the documents are annulled, never deleted). */
+    public function destroy(Request $request, string $company, int $customer): Response|JsonResponse
+    {
+        $record = $this->company($request, $company, 'customers:write');
+        $this->find((int) $record->id, $customer);
+        if (DB::table('sales_invoices')->where('sales_customer_id', $customer)->exists() || DB::table('fel_documents')->where('customer_id', $customer)->exists()) {
+            $this->fail(409, 'has_history', 'El cliente tiene documentos y no se puede eliminar. Conserva el registro: los documentos se anulan, no se borran.');
+        }
+        try {
+            DB::transaction(function () use ($request, $record, $customer): void {
+                DB::table('sales_customers')->where('company_id', $record->id)->where('id', $customer)->delete();
+                $this->accounting->audit($this->organization($request), $this->user($request), 'sales.customer.deleted', 'sales_customers', $customer, $this->via($request));
+            });
+        } catch (QueryException) {
+            $this->fail(409, 'has_history', 'El cliente tiene movimientos relacionados y no se puede eliminar.');
+        }
+
+        return response()->noContent();
     }
 
     private function find(int $companyId, int $customer): stdClass

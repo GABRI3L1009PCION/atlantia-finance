@@ -144,7 +144,7 @@ class OfficeClientPortalController extends Controller
     public function storeReport(Request $request): RedirectResponse
     {
         [$organization, $user] = $this->resolve($request);
-        $data = $request->validate(['company_id' => 'required|integer', 'report_type' => ['required', Rule::in(array_keys(PublishedReportService::TYPES))], 'period_start' => 'required|date', 'period_end' => 'required|date', 'file' => 'nullable|file|max:20480']);
+        $data = $request->validate(['company_id' => 'required|integer', 'report_type' => ['required', Rule::in(array_keys(PublishedReportService::TYPES))], 'period_start' => 'required|date', 'period_end' => 'required|date', 'file' => 'nullable|file|mimes:pdf|max:20480']);
         $file = $request->file('file');
         $this->reports->prepare($organization, $user, (int) $data['company_id'], (string) $data['report_type'], Carbon::parse($data['period_start'])->toDateString(), Carbon::parse($data['period_end'])->toDateString(), $file instanceof UploadedFile ? $file : null);
 

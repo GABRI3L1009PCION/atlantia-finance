@@ -64,9 +64,9 @@ class FelEmailService
                 $response = Http::withToken($key)->withHeaders(['Idempotency-Key' => 'fel/'.$uuid])
                     ->connectTimeout(5)->timeout(20)->post('https://api.resend.com/emails', [
                         'from' => config('mail.from.address'), 'to' => [$email],
-                        'subject' => 'PRUEBA FEL · '.$doc->series.'-'.$doc->number,
+                        'subject' => FelInvoiceMail::subjectFor($doc),
                         'html' => view('fel.email', ['document' => $doc])->render(),
-                        'attachments' => [['filename' => 'FEL-PRUEBA-'.$doc->number.'.pdf', 'content' => base64_encode($content)]],
+                        'attachments' => [['filename' => FelInvoiceMail::attachmentName($doc), 'content' => base64_encode($content)]],
                     ]);
                 if (! $response->successful() || ! is_string($response->json('id'))) {
                     throw new RuntimeException('Resend no confirmó la recepción del correo.');

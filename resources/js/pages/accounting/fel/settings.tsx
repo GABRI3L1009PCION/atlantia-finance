@@ -107,16 +107,6 @@ export function FelIssuerForm({
                             />
                             <InputError message={errors.address} />
                         </label>
-                        <input
-                            type="hidden"
-                            name="provider"
-                            value={issuer.provider}
-                        />
-                        <input
-                            type="hidden"
-                            name="environment"
-                            value={issuer.environment}
-                        />
                         <div className="sm:col-span-2">
                             {issuer.logo_data_uri && (
                                 <img
@@ -152,17 +142,20 @@ export function FelIssuerForm({
                         <div className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:col-span-2 sm:grid-cols-2">
                             <div className="sm:col-span-2">
                                 <p className="font-semibold">
-                                    Certificador FEL
+                                    Cómo se emiten las facturas
                                 </p>
                                 <p className="text-xs text-slate-500">
-                                    Cada empresa elige con qué certificador
-                                    autorizado por SAT trabaja. Las credenciales
-                                    se guardan cifradas y nunca se vuelven a
-                                    mostrar completas.
+                                    Puedes emitir directamente en el portal de
+                                    la SAT, sin certificador ni costo, y
+                                    registrar aquí lo que la SAT emitió. Si
+                                    facturas mucho, elige un certificador
+                                    autorizado: sus credenciales se guardan
+                                    cifradas y nunca se vuelven a mostrar
+                                    completas.
                                 </p>
                             </div>
                             <label className="text-sm">
-                                Certificador
+                                Forma de emisión
                                 <select
                                     className={field}
                                     name="certifier"
@@ -182,7 +175,9 @@ export function FelIssuerForm({
                                 </select>
                                 <InputError message={errors.certifier} />
                             </label>
-                            <label className="text-sm">
+                            <label
+                                className={`text-sm ${certifier === 'sat_manual' ? 'hidden' : ''}`}
+                            >
                                 Ambiente del certificador
                                 <select
                                     className={field}
@@ -287,11 +282,21 @@ export function FelIssuerForm({
                                     />
                                 </label>
                             ))}
-                            <p className="text-sm text-amber-900 sm:col-span-2">
-                                {certifier === 'none'
-                                    ? 'Selecciona el certificador con el que trabaja esta empresa para poder emitir facturas electrónicas.'
-                                    : 'Datos del certificador guardados. La emisión con validez ante SAT se activa al validar la conexión con el ambiente de pruebas de este certificador.'}
-                            </p>
+                            {certifier === 'sat_manual' ? (
+                                <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900 sm:col-span-2">
+                                    Atlantia prepara la factura; tú la emites en
+                                    el portal de la SAT con tu usuario y
+                                    registras aquí el XML que la SAT te da.
+                                    Atlantia no pide ni guarda tu usuario ni tu
+                                    clave de la SAT.
+                                </p>
+                            ) : (
+                                <p className="text-sm text-amber-900 sm:col-span-2">
+                                    {certifier === 'none'
+                                        ? 'Selecciona cómo emite facturas esta empresa para poder prepararlas.'
+                                        : 'Datos del certificador guardados. La emisión con validez ante SAT se activa al validar la conexión con el ambiente de pruebas de este certificador.'}
+                                </p>
+                            )}
                         </div>
                         <div>
                             <button className={primary} disabled={processing}>

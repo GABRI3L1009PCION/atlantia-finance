@@ -22,6 +22,7 @@ class CompanyAssignmentService
         'accounts_payable',
         'payroll',
         'auditor',
+        'read_only',
     ];
 
     /** Permission a collaborator's role must grant in the office to hold each responsibility on a company. */
@@ -29,12 +30,13 @@ class CompanyAssignmentService
         'accountant_in_charge' => 'journal.review',
         'accounting_assistant' => 'journal.create',
         'supervisor' => 'tasks.review',
-        'tax_specialist' => 'fiscal.manage',
+        'tax_specialist' => 'fiscal.obligations.prepare',
         'treasury' => 'banks.manage',
         'accounts_receivable' => 'sales.manage',
         'accounts_payable' => 'purchases.manage',
         'payroll' => 'operations.manage',
         'auditor' => 'office.audit.view',
+        'read_only' => 'journal.view',
     ];
 
     public const LABELS = [
@@ -47,6 +49,7 @@ class CompanyAssignmentService
         'accounts_payable' => 'Cuentas por pagar',
         'payroll' => 'Nómina',
         'auditor' => 'Auditor',
+        'read_only' => 'Consulta (solo lectura)',
     ];
 
     public function __construct(
@@ -157,7 +160,7 @@ class CompanyAssignmentService
 
             DB::table('company_user')->updateOrInsert(
                 ['company_id' => $companyId, 'user_id' => $userId],
-                ['permission' => $role === 'auditor' ? 'viewer' : 'editor'],
+                ['permission' => in_array($role, ['auditor', 'read_only'], true) ? 'viewer' : 'editor'],
             );
 
             $this->accounting->audit($organization, $actor, 'company.user_assigned', 'company_assignments', $assignmentId, [

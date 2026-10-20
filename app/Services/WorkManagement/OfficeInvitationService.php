@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Notifications\WorkspaceInvitation;
 use App\Services\AccountingService;
+use App\Services\ClientPortal\ClientAccessService;
 use App\Services\WorkspaceContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -51,6 +52,9 @@ class OfficeInvitationService
         if ($role === null) {
             throw ValidationException::withMessages(['role_code' => 'Selecciona un rol activo.']);
         }
+        if (! $this->authorization->roleAllowedByPlan($organization, (string) $role->code)) {
+            throw ValidationException::withMessages(['role_code' => 'Tu plan solo permite invitar contadores o auxiliares. Para más roles, mejora tu plan.']);
+        }
         abort_if($this->authorization->isHighPrivilegeRole($organization, (string) $role->code) && ! $this->authorization->can($organization, $actor, 'roles.assign_high_privilege'), 403, 'No puedes invitar con un rol de dirección o administración.');
 
         $companies = collect($data['companies'] ?? [])->map(fn (array $item): array => ['company_id' => (int) $item['company_id'], 'assignment_role' => (string) $item['assignment_role']])->values();
@@ -67,7 +71,7 @@ class OfficeInvitationService
             if ($organization->users()->whereRaw('lower(email) = ?', [$email])->exists() || (clone $pending)->where('email', $email)->exists()) {
                 throw ValidationException::withMessages(['email' => 'Este correo ya pertenece al equipo o tiene una invitación vigente.']);
             }
-            if ($organization->users()->wherePivot('status', 'active')->count() + $pending->count() >= $this->context->limit($organization, 'users')) {
+            if ($this->seatsInUse($organization) >= $this->context->limit($organization, 'users')) {
                 throw ValidationException::withMessages(['email' => 'No hay cupos disponibles en el plan. Las invitaciones pendientes también reservan un cupo.']);
             }
 
@@ -94,6 +98,96 @@ class OfficeInvitationService
         $this->send($organization, $invitation, $token, true);
 
         return $invitation;
+    }
+
+    /**
+     * Invites an external client contact of one company. The contact joins with the client role, reaches only that company
+     * with its contact role, and does not take a seat of the plan. A contact the office already has gets the access right away.
+     *
+     * @param  array{name: string, email: string, company_id: int, contact_role: string}  $data
+     * @return array{status: 'invited'|'linked', invitation?: Invitation}
+     */
+    public function inviteClient(Organization $organization, User $actor, array $data): array
+    {
+        $companyId = (int) $data['company_id'];
+        abort_unless(array_key_exists($data['contact_role'], ClientAccessService::CONTACT_ROLES), 422);
+        $company = DB::table('companies')->where('companies.organization_id', $organization->id)->where('id', $companyId)->first(['id', 'office_id', 'name']);
+        abort_if($company === null || $company->office_id === null, 422, 'La empresa no pertenece a una oficina activa.');
+        $officeId = (int) $company->office_id;
+        $this->scope->authorize($organization, $actor, 'office.companies.assign', $officeId);
+        $email = Str::lower(trim($data['email']));
+        $clientRoleId = $this->clientRoleId($organization);
+        if ($clientRoleId === null) {
+            throw ValidationException::withMessages(['email' => 'El rol de cliente no está disponible en esta firma.']);
+        }
+
+        $existing = $organization->users()->whereRaw('lower(email) = ?', [$email])->first();
+        if ($existing !== null) {
+            $isClient = DB::table('user_role_assignments')->where('user_role_assignments.organization_id', $organization->id)->where('user_id', $existing->id)->where('workspace_role_id', $clientRoleId)
+                ->where('status', 'active')->whereNull('deleted_at')->exists();
+            if (! $isClient) {
+                throw ValidationException::withMessages(['email' => 'Este correo pertenece al equipo de la firma; no se puede usar como contacto de cliente.']);
+            }
+            $this->grantClientAccess($organization, $companyId, (int) $existing->id, $data['contact_role'], $actor->id);
+            $this->accounting->audit($organization, $actor, 'client_access.granted', 'companies', $companyId, ['user_id' => $existing->id, 'role' => $data['contact_role']], $officeId);
+
+            return ['status' => 'linked'];
+        }
+
+        $token = Str::random(64);
+        $invitation = DB::transaction(function () use ($organization, $actor, $email, $data, $clientRoleId, $companyId, $officeId, $token): Invitation {
+            $organization = Organization::query()->lockForUpdate()->findOrFail($organization->id);
+            if ($organization->invitations()->where('status', 'pending')->where('expires_at', '>', now())->where('email', $email)->exists()) {
+                throw ValidationException::withMessages(['email' => 'Este correo ya tiene una invitación vigente.']);
+            }
+            $invitation = $organization->invitations()->create([
+                'public_id' => (string) Str::uuid(), 'invited_by' => $actor->id, 'email' => $email, 'name' => trim($data['name']), 'role' => 'member', 'workspace_role_id' => $clientRoleId,
+                'token_hash' => hash('sha256', $token), 'status' => 'pending',
+                'metadata' => json_encode(['client_access' => [['company_id' => $companyId, 'contact_role' => $data['contact_role']]]], JSON_THROW_ON_ERROR),
+                'sent_count' => 1, 'last_sent_at' => now(), 'expires_at' => now()->addDays(7),
+            ]);
+            $invitation->offices()->attach($officeId);
+            $this->accounting->audit($organization, $actor, 'client_access.invited', 'invitations', (int) $invitation->id, ['email' => $email, 'company_id' => $companyId, 'role' => $data['contact_role']], $officeId);
+
+            return $invitation;
+        });
+
+        $this->send($organization, $invitation, $token, true);
+
+        return ['status' => 'invited', 'invitation' => $invitation];
+    }
+
+    /** Seats of the plan in use: active members and reserved invitations, leaving out external client contacts. */
+    public function seatsInUse(Organization $organization): int
+    {
+        $clientRoleId = $this->clientRoleId($organization);
+        $clientUsers = $clientRoleId === null ? [] : DB::table('user_role_assignments')->where('user_role_assignments.organization_id', $organization->id)->where('workspace_role_id', $clientRoleId)
+            ->where('status', 'active')->whereNull('deleted_at')->pluck('user_id')->all();
+        $active = $organization->users()->wherePivot('status', 'active')->whereNotIn('users.id', $clientUsers === [] ? [-1] : $clientUsers)->count();
+        $reserved = $organization->invitations()->where('status', 'pending')->where('expires_at', '>', now())
+            ->where(fn ($query) => $clientRoleId === null ? $query : $query->whereNull('workspace_role_id')->orWhere('workspace_role_id', '!=', $clientRoleId))->count();
+
+        return $active + $reserved;
+    }
+
+    public function isClientInvitation(Invitation $invitation): bool
+    {
+        $metadata = json_decode((string) ($invitation->getAttribute('metadata') ?? '{}'), true);
+
+        return is_array($metadata) && is_array($metadata['client_access'] ?? null) && $metadata['client_access'] !== [];
+    }
+
+    private function clientRoleId(Organization $organization): ?int
+    {
+        $id = DB::table('workspace_roles')->where('workspace_roles.organization_id', $organization->id)->where('code', 'client_user')->where('status', 'active')->whereNull('deleted_at')->value('id');
+
+        return $id === null ? null : (int) $id;
+    }
+
+    private function grantClientAccess(Organization $organization, int $companyId, int $userId, string $contactRole, ?int $grantedBy): void
+    {
+        DB::table('client_company_access')->updateOrInsert(['company_id' => $companyId, 'user_id' => $userId],
+            ['organization_id' => $organization->id, 'contact_role' => $contactRole, 'status' => 'active', 'granted_by' => $grantedBy, 'updated_at' => now(), 'created_at' => now()]);
     }
 
     /** Issues a new link (the old one stops working) and extends the expiry of a pending invitation. */
@@ -161,6 +255,13 @@ class OfficeInvitationService
             }
         }
 
+        foreach (is_array($metadata['client_access'] ?? null) ? $metadata['client_access'] : [] as $item) {
+            if (DB::table('companies')->where('companies.organization_id', $organization->id)->where('id', (int) $item['company_id'])->exists()) {
+                $this->grantClientAccess($organization, (int) $item['company_id'], $member->id, (string) $item['contact_role'], $invitation->invited_by);
+                $this->accounting->audit($organization, $member, 'client_access.accepted', 'companies', (int) $item['company_id'], ['user_id' => $member->id, 'role' => $item['contact_role']], $officeId);
+            }
+        }
+
         $this->accounting->audit($organization, $member, 'user.activated', 'users', $member->id, ['invitation' => $invitation->public_id], $officeId);
         $this->notifications->notify($organization->id, $invitation->invited_by, $member->id, 'invitation.accepted', $member->name.' aceptó la invitación y ya forma parte del equipo', $invitation->email, 'users', $member->id);
     }
@@ -169,10 +270,11 @@ class OfficeInvitationService
     {
         $invitation = $organization->invitations()->where('public_id', $publicId)->firstOrFail();
         $officeId = $this->officeId($invitation);
+        $permission = $this->isClientInvitation($invitation) ? 'office.companies.assign' : 'office.users.invite';
         if ($officeId === null) {
-            abort_unless($this->authorization->can($organization, $actor, 'office.users.invite'), 403);
+            abort_unless($this->authorization->can($organization, $actor, $permission), 403);
         } else {
-            $this->scope->authorize($organization, $actor, 'office.users.invite', $officeId);
+            $this->scope->authorize($organization, $actor, $permission, $officeId);
         }
 
         return $invitation;

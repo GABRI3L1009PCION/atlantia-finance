@@ -89,6 +89,7 @@ class WorkspaceController extends Controller
                 $office->update($values);
             } else {
                 $office = $organization->offices()->create([...$values, 'code' => 'MAIN', 'is_primary' => true]);
+                DB::table('offices')->where('id', $office->id)->update(['treasury_close_policy' => 'block', 'fiscal_close_policy' => 'block']);
             }
             $office->users()->syncWithoutDetaching([$request->user()->id => ['role' => 'owner', 'status' => 'active', 'assigned_at' => now()]]);
         });

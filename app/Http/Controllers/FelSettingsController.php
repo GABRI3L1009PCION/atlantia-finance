@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Services\AccountingService;
 use App\Services\Fel\FelCertifiers;
 use App\Services\Fel\FelIssuerSettings;
+use App\Services\Fel\FelProviderResolver;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\RedirectResponse;
@@ -50,7 +51,7 @@ class FelSettingsController extends Controller
         ]);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:150'], 'nit' => ['required', 'string', 'max:30', 'regex:/^[A-Za-z0-9-]+$/D'],
-            'address' => ['required', 'string', 'max:255'], 'provider' => ['required', 'in:mock'], 'environment' => ['required', 'in:test'],
+            'address' => ['required', 'string', 'max:255'], 'provider' => ['sometimes', 'in:mock,sat_manual'], 'environment' => ['sometimes', 'in:test,production'],
             'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg', 'max:512', 'dimensions:max_width=2000,max_height=2000'],
             'remove_logo' => ['sometimes', 'boolean'],
             'certifier' => ['required', Rule::in(FelCertifiers::codes())],
@@ -62,6 +63,9 @@ class FelSettingsController extends Controller
             'issuer_email' => ['nullable', 'email', 'max:150'],
             'trade_name' => ['nullable', 'string', 'max:150'],
         ]);
+        // Issuing by hand in the SAT portal is its own mode; every other certifier stays simulated until its adapter is validated.
+        $data['provider'] = $data['certifier'] === FelCertifiers::SAT_MANUAL ? FelProviderResolver::SAT_MANUAL : 'mock';
+        $data['environment'] = 'test';
         DB::transaction(function () use ($request, $organization, $record, $data): void {
             $this->accounting->lock($record->id);
             $current = $this->issuers->forCompany($record);

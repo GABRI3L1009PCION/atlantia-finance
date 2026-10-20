@@ -172,7 +172,7 @@ function Locked({ feature }: { feature: string }) {
                 {feature} no está incluido en tu plan actual. Está disponible en
                 los planes Corporativo y Empresarial.
             </span>
-            <Link href="/billing/plans" className={secondaryButton}>
+            <Link href="/office/subscription" className={secondaryButton}>
                 Ver planes
             </Link>
         </div>

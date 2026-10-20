@@ -137,6 +137,14 @@ class FelDocumentService
                 }
                 $doc->provider_payload = null;
             }
+            if ($doc->provider === FelProviderResolver::SAT_MANUAL) {
+                // Issued by hand in the SAT portal: it waits here until someone registers what the SAT issued.
+                $doc->transition(FelDocumentStatus::AwaitingSat);
+                $doc->forceFill(['error_code' => null, 'awaiting_sat_at' => now(), 'sat_alerted_at' => null])->save();
+                $this->audit->record($doc, 'awaiting_sat', $actorId);
+
+                return;
+            }
             $doc->transition(FelDocumentStatus::Pending);
             $doc->forceFill(['error_code' => null])->save();
             $this->audit->record($doc, 'certification_requested', $actorId);

@@ -6,8 +6,10 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
+use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\Fiscal\VatBookService;
+use App\Services\Fiscal\WithholdingService;
 use App\Services\FiscalConfigurationService;
 use App\Services\Payables\PayableService;
 use App\Services\PurchaseCreditNoteService;
@@ -18,6 +20,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -36,6 +39,7 @@ class PurchaseController extends Controller
         private AccountingAutomationService $automation,
         private FiscalConfigurationService $fiscal,
         private VatBookService $vatBooks,
+        private DocumentAnnulmentService $annulments,
     ) {}
 
     public function index(Request $request, string $company): Response
@@ -451,7 +455,8 @@ class PurchaseController extends Controller
             'company' => $record, 'document' => $row,
             'lines' => DB::table('purchase_document_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')
                 ->where('l.purchase_document_id', $row->id)->select('l.*', 'a.code as account_code', 'a.name as account_name')->orderBy('l.position')->get(),
-            'payments' => DB::table('purchase_payments')->where('purchase_document_id', $row->id)->orderByDesc('id')->get(),
+            'payments' => $this->paymentsWithWithholdings($row->id),
+            'suggestedRates' => WithholdingService::SUGGESTED_RATES,
             'creditNotes' => DB::table('purchase_credit_notes')->where('purchase_document_id', $row->id)->orderByDesc('id')->get(['id', 'fiscal_series', 'fiscal_number', 'issued_on', 'amount_cents', 'vat_cents', 'reason', 'status', 'void_reason']),
             'payable' => app(PayableService::class)->find($row->id),
             'canCredit' => $this->accounting->canModule($org, $record->id, $request->user(), 'purchases.approve'),
@@ -468,6 +473,9 @@ class PurchaseController extends Controller
         $data = $request->validate(['action' => 'required|in:approve,void', 'reason' => 'required_if:action,void|nullable|string|max:500']);
         if ($data['action'] === 'void') {
             $this->accounting->assertModule($org, $record->id, $request->user(), 'purchases.void');
+            $this->annulments->annulPurchase($org, $request->user(), $record, $document, (string) $data['reason']);
+
+            return back()->with('purchase_notice', 'Documento anulado sin borrar movimientos. El reverso contable quedó trazado.');
         }
         DB::transaction(function () use ($request, $org, $record, $document, $data): void {
             $this->accounting->lock($record->id);
@@ -493,12 +501,6 @@ class PurchaseController extends Controller
                 $number = (int) DB::table('purchase_documents')->where('company_id', $record->id)->max('number') + 1;
                 DB::table('purchase_documents')->where('id', $row->id)->update(['status' => 'approved', 'number' => $number,
                     'approved_by' => $request->user()->id, 'approved_at' => now(), 'updated_at' => now()]);
-            } else {
-                $payable = app(PayableService::class)->find($row->id);
-                $this->ensure($row->status === 'approved' && $this->paid($row->id) === 0 && ($payable === null || $payable['credited_cents'] + $payable['advances_cents'] + $payable['adjusted_cents'] + $payable['committed_cents'] === 0), 'Solo puedes anular documentos aprobados sin pagos, notas de crédito, anticipos aplicados ni pagos en proceso.');
-                $this->automation->reverseSource($org, $request->user(), $record->id, 'purchase_document', $row->id, now()->toDateString(), $data['reason']);
-                DB::table('purchase_documents')->where('id', $row->id)->update(['status' => 'void', 'voided_by' => $request->user()->id,
-                    'voided_at' => now(), 'void_reason' => $data['reason'], 'updated_at' => now()]);
             }
             $this->accounting->audit($org, $request->user(), 'purchase.document.'.$data['action'], 'purchase_documents', $row->id, ['reason' => $data['reason'] ?? null]);
         });
@@ -512,7 +514,9 @@ class PurchaseController extends Controller
     {
         [$org, $record] = $this->scope($request, $company, 'purchases.manage');
         $data = $request->validate(['request_id' => 'required|uuid', 'amount' => 'required|string|max:13',
-            'paid_on' => 'required|date_format:Y-m-d|before_or_equal:today', 'reference' => 'required|string|max:150']);
+            'paid_on' => 'required|date_format:Y-m-d|before_or_equal:today', 'reference' => 'required|string|max:150',
+            'withholdings' => 'nullable|array|max:2', 'withholdings.*.kind' => 'required|in:isr,iva', 'withholdings.*.base' => 'required|string|max:13',
+            'withholdings.*.rate' => 'required|numeric|min:0.01|max:100', 'withholdings.*.certificate_number' => 'nullable|string|max:60']);
         DB::transaction(function () use ($request, $org, $record, $document, $data): void {
             $this->accounting->lock($record->id);
             $row = $this->document($record->id, $document);
@@ -528,9 +532,13 @@ class PurchaseController extends Controller
             $id = DB::table('purchase_payments')->insertGetId(['public_id' => $data['request_id'], 'purchase_document_id' => $row->id,
                 'amount_cents' => $amount, 'paid_on' => $data['paid_on'], 'reference' => $data['reference'],
                 'created_by' => $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
-            $entry = $this->automation->draftFromRule($org, $request->user(), $record->id, 'purchase_payment', $id, $data['paid_on'],
-                'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $amount,
-                ['third_party_type' => 'supplier', 'third_party_id' => $row->purchase_supplier_id]);
+            $dimensions = ['third_party_type' => 'supplier', 'third_party_id' => $row->purchase_supplier_id];
+            $withholdings = app(WithholdingService::class);
+            $entry = filled($data['withholdings'] ?? null)
+                ? $withholdings->draftPayment($org, $request->user(), $record->id, $id, $data['paid_on'], 'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $amount,
+                    $withholdings->compute($data['withholdings'], $amount), $dimensions)
+                : $this->automation->draftFromRule($org, $request->user(), $record->id, 'purchase_payment', $id, $data['paid_on'],
+                    'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $amount, $dimensions);
             $this->ensure($entry !== null, 'Abre un período contable que incluya la fecha del pago.');
             $this->accounting->audit($org, $request->user(), 'purchase.payment.created', 'purchase_payments', $id, ['amount_cents' => $amount]);
         });
@@ -708,6 +716,22 @@ class PurchaseController extends Controller
     private function paid(int $documentId): int
     {
         return (int) DB::table('purchase_payments')->where('purchase_document_id', $documentId)->whereNull('voided_at')->sum('amount_cents');
+    }
+
+    /** @return Collection<int, stdClass> payments of the document, each with the taxes withheld from it */
+    private function paymentsWithWithholdings(int $documentId): Collection
+    {
+        $payments = DB::table('purchase_payments')->where('purchase_document_id', $documentId)->orderByDesc('id')->get();
+        $withheld = DB::table('purchase_payment_withholdings')->whereIn('purchase_payment_id', $payments->pluck('id')->all() ?: [-1])->get()->groupBy('purchase_payment_id');
+
+        return $payments->map(function (stdClass $payment) use ($withheld): stdClass {
+            $items = $withheld[$payment->id] ?? collect();
+            $payment->withholdings = $items->map(fn ($item): array => ['kind' => $item->kind, 'rate_bp' => (int) $item->rate_bp, 'amount_cents' => (int) $item->amount_cents,
+                'certificate_number' => $item->certificate_number])->values()->all();
+            $payment->withheld_cents = (int) $items->sum('amount_cents');
+
+            return $payment;
+        });
     }
 
     private function paymentTotals(): Builder

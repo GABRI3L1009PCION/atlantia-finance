@@ -36,7 +36,7 @@ class FiscalObligationService
         $companies = DB::table('companies')
             ->leftJoin('company_fiscal_profiles as profile', 'profile.company_id', '=', 'companies.id')
             ->whereIn('companies.id', $companyIds)
-            ->get(['companies.id', 'companies.name', 'companies.public_id', 'profile.vat_regime', 'profile.income_tax_regime']);
+            ->get(['companies.id', 'companies.name', 'companies.public_id', 'companies.created_at', 'profile.vat_regime', 'profile.income_tax_regime']);
         $closedBooks = DB::table('vat_book_periods')->whereIn('company_id', $companyIds)->where('status', 'closed')
             ->get(['company_id', 'year', 'month'])->map(fn (object $row): string => $row->company_id.'-'.$row->year.'-'.$row->month)->all();
         $isrDone = DB::table('work_tasks')->whereIn('company_id', $companyIds)->where('automation_key', 'like', 'obligation:isr:%')
@@ -85,6 +85,11 @@ class FiscalObligationService
                 $cursor->addMonth();
             }
         }
+
+        // A company is not born owing the past: obligations that were already past due the day it joined Atlantia are not
+        // generated. Companies without a registration date keep the whole window.
+        $joinedOn = $companies->mapWithKeys(fn (stdClass $company): array => [(int) $company->id => $company->created_at === null ? null : Carbon::parse($company->created_at)->toDateString()])->all();
+        $obligations = array_values(array_filter($obligations, fn (array $row): bool => ($joinedOn[$row['company_id']] ?? null) === null || $row['due_on'] >= $joinedOn[$row['company_id']]));
 
         $obligations = array_map(function (array $row) use ($persisted): array {
             $saved = $persisted->get($row['key']);

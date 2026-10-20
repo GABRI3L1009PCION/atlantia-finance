@@ -29,7 +29,7 @@ class ClientAccessService
         'admin_contact' => ['-client.payroll.view', '-client.payroll.respond'],
         'accounting_contact' => ['client.dashboard.view', 'client.company.view', 'client.pending.view', 'client.calendar.view', 'client.documents.view', 'client.documents.upload', 'client.documents.replace',
             'client.document_requests.view', 'client.document_requests.respond', 'client.approvals.view', 'client.obligations.view', 'client.reports.view', 'client.reports.download', 'client.financial_reports.view',
-            'client.history.view', 'client.messages.view', 'client.messages.send', 'client.luzma.use', 'client.reminders.create', 'client.bank_documents.upload', 'client.fiscal.view'],
+            'client.history.view', 'client.messages.view', 'client.messages.send', 'client.luzma.use', 'client.reminders.create', 'client.bank_documents.upload', 'client.fiscal.view', 'client.finances.view'],
         'payroll_contact' => ['client.dashboard.view', 'client.company.view', 'client.pending.view', 'client.calendar.view', 'client.documents.view', 'client.documents.upload', 'client.documents.replace',
             'client.document_requests.view', 'client.document_requests.respond', 'client.payroll.view', 'client.payroll.respond', 'client.approvals.view', 'client.approvals.respond', 'client.history.view',
             'client.messages.view', 'client.messages.send', 'client.luzma.use', 'client.reminders.create'],

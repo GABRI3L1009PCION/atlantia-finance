@@ -1,7 +1,9 @@
 <?php
 
 return [
-    'provider' => env('FEL_PROVIDER', 'mock'),
+    'provider' => env('FEL_PROVIDER', 'sat_manual'),
+    'sat_portal_url' => env('FEL_SAT_PORTAL_URL', 'https://portal.sat.gob.gt'),
+    'sat_pending_alert_days' => (int) env('FEL_SAT_PENDING_ALERT_DAYS', 2),
     'environment' => env('FEL_ENVIRONMENT', 'test'),
     'api_url' => env('FEL_API_URL'),
     'api_key' => env('FEL_API_KEY'),

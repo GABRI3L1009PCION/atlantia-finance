@@ -117,9 +117,8 @@ class InvitationController extends Controller
             $record = Invitation::query()->lockForUpdate()->findOrFail($record->id);
             abort_unless($record->status === 'pending' && $record->expires_at->isFuture(), 410);
             abort_unless(in_array($organization->status, PlatformStatus::ORGANIZATION_ACCESS, true) && $organization->subscriptions()->whereIn('status', PlatformStatus::SUBSCRIPTION_ACCESS)->exists(), 403);
-            $occupied = $organization->users()->wherePivot('status', 'active')->count();
-            $reserved = $organization->invitations()->where('status', 'pending')->where('expires_at', '>', now())->count();
-            if ($occupied + $reserved > $context->limit($organization, 'users')) {
+            $seats = app(OfficeInvitationService::class);
+            if (! $seats->isClientInvitation($record) && $seats->seatsInUse($organization) > $context->limit($organization, 'users')) {
                 throw ValidationException::withMessages(['invitation' => 'El plan ya no tiene cupos suficientes. Contacta al propietario.']);
             }
             abort_if($existing && $organization->users()->whereKey($existing->id)->exists(), 409);

@@ -11,8 +11,10 @@ export const PAYABLES_HOME = '/payables/dashboard';
 export const PAYROLL_HOME = '/payroll/dashboard';
 export const AUDITOR_HOME = '/work/audit';
 export const CLIENT_HOME = '/client';
+export const ESSENTIAL_HOME = '/essential/dashboard';
 
 export type FirmWorkspace =
+    | 'essential'
     | 'executive'
     | 'office-admin'
     | 'operations'
@@ -64,6 +66,13 @@ const sharedFirmScreens = [
     '/settings',
 ];
 
+function isSharedFirmScreen(currentPath: string): boolean {
+    return (
+        sharedFirmScreens.includes(currentPath) ||
+        sharedFirmPrefixes.some((prefix) => currentPath.startsWith(prefix))
+    );
+}
+
 /**
  * Which firm-level navigation a screen belongs to. The executive and office administration panels keep their own menu
  * on their own screens; shared screens (offices, roles, closings, audit, client list) follow the user's home panel.
@@ -80,6 +89,17 @@ export function firmWorkspace(
         currentPath.startsWith(CLIENT_HOME + '/')
     ) {
         return 'client';
+    }
+
+    // The Esencial plan has a single workspace: its own screens and every shared screen keep its menu.
+    if (homePath === ESSENTIAL_HOME) {
+        if (currentPath.startsWith('/essential/')) {
+            return 'essential';
+        }
+
+        if (!pageCompany && isSharedFirmScreen(currentPath)) {
+            return 'essential';
+        }
     }
 
     if (currentPath === EXECUTIVE_HOME) {
@@ -146,11 +166,7 @@ export function firmWorkspace(
         return null;
     }
 
-    const isSharedFirmScreen =
-        sharedFirmScreens.includes(currentPath) ||
-        sharedFirmPrefixes.some((prefix) => currentPath.startsWith(prefix));
-
-    if (!isSharedFirmScreen) {
+    if (!isSharedFirmScreen(currentPath)) {
         return null;
     }
 

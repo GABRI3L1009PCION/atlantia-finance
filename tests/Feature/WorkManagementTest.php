@@ -8,9 +8,12 @@ use App\Services\WorkManagement\TaskTemplateService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkManagement\WorkDashboardService;
 use App\Services\WorkManagement\WorkloadService;
+use App\Services\WorkManagement\WorkNotificationService;
 use App\Services\WorkManagement\WorkTaskService;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -314,7 +317,7 @@ test('owner can assign operational role and company responsibility through route
         'user_id' => $f['assistant']->id,
         'assignment_role' => 'tax_specialist',
         'primary' => true,
-    ])->assertRedirect();
+    ])->assertRedirect()->assertSessionHasNoErrors();
 
     $this->assertDatabaseHas('company_assignments', [
         'company_id' => $f['companyId'],
@@ -544,6 +547,17 @@ test('task and review events notify the responsible collaborators only', functio
     $this->post(route('work.notifications.readAll'))->assertRedirect();
     expect(DB::table('work_notifications')->where('user_id', $f['assistant']->id)->whereNull('read_at')->count())->toBe(0)
         ->and(DB::table('work_notifications')->where('user_id', $f['reviewer']->id)->whereNull('read_at')->count())->toBeGreaterThan(0);
+
+    // Archiving moves a notification out of the inbox tabs; only its owner can archive or restore it.
+    $unreadReviewer = (int) DB::table('work_notifications')->where('user_id', $f['reviewer']->id)->whereNull('read_at')->value('id');
+    $this->actingAs($f['assistant'])->post(route('work.notifications.archive', [$unreadReviewer, 'archive']))->assertNotFound();
+    $this->actingAs($f['reviewer'])->post(route('work.notifications.archive', [$unreadReviewer, 'archive']))->assertRedirect();
+    $archived = DB::table('work_notifications')->where('id', $unreadReviewer)->first();
+    expect($archived->archived_at)->not->toBeNull()->and($archived->read_at)->not->toBeNull();
+    $inbox = app(WorkNotificationService::class)->inbox($f['org']->id, $f['reviewer']);
+    expect(collect($inbox['notifications'])->firstWhere('id', $unreadReviewer)['archived'])->toBeTrue();
+    $this->post(route('work.notifications.archive', [$unreadReviewer, 'restore']))->assertRedirect();
+    expect(DB::table('work_notifications')->where('id', $unreadReviewer)->value('archived_at'))->toBeNull();
 });
 
 test('executive header search and shared inbox respect the viewer scope', function () {
@@ -686,20 +700,40 @@ test('the firm administrator runs training and the supervising director only see
     $authorization->ensureDefaults($f['org']);
     $authorization->assignRole($f['org'], $f['owner'], $f['owner']->id, 'owner_director');
 
-    $this->actingAs($f['owner'])->post(route('office.training.courses.store'), ['title' => 'NIIF para PYMES', 'area' => 'Contabilidad', 'modality' => 'virtual', 'starts_on' => '2026-11-10', 'capacity' => 20])
+    $this->actingAs($f['owner'])->post(route('office.training.courses.store'), ['title' => 'NIIF para PYMES', 'area' => 'Contabilidad', 'modality' => 'virtual', 'starts_on' => '2026-11-10', 'start_time' => '09:00', 'duration_hours' => 2.5, 'capacity' => 20, 'session_url' => 'https://meet.example.com/niif'])
         ->assertRedirect();
+    $this->post(route('office.training.courses.store'), ['title' => 'Sin fecha', 'area' => 'Fiscal', 'modality' => 'virtual'])->assertSessionHasErrors(['starts_on', 'capacity']);
+    $this->post(route('office.training.courses.store'), ['title' => 'Enlace malo', 'area' => 'Fiscal', 'modality' => 'virtual', 'starts_on' => '2026-11-10', 'capacity' => 5, 'session_url' => 'javascript:alert(1)'])->assertSessionHasErrors('session_url');
+    expect(DB::table('training_courses')->where('title', 'NIIF para PYMES')->first())->duration_hours->toEqual(2.5)->session_url->toBe('https://meet.example.com/niif');
     $courseId = (int) DB::table('training_courses')->where('title', 'NIIF para PYMES')->value('id');
     expect($courseId)->toBeGreaterThan(0);
 
     $this->post(route('office.training.enroll', $courseId), ['user_ids' => [$f['assistant']->id, $f['reviewer']->id]])->assertRedirect();
     $enrollmentId = (int) DB::table('training_enrollments')->where('training_course_id', $courseId)->where('user_id', $f['assistant']->id)->value('id');
     $this->patch(route('office.training.progress', $enrollmentId), ['progress' => 100, 'satisfaction' => 90])->assertRedirect();
-    $this->post(route('office.training.needs.store'), ['area' => 'Fiscal', 'topic' => 'Nuevas disposiciones SAT', 'priority' => 'high', 'employees' => 6])->assertRedirect();
+    $this->post(route('office.training.needs.store'), ['area' => 'Fiscal', 'topic' => 'Nuevas disposiciones SAT', 'priority' => 'high', 'objective' => 'Preparar al equipo para los cambios de la SAT.', 'participants' => [$f['assistant']->id, $f['reviewer']->id], 'target_date' => now()->addDays(20)->toDateString()])->assertRedirect();
+    $this->post(route('office.training.needs.store'), ['area' => 'Fiscal', 'topic' => 'Sin gente', 'priority' => 'low', 'objective' => 'x'])->assertSessionHasErrors('participants');
+    $this->post(route('office.training.needs.store'), ['area' => 'Fiscal', 'topic' => 'Ajeno', 'priority' => 'low', 'objective' => 'x', 'participants' => [User::factory()->create()->id]])->assertUnprocessable();
+    expect(DB::table('training_needs')->where('topic', 'Nuevas disposiciones SAT')->first())->employees->toBe(2)->objective->toStartWith('Preparar');
     $this->post(route('office.training.certifications.store'), ['user_id' => $f['assistant']->id, 'name' => 'Contador Público Certificado', 'issued_on' => '2026-01-10', 'expires_on' => '2027-01-10'])->assertRedirect();
 
     $this->get(route('office.training'))->assertOk()->assertInertia(fn ($page) => $page->component('work/training')
         ->where('canManage', true)->where('summary.courses_completed', 0)->has('courses', 1)->has('certifications', 1)->has('needs', 1));
-    expect(DB::table('training_enrollments')->where('id', $enrollmentId)->value('status'))->toBe('completed');
+    expect(DB::table('training_enrollments')->where('id', $enrollmentId)->value('status'))->toBe('completed')
+        ->and(DB::table('training_certifications')->where('name', 'Contador Público Certificado')->value('code'))->toStartWith('AF-'.now()->year.'-');
+
+    Storage::fake();
+    $this->post(route('office.training.certifications.store'), [
+        'user_id' => $f['reviewer']->id, 'name' => 'Curso de IVA', 'issued_on' => '2026-02-01', 'code' => 'AF-2026-00500', 'generated' => true,
+        'attachment' => UploadedFile::fake()->create('externo.pdf', 100, 'application/pdf'),
+    ])->assertRedirect();
+    $cert = DB::table('training_certifications')->where('code', 'AF-2026-00500')->first();
+    expect($cert->generated)->toBeTrue()->and($cert->attachment_name)->toBe('externo.pdf');
+    Storage::assertExists($cert->attachment_path);
+    $this->post(route('office.training.certifications.store'), ['user_id' => $f['assistant']->id, 'name' => 'Repetido', 'issued_on' => '2026-02-01', 'code' => 'AF-2026-00500'])->assertSessionHasErrors('code');
+    $this->get(route('office.training.certifications.file', $cert->id))->assertOk();
+    $this->get(route('office.training.certifications.certificate', $cert->id))->assertOk()
+        ->assertInertia(fn ($page) => $page->component('work/certificate')->where('certificate.code', 'AF-2026-00500')->where('certificate.course', 'Curso de IVA'));
 
     $authorization->assignRole($f['org'], $f['owner'], $f['assistant']->id, 'office_admin');
 
@@ -744,6 +778,28 @@ test('the firm administrator manages the commercial portfolio and the supervisin
     $this->get(route('office.growth'))->assertOk()->assertInertia(fn ($page) => $page->component('work/director-growth')->where('kpis.mrr_cents', 300000)->has('mrr', 12));
     $this->post(route('office.crm.prospects.store'), ['name' => 'Otro', 'stage' => 'prospect'])->assertForbidden();
     $this->post(route('office.crm.contracts.save'), ['company_id' => $f['companyId'], 'services' => 'x', 'monthly_fee' => 1, 'starts_on' => '2026-01-01', 'status' => 'active'])->assertForbidden();
+});
+
+test('commercial alerts reach the CRM managers as notifications and are not repeated', function () {
+    $f = workManagementFixture();
+    $f['org']->subscriptions()->create(['status' => 'active']);
+    $authorization = app(WorkAuthorizationService::class);
+    $authorization->ensureDefaults($f['org']);
+    $authorization->assignRole($f['org'], $f['owner'], $f['owner']->id, 'owner_director');
+    $alerts = fn () => DB::table('work_notifications')->where('user_id', $f['owner']->id)->where('type', 'crm.alert');
+
+    $this->artisan('crm:alerts')->assertSuccessful();
+    expect($alerts()->where('metadata->alert', 'no_contract')->where('related_id', $f['companyId'])->count())->toBe(1)
+        ->and(DB::table('work_notifications')->where('user_id', $f['assistant']->id)->where('type', 'crm.alert')->count())->toBe(0);
+
+    $this->actingAs($f['owner'])->post(route('office.crm.contracts.save'), ['company_id' => $f['companyId'], 'services' => 'Contabilidad', 'monthly_fee' => 3000, 'starts_on' => '2026-01-01', 'renews_on' => now()->addDays(10)->toDateString(), 'status' => 'active'])->assertRedirect();
+    $this->artisan('crm:alerts')->assertSuccessful();
+    $total = $alerts()->count();
+    expect($alerts()->where('metadata->alert', 'renewal')->count())->toBe(1);
+
+    $this->artisan('crm:alerts')->assertSuccessful();
+    expect($alerts()->count())->toBe($total);
+    $this->get(route('office.crm'))->assertOk();
 });
 
 test('the firm administrator charges and collects client fees and the supervising director only sees the income', function () {

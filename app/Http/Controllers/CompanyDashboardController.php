@@ -30,6 +30,9 @@ class CompanyDashboardController extends Controller
         if ($request->query('module') === 'libros-iva') {
             return to_route('accounting.vatBooks', $record->public_id);
         }
+        if ($request->query('module') === 'fel') {
+            return to_route('accounting.fel.index', $record->public_id);
+        }
         $canWrite = $this->accounting->canModule($organization, $record->id, $request->user(), 'journal.create')
             || $this->accounting->canModule($organization, $record->id, $request->user(), 'sales.manage')
             || $this->accounting->canModule($organization, $record->id, $request->user(), 'purchases.manage')

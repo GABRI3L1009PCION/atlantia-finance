@@ -238,10 +238,10 @@ export default function SupervisorFiscal({
                     <>
                         {(data as Fel).simulated && (
                             <p className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                                <AlertTriangle className="size-4" /> FEL
-                                simulado: la certificación con SAT aún no está
-                                conectada. Los estados mostrados provienen del
-                                entorno de pruebas.
+                                <AlertTriangle className="size-4" /> Hay
+                                documentos FEL de prueba (proveedor simulado)
+                                sin validez ante la SAT. Configura la emisión
+                                real en Configuración de facturación.
                             </p>
                         )}
                         <section className="grid gap-3 md:grid-cols-5">

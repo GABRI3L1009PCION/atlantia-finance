@@ -6,6 +6,7 @@ namespace App\Services\Platform;
 
 use App\Models\User;
 use App\Services\Luzma\Contracts\LuzmaModelProvider;
+use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Luzma\LuzmaTool;
 use App\Services\Luzma\LuzmaToolRegistry;
 use Illuminate\Support\Carbon;
@@ -24,12 +25,13 @@ class LuzmaPlatformService
     public const RISK_LABELS = [LuzmaTool::READ_ONLY => 'Solo lectura', LuzmaTool::PREPARE => 'Prepara', LuzmaTool::LOW_RISK_WRITE => 'Escritura de bajo riesgo',
         LuzmaTool::SENSITIVE_WRITE => 'Escritura sensible', LuzmaTool::CRITICAL => 'Crítica'];
 
-    public function __construct(private LuzmaModelProvider $provider, private PlatformAuditService $audit) {}
+    public function __construct(private LuzmaModelProvider $provider, private PlatformAuditService $audit, private LuzmaSwitch $switch) {}
 
     /** @return array<string, mixed> */
     public function status(): array
     {
         $health = $this->provider->health();
+        $enabled = $this->switch->enabled();
         $today = DB::table('luzma_messages')->where('created_at', '>=', now()->startOfDay())->where('role', 'assistant')
             ->selectRaw("CAST(COUNT(*) AS BIGINT) as total, CAST(COUNT(*) FILTER (WHERE status = 'ok') AS BIGINT) as ok, CAST(COUNT(*) FILTER (WHERE status <> 'ok') AS BIGINT) as errors, AVG(latency_ms) as latency")->first();
         $uptime = DB::table('service_health_checks')->where('service', 'luzma_gateway')->where('checked_at', '>=', now()->subDay())
@@ -37,8 +39,8 @@ class LuzmaPlatformService
         $gatewayData = (array) json_decode((string) (DB::table('service_health_checks')->where('service', 'luzma_gateway')->orderByDesc('id')->value('data') ?? '{}'), true);
 
         return [
-            'enabled' => (bool) config('luzma.enabled'), 'gateway' => (bool) $health['gateway'], 'model_loaded' => (bool) $health['model_loaded'],
-            'status' => ! (bool) config('luzma.enabled') ? 'maintenance' : ($health['available'] ? 'healthy' : ($health['gateway'] ? 'degraded' : 'down')),
+            'enabled' => $enabled, 'provider' => $health['provider'] ?? null, 'providers' => (array) config('luzma.providers'), 'resident' => $health['model_resident'], 'disabled_message' => $this->switch->message(), 'gateway' => (bool) $health['gateway'], 'model_loaded' => (bool) $health['model_loaded'],
+            'status' => ! $enabled ? 'maintenance' : ($health['available'] ? 'healthy' : ($health['gateway'] ? 'degraded' : 'down')),
             'model' => $health['model'], 'latency_ms' => $health['latency_ms'], 'detail' => $health['detail'], 'gateway_url' => (string) config('luzma.gateway_url'),
             'gpu' => $gatewayData['gpu'] ?? null, 'vram' => $gatewayData['vram'] ?? null,
             'requests_today' => (int) ($today->total ?? 0), 'successful_today' => (int) ($today->ok ?? 0), 'errors_today' => (int) ($today->errors ?? 0),

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Luzma;
 
+use Illuminate\Support\Str;
+
 /**
  * Prompts of Luzma. The system prompt fixes the rules (official figures only from tools, no invented data,
  * inferences marked as such, no actions without confirmation); the data message carries only the minimized,
@@ -66,6 +68,7 @@ class LuzmaPromptService
         - No ejecutas acciones: solo puedes ofrecer preparar tareas, recordatorios o propuestas, que el usuario confirma.
         - Con la Biblioteca Normativa: distingue el texto recuperado (cítalo con documento y artículo), tu interpretación y tu recomendación. No inventes artículos ni normas que no estén en los datos. Si un artículo tiene ADVERTENCIA DE REFORMA, menciónala. Los "Resumen de Atlantia" no son el texto oficial.
         - No das la decisión profesional final: el usuario autorizado decide sobre cierres, aprobaciones, pagos y temas fiscales.
+        - Si te saludan o preguntan qué puedes hacer, preséntate en pocas líneas: consultas los datos oficiales de Atlantia (prioridades, obligaciones fiscales, cuentas por pagar y por cobrar, tesorería, nómina, cierres, biblioteca normativa), explicas diferencias y alertas, y puedes preparar tareas, recordatorios y propuestas que el usuario confirma. No inventes otras capacidades.
         - Responde en español, breve y claro. Cuando ayude, organiza en: Resumen, Qué encontré, Por qué importa, Siguiente paso.
         - Explica en lenguaje entendible; los montos van con "Q" y dos decimales, tal como vienen en los datos.
         - Datos de Guatemala: SAT es la Superintendencia de Administración Tributaria; la moneda es el quetzal (Q).
@@ -81,7 +84,7 @@ class LuzmaPromptService
     public function dataMessage(LuzmaContext $context, ?array $result): string
     {
         $scope = 'Contexto: '.($context->companyName ?? 'todas las empresas accesibles ('.count($context->companyIds).')').($context->period === null ? '' : ' · período '.$context->period['name'])
-            .' · pantalla '.$context->module.' · hoy '.$context->today().' ('.$context->timezone.').';
+            .' · pantalla '.$context->module.' · hoy '.$context->today().', hora local '.now($context->timezone)->format('H:i').' ('.$context->timezone.').';
         if ($result === null) {
             return $scope."\nNo se consultó ninguna herramienta: no tienes datos oficiales para esta pregunta. No des cifras; orienta al usuario sobre dónde encontrarlas en Atlantia.";
         }
@@ -93,13 +96,29 @@ class LuzmaPromptService
     }
 
     /**
-     * Prose shown when the model is unavailable: the official facts, exactly as Laravel computed them.
+     * Prose shown when the model is unavailable: the official facts exactly as Laravel computed them, with the risk the
+     * figures show and a next step, so even then the answer is useful. It never states anything the facts do not.
      *
      * @param  array{ok: bool, facts: list<string>}  $result
      */
     public function fallback(array $result): string
     {
-        return "Luzma no está disponible temporalmente para redactar el análisis. Estos son los datos oficiales:\n\n• ".implode("\n• ", $result['facts']);
+        $text = Str::ascii(mb_strtolower(implode(' ', $result['facts'])));
+        $risks = [];
+        foreach ([['vencid', 'Hay montos o elementos vencidos que conviene atender.'], ['diferencia', 'Hay una diferencia que conviene revisar antes de cerrar el período.'], ['incumplid', 'Hay promesas de pago incumplidas.']] as [$word, $message]) {
+            if (preg_match('/'.$word.'\w*[^\d.;]{0,8}q?\s?([1-9]\d*|0\.[1-9]|0\.0[1-9])|([1-9]\d*)\s+(?:\S+\s+){0,2}'.$word.'/u', $text) === 1) {
+                $risks[] = $message;
+            }
+        }
+
+        $impact = $risks === [] ? 'con estos datos no veo señales de riesgo por ahora.' : implode(' ', $risks);
+
+        return implode("\n\n", [
+            'Luzma no está disponible temporalmente para redactar el análisis (se está reiniciando). Estos son los datos oficiales:',
+            '• '.implode("\n• ", $result['facts']),
+            'Por qué importa: '.$impact,
+            'Siguiente paso: abre la pantalla de origen (enlace abajo) para ver el detalle.',
+        ]);
     }
 
     /** @return list<string> */

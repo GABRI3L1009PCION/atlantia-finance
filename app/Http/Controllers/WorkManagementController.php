@@ -14,7 +14,9 @@ use App\Services\WorkManagement\ExecutiveIndicatorsService;
 use App\Services\WorkManagement\ExecutiveReportsService;
 use App\Services\WorkManagement\FirmRevenueService;
 use App\Services\WorkManagement\GrowthOverviewService;
+use App\Services\WorkManagement\OfficeAdminService;
 use App\Services\WorkManagement\OfficeDirectoryService;
+use App\Services\WorkManagement\OfficeInvitationService;
 use App\Services\WorkManagement\OfficeScopeService;
 use App\Services\WorkManagement\PersonnelDirectoryService;
 use App\Services\WorkManagement\ProductivityOverviewService;
@@ -211,6 +213,14 @@ class WorkManagementController extends Controller
         return redirect($notifications->markRead($organization->id, $request->user(), $notification));
     }
 
+    public function archiveNotification(Request $request, int $notification, string $action, WorkNotificationService $notifications): RedirectResponse
+    {
+        $organization = $this->context->organization($request->user());
+        $notifications->archive($organization->id, $request->user(), $notification, $action === 'archive');
+
+        return back();
+    }
+
     public function readAllNotifications(Request $request, WorkNotificationService $notifications): RedirectResponse
     {
         $organization = $this->context->organization($request->user());
@@ -335,6 +345,11 @@ class WorkManagementController extends Controller
         return $this->renderAdmin($request, 'users-roles', 'office.users.manage');
     }
 
+    public function rolesPermissions(Request $request): Response
+    {
+        return $this->renderAdmin($request, 'roles', 'office.users.manage');
+    }
+
     public function companyAssignments(Request $request): Response
     {
         return $this->renderAdmin($request, 'company-assignments', 'office.companies.assign');
@@ -423,6 +438,8 @@ class WorkManagementController extends Controller
                 'is_primary' => (bool) ($data['is_primary'] ?? false),
                 'status' => $data['status'] ?? 'active',
             ]);
+            // A new office starts strict: unreconciled banks and unfiled obligations stop the close until the office decides otherwise.
+            DB::table('offices')->where('id', $office->id)->update(['treasury_close_policy' => 'block', 'fiscal_close_policy' => 'block']);
 
             DB::table('office_user')->updateOrInsert(
                 ['office_id' => $office->id, 'user_id' => $request->user()->id],
@@ -906,8 +923,29 @@ class WorkManagementController extends Controller
         $supervising = $this->authorization->isExecutiveReadOnly($organization, $request->user());
         abort_unless($supervising || $this->authorization->can($organization, $request->user(), $permission), 403);
 
+        $officeLimit = $this->context->limit($organization, 'offices');
+
+        $inviteOfficeIds = [];
+        if (! $supervising && $screen === 'users-roles') {
+            $allowedOffices = $this->authorization->officesWithPermission($organization, $request->user(), 'office.users.invite');
+            $inviteOfficeIds = array_values($allowedOffices ?? DB::table('offices')->where('organization_id', $organization->id)->whereNull('deleted_at')->pluck('id')->map(fn ($id): int => (int) $id)->values()->all());
+        }
+
         return Inertia::render('work/admin', [
             'screen' => $screen,
+            'invite' => $inviteOfficeIds === [] ? null : [
+                'officeIds' => $inviteOfficeIds,
+                'options' => app(OfficeAdminService::class)->formOptions($organization, $request->user(), $inviteOfficeIds),
+            ],
+            'officeQuota' => [
+                'limit' => $officeLimit === PHP_INT_MAX ? null : $officeLimit,
+                'used' => DB::table('offices')->where('organization_id', $organization->id)->whereNull('deleted_at')->count(),
+            ],
+            'canCreateOffice' => $this->authorization->officesWithPermission($organization, $request->user(), 'office.manage') === null,
+            'userQuota' => $screen === 'users-roles' ? [
+                'limit' => ($userLimit = $this->context->limit($organization, 'users')) === PHP_INT_MAX ? null : $userLimit,
+                'used' => app(OfficeInvitationService::class)->seatsInUse($organization),
+            ] : null,
             'admin' => $this->admin->payload($organization, $screen, $detailId, $supervising ? null : $this->authorization->officesWithPermission($organization, $request->user(), $permission)),
         ]);
     }

@@ -28,10 +28,6 @@ export default function BillingDetails({
                     {issuer.name}, NIT {issuer.nit}, emitirá la factura de tu
                     plan y enviará el PDF a {email} cuando se confirme el pago.
                 </p>
-                <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-                    Actualmente emitimos documentos simulados, sin validez ante
-                    SAT.
-                </p>
                 <Form {...details.update.form()} className="mt-6 space-y-4">
                     {({ errors, processing }) => (
                         <>

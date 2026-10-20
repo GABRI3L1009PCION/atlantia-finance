@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Accounting\CostCenterService;
 use App\Services\Integrations\WebhookDispatcher;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,9 @@ class AccountingService
     public const ADJUSTMENT_KINDS = ['adjustment', 'reclassification', 'provision', 'closing'];
 
     private const STRICT_READ_ONLY_ROLE_CODES = ['auditor', 'read_only'];
+
+    /** Roles that oversee every company of their office instead of being assigned company by company. Read-only access is granted per company. */
+    public const OFFICE_WIDE_ROLE_CODES = ['general_accountant', 'accounting_manager'];
 
     private const JOURNAL_PERMISSIONS = [
         'view' => 'journal.view',
@@ -49,6 +53,9 @@ class AccountingService
         ['code' => '1201', 'name' => 'Inventarios', 'type' => 'asset'],
         ['code' => '1301', 'name' => 'IVA crédito fiscal', 'type' => 'asset'],
         ['code' => '1401', 'name' => 'Propiedad, planta y equipo', 'type' => 'asset'],
+        ['code' => '1402', 'name' => 'Depreciación acumulada', 'type' => 'asset'],
+        ['code' => '1403', 'name' => 'Activos intangibles', 'type' => 'asset'],
+        ['code' => '1404', 'name' => 'Amortización acumulada', 'type' => 'asset'],
         ['code' => '2101', 'name' => 'Proveedores', 'type' => 'liability'],
         ['code' => '2102', 'name' => 'Cuentas por pagar', 'type' => 'liability'],
         ['code' => '2201', 'name' => 'IVA débito fiscal', 'type' => 'liability'],
@@ -63,6 +70,10 @@ class AccountingService
         ['code' => '5203', 'name' => 'Alquileres', 'type' => 'expense'],
         ['code' => '5204', 'name' => 'Servicios básicos', 'type' => 'expense'],
         ['code' => '5205', 'name' => 'Gastos bancarios', 'type' => 'expense'],
+        ['code' => '5206', 'name' => 'Gasto por depreciación', 'type' => 'expense'],
+        ['code' => '5207', 'name' => 'Gasto por amortización', 'type' => 'expense'],
+        ['code' => '5208', 'name' => 'Honorarios profesionales', 'type' => 'expense'],
+        ['code' => '5209', 'name' => 'Intereses y gastos financieros', 'type' => 'expense'],
     ];
 
     /** Install an idempotent starter chart without overwriting custom accounts. */
@@ -86,7 +97,14 @@ class AccountingService
             ->where('offices.organization_id', $organization->id)->where('offices.status', 'active')
             ->whereNull('offices.deleted_at')->select('companies.*', 'offices.name as office_name');
         if ($organization->pivot->role !== 'owner') {
-            $query->whereExists(fn (Builder $q) => $q->selectRaw('1')->from('company_user')->whereColumn('company_id', 'companies.id')->where('user_id', $user->id))
+            // Most roles reach only the companies they are assigned to. The general accountant, the accounting manager and the
+            // read-only role oversee a whole office, so their role in an office opens every company of that office.
+            $query->where(fn (Builder $access) => $access
+                ->whereExists(fn (Builder $q) => $q->selectRaw('1')->from('company_user')->whereColumn('company_id', 'companies.id')->where('user_id', $user->id))
+                ->orWhereExists(fn (Builder $q) => $q->selectRaw('1')->from('user_role_assignments as ura')->join('workspace_roles as role', 'role.id', '=', 'ura.workspace_role_id')
+                    ->where('ura.organization_id', $organization->id)->where('ura.user_id', $user->id)->where('ura.status', 'active')->whereNull('ura.deleted_at')
+                    ->where('role.status', 'active')->whereIn('role.code', self::OFFICE_WIDE_ROLE_CODES)
+                    ->where(fn (Builder $scope) => $scope->whereNull('ura.office_id')->orWhereColumn('ura.office_id', 'companies.office_id'))))
                 ->whereExists(fn (Builder $q) => $q->selectRaw('1')->from('office_user')->whereColumn('office_user.office_id', 'companies.office_id')->where('office_user.user_id', $user->id)->where('office_user.status', 'active'));
         }
 
@@ -235,7 +253,7 @@ class AccountingService
 
     private function organizationRole(Organization $organization, User $user): string
     {
-        if ($organization->relationLoaded('pivot') && $organization->pivot->role) {
+        if ($organization->relationLoaded('pivot') && $organization->pivot->role && (int) $organization->pivot->user_id === $user->id) {
             return (string) $organization->pivot->role;
         }
 
@@ -317,6 +335,7 @@ class AccountingService
         if (count($normalized) < 2 || $debit === 0 || $debit !== $credit) {
             throw ValidationException::withMessages(['accounting' => 'El asiento necesita al menos dos líneas y el debe debe ser igual al haber.']);
         }
+        app(CostCenterService::class)->validateLines($companyId, $normalized);
 
         return $normalized;
     }

@@ -49,7 +49,9 @@ class IntegrationsOverviewService
             ->map(fn (object $row): array => ['public_id' => $row->public_id, 'name' => $row->name, 'configured' => $row->settings_id !== null])->all();
 
         $connected = [
-            ['name' => 'FEL / SAT', 'category' => 'Fiscal', 'description' => 'Emisión y certificación de documentos tributarios electrónicos.', 'status' => 'connected', 'detail' => config('fel.provider') === 'mock' ? 'Modo simulado (sin validez fiscal)' : 'Certificador activo', 'last_sync' => $lastFel, 'manage' => 'fel', 'companies' => $felCompanies],
+            ['name' => 'FEL / SAT', 'category' => 'Fiscal', 'description' => 'Emisión y certificación de documentos tributarios electrónicos.', 'status' => 'connected', 'detail' => match (config('fel.provider')) {
+                'mock' => 'Modo simulado (sin validez fiscal)', 'sat_manual' => 'Emisión en el portal de la SAT; Atlantia prepara, registra y controla', default => 'Certificador activo'
+            }, 'last_sync' => $lastFel, 'manage' => 'fel', 'companies' => $felCompanies],
             ['name' => 'API pública', 'category' => 'Desarrollo', 'description' => 'Claves de acceso para integraciones personalizadas.', 'status' => $tokens->where('status', 'active')->isNotEmpty() ? 'connected' : 'idle', 'detail' => $tokens->where('status', 'active')->count().' clave(s) activa(s)', 'last_sync' => $lastToken, 'manage' => 'keys'],
             ['name' => 'Webhooks', 'category' => 'Automatización', 'description' => 'Eventos en tiempo real hacia los sistemas de la firma.', 'status' => $endpoints->where('status', 'active')->isNotEmpty() ? 'connected' : 'idle', 'detail' => $endpoints->where('status', 'active')->count().' destino(s) activo(s)', 'last_sync' => $lastWebhook, 'manage' => 'webhooks'],
         ];

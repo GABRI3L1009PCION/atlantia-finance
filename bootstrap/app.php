@@ -1,16 +1,21 @@
 <?php
 
+use App\Http\Middleware\AddSecurityHeaders;
 use App\Http\Middleware\AssignCorrelationId;
 use App\Http\Middleware\AuthenticateApiToken;
 use App\Http\Middleware\EnforceOfficeTwoFactor;
+use App\Http\Middleware\EnforcePasswordChange;
 use App\Http\Middleware\EnforceServiceHours;
 use App\Http\Middleware\EnsureActiveSubscription;
+use App\Http\Middleware\EnsurePlanFeature;
 use App\Http\Middleware\EnsurePlatformStaff;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RestrictClientPortalUsers;
 use App\Http\Middleware\RestrictSupervisingDirector;
 use App\Http\Middleware\SetTenantDatabaseContext;
 use App\Http\Middleware\UseSystemDatabaseContext;
+use App\Services\Platform\ErrorPageResponder;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -30,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'subscription.active' => EnsureActiveSubscription::class,
+            'plan.feature' => EnsurePlanFeature::class,
             'tenancy.system' => UseSystemDatabaseContext::class,
             'api.token' => AuthenticateApiToken::class,
             'platform' => EnsurePlatformStaff::class,
@@ -44,10 +50,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(AssignCorrelationId::class);
 
         $middleware->web(append: [
+            AddSecurityHeaders::class,
             SetTenantDatabaseContext::class,
             EnforceServiceHours::class,
+            EnforcePasswordChange::class,
             EnforceOfficeTwoFactor::class,
             RestrictSupervisingDirector::class,
+            RestrictClientPortalUsers::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
@@ -57,4 +66,5 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+        $exceptions->respond(new ErrorPageResponder);
     })->create();

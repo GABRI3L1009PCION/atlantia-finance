@@ -120,6 +120,15 @@ class LuzmaConversationService
             ->reverse()->map(fn (stdClass $row): array => ['role' => (string) $row->role, 'content' => mb_strimwidth((string) $row->content, 0, 1200, '…')])->values()->all());
     }
 
+    /** The read tool that answered the previous question of the conversation, so a follow-up can lean on it. */
+    public function lastTool(int $conversationId): ?string
+    {
+        $calls = DB::table('luzma_messages')->where('luzma_conversation_id', $conversationId)->where('role', 'assistant')->whereNotNull('tool_calls')->orderByDesc('id')->value('tool_calls');
+        $tool = is_string($calls) ? ((array) json_decode($calls, true))[0]['tool'] ?? null : null;
+
+        return is_string($tool) && $tool !== '' ? $tool : null;
+    }
+
     private function own(Organization $organization, User $user, string $publicId): stdClass
     {
         $row = DB::table('luzma_conversations')->where('luzma_conversations.organization_id', $organization->id)->where('user_id', $user->id)->where('public_id', $publicId)->first();

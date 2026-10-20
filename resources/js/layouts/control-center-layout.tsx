@@ -5,6 +5,7 @@ import {
     Bell,
     BookOpenCheck,
     Boxes,
+    BrainCircuit,
     Bot,
     Building2,
     ChevronRight,
@@ -170,6 +171,12 @@ const groups: Group[] = [
                 permission: 'saas.luzma.view',
             },
             {
+                title: 'Red neuronal',
+                href: '/control-center/luzma/neural',
+                icon: BrainCircuit,
+                permission: 'saas.luzma.view',
+            },
+            {
                 title: 'Herramientas',
                 href: '/control-center/luzma/tools',
                 icon: Wrench,
@@ -319,14 +326,15 @@ export default function ControlCenterLayout({
                 <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col overflow-y-auto border-r border-white/[0.06] bg-[#0a0c11] lg:flex">
                     <Link
                         href="/control-center"
-                        className="flex items-center gap-2.5 px-5 py-4"
+                        className="flex flex-col items-center gap-1.5 px-5 pt-4 pb-3"
                     >
-                        <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[#c8102e] to-[#5c0612] font-serif text-lg font-black text-white shadow-[0_8px_24px_-8px_rgba(200,16,46,.9)]">
-                            A
-                        </span>
-                        <span className="font-serif text-lg font-bold text-white">
-                            Atlantia{' '}
-                            <span className="text-[#e8b04b]">Finance</span>
+                        <img
+                            src="/images/atlantia-finance-logo.png"
+                            alt="Atlantia Finance"
+                            className="mx-auto h-16 w-auto max-w-full object-contain"
+                        />
+                        <span className="text-center text-[11px] font-bold tracking-[0.12em] text-[#e8b04b] uppercase">
+                            Panel del Super Administrador
                         </span>
                     </Link>
                     <nav className="flex-1 space-y-4 px-3 pb-6">

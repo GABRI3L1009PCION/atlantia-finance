@@ -61,14 +61,20 @@ class FelCertificationService
                 'certified_at' => $response['certification_timestamp'], 'error_code' => null,
             ])->save();
             $this->audit->record($doc, 'certified');
-            // A certified FEL credit note lowers the receivable of the internal invoice it credits (once).
-            if ($doc->document_type === 'NCRE' && $doc->sales_invoice_id !== null && ! DB::table('sales_credit_notes')->where('fel_document_id', $doc->id)->exists()) {
-                $organization = Organization::findOrFail($doc->organization_id);
-                $creditNote = $this->creditNotes->issue($organization, User::findOrFail($doc->created_by), $doc->company_id, (int) $doc->sales_invoice_id, (int) $doc->total_cents, $doc->issued_on->toDateString(), 'Nota de crédito FEL '.$doc->fel_series.'-'.$doc->fel_number);
-                DB::table('sales_credit_notes')->where('id', $creditNote)->update(['fel_document_id' => $doc->id]);
-            }
-            GenerateInvoicePdfJob::dispatch($companyId, $uuid)->afterCommit();
+            $this->finalize($doc);
         });
+    }
+
+    /** Effects shared by every certified document, whoever certified it: the credit note's balance and the PDF. */
+    public function finalize(FelDocument $doc): void
+    {
+        // A certified FEL credit note lowers the receivable of the internal invoice it credits (once).
+        if ($doc->document_type === 'NCRE' && $doc->sales_invoice_id !== null && ! DB::table('sales_credit_notes')->where('fel_document_id', $doc->id)->exists()) {
+            $organization = Organization::findOrFail($doc->organization_id);
+            $creditNote = $this->creditNotes->issue($organization, User::findOrFail($doc->created_by), $doc->company_id, (int) $doc->sales_invoice_id, (int) $doc->total_cents, $doc->issued_on->toDateString(), 'Nota de crédito FEL '.$doc->fel_series.'-'.$doc->fel_number);
+            DB::table('sales_credit_notes')->where('id', $creditNote)->update(['fel_document_id' => $doc->id]);
+        }
+        GenerateInvoicePdfJob::dispatch($doc->company_id, $doc->public_id)->afterCommit();
     }
 
     public function markFailed(int $companyId, string $uuid): void

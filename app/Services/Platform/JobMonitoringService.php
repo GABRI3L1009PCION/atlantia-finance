@@ -134,6 +134,8 @@ class JobMonitoringService
      */
     public function scheduler(): array
     {
+        // Scheduled tasks are declared in routes/console.php, which a web request does not load on its own.
+        Artisan::all();
         $rows = [];
         foreach (app(Schedule::class)->events() as $event) {
             $name = app(PlatformMonitoringRecorder::class)->taskName($event);

@@ -426,7 +426,7 @@ function OfficeDetail({ office }: { office: DirectorOffice }) {
                                 {office.team.length}
                             </dd>
                             <dt className="text-xs text-slate-500">
-                                Miembros de equipo
+                                Colaboradores del equipo
                             </dt>
                         </div>
                         <div>

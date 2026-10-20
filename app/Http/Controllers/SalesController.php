@@ -6,6 +6,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
+use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\Fiscal\VatBookService;
 use App\Services\FiscalConfigurationService;
@@ -30,6 +31,7 @@ class SalesController extends Controller
         private AccountingAutomationService $automation,
         private FiscalConfigurationService $fiscal,
         private VatBookService $vatBooks,
+        private DocumentAnnulmentService $annulments,
     ) {}
 
     /** GET sales: customers/invoices/receipts of the authorized company. No journal writes. */
@@ -383,38 +385,35 @@ class SalesController extends Controller
         $data = $request->validate(['action' => 'required|in:issue,void', 'reason' => 'required_if:action,void|nullable|string|max:500']);
         if ($data['action'] === 'void') {
             $this->accounting->assertModule($org, $record->id, $request->user(), 'sales.void');
+            $this->annulments->annulSale($org, $request->user(), $record, $invoice, (string) $data['reason']);
+
+            return back()->with('success', 'Comprobante actualizado.');
         }
         DB::transaction(function () use ($request, $org, $record, $invoice, $data): void {
             $this->accounting->lock($record->id);
             $doc = $this->invoice($record->id, $invoice);
             $this->vatBooks->assertOpen($record->id, $doc->issued_on);
-            if ($data['action'] === 'issue') {
-                $this->ensure($doc->status === 'draft', 'Solo puedes emitir borradores.');
-                $dimensions = ['third_party_type' => 'customer', 'third_party_id' => $doc->sales_customer_id];
-                $description = 'Factura emitida a '.$doc->customer_name;
-                if ((int) $doc->vat_cents > 0) {
-                    // Revenue is booked net of VAT; the VAT collected is a liability (IVA débito fiscal).
-                    // The mapping installs the starter chart first so its VAT accounts can be linked.
-                    $this->ensure($this->automation->ensureMapping($record->id) !== null, 'Configura el mapeo contable antes de emitir.');
-                    $this->fiscal->linkDefaultAccounts($record->id);
-                    $vatAccount = $this->fiscal->vatRule($record->id, $doc->issued_on)?->payable_account_id;
-                    $this->ensure($vatAccount !== null, 'Asigna la cuenta de IVA débito fiscal al impuesto IVA en Parámetros fiscales antes de emitir.');
-                    $lines = $this->automation->ruleLinesWithTax($record->id, 'sales_invoice.origin', (int) $doc->total_cents,
-                        (int) $doc->vat_cents, (int) $vatAccount, ['description' => $description, ...$dimensions]);
-                    $entry = $this->automation->draft($org, $request->user(), $record->id, 'sales_invoice', $doc->id, $doc->issued_on,
-                        $description, 'VENTA-'.$doc->public_id, $lines, 'sales_invoice.origin');
-                } else {
-                    $entry = $this->automation->draftFromRule($org, $request->user(), $record->id, 'sales_invoice', $doc->id, $doc->issued_on,
-                        $description, 'VENTA-'.$doc->public_id, (int) $doc->total_cents, $dimensions);
-                }
-                $this->ensure($entry !== null, 'Abre un período contable que incluya la fecha de emisión.');
-                $number = (int) DB::table('sales_invoices')->where('company_id', $record->id)->max('number') + 1;
-                $values = ['status' => 'issued', 'number' => $number, 'issued_by' => $request->user()->id, 'issued_at' => now()];
+            $this->ensure($doc->status === 'draft', 'Solo puedes emitir borradores.');
+            $dimensions = ['third_party_type' => 'customer', 'third_party_id' => $doc->sales_customer_id];
+            $description = 'Factura emitida a '.$doc->customer_name;
+            if ((int) $doc->vat_cents > 0) {
+                // Revenue is booked net of VAT; the VAT collected is a liability (IVA débito fiscal).
+                // The mapping installs the starter chart first so its VAT accounts can be linked.
+                $this->ensure($this->automation->ensureMapping($record->id) !== null, 'Configura el mapeo contable antes de emitir.');
+                $this->fiscal->linkDefaultAccounts($record->id);
+                $vatAccount = $this->fiscal->vatRule($record->id, $doc->issued_on)?->payable_account_id;
+                $this->ensure($vatAccount !== null, 'Asigna la cuenta de IVA débito fiscal al impuesto IVA en Parámetros fiscales antes de emitir.');
+                $lines = $this->automation->ruleLinesWithTax($record->id, 'sales_invoice.origin', (int) $doc->total_cents,
+                    (int) $doc->vat_cents, (int) $vatAccount, ['description' => $description, ...$dimensions]);
+                $entry = $this->automation->draft($org, $request->user(), $record->id, 'sales_invoice', $doc->id, $doc->issued_on,
+                    $description, 'VENTA-'.$doc->public_id, $lines, 'sales_invoice.origin');
             } else {
-                $this->ensure($doc->status !== 'void' && $this->paid($doc->id) === 0 && $this->credited($doc->id) === 0, 'Anula primero los cobros y notas de crédito vigentes. El documento no debe estar ya anulado.');
-                $this->automation->reverseSource($org, $request->user(), $record->id, 'sales_invoice', $doc->id, now()->toDateString(), $data['reason']);
-                $values = ['status' => 'void', 'voided_by' => $request->user()->id, 'voided_at' => now(), 'void_reason' => $data['reason']];
+                $entry = $this->automation->draftFromRule($org, $request->user(), $record->id, 'sales_invoice', $doc->id, $doc->issued_on,
+                    $description, 'VENTA-'.$doc->public_id, (int) $doc->total_cents, $dimensions);
             }
+            $this->ensure($entry !== null, 'Abre un período contable que incluya la fecha de emisión.');
+            $number = (int) DB::table('sales_invoices')->where('company_id', $record->id)->max('number') + 1;
+            $values = ['status' => 'issued', 'number' => $number, 'issued_by' => $request->user()->id, 'issued_at' => now()];
             DB::table('sales_invoices')->where('id', $doc->id)->update([...$values, 'updated_at' => now()]);
             $this->accounting->audit($org, $request->user(), 'sales.invoice.'.$data['action'], 'sales_invoices', $doc->id, $values);
         });

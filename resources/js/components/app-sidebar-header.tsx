@@ -83,10 +83,25 @@ export function AppSidebarHeader({
     const currentModule = currentUrl.searchParams.get('module');
     const [search, setSearch] = useState(currentSearch);
     const [syncedSearch, setSyncedSearch] = useState(currentSearch);
+    // On the accounting screens the chip names the period being worked on, not the month of the calendar.
+    const pagePeriods = page.props.periods as
+        { id: number; starts_on: string }[] | undefined;
+    const pageFilters = page.props.filters as
+        { period?: string | number } | undefined;
+    const workingPeriod = Array.isArray(pagePeriods)
+        ? pagePeriods.find(
+              (candidate) =>
+                  String(candidate.id) === String(pageFilters?.period),
+          )
+        : undefined;
     const period = new Intl.DateTimeFormat('es-GT', {
         month: 'long',
         year: 'numeric',
-    }).format(new Date());
+    }).format(
+        workingPeriod
+            ? new Date(`${workingPeriod.starts_on.slice(0, 10)}T12:00:00`)
+            : new Date(),
+    );
 
     if (syncedSearch !== currentSearch) {
         setSyncedSearch(currentSearch);
@@ -231,8 +246,10 @@ export function AppSidebarHeader({
 
             <div className="hidden h-10 items-center gap-2 rounded-xl border border-[#ded8d4] px-3 text-xs font-semibold text-[#172033] 2xl:flex">
                 <CalendarDays className="size-4 text-[#7a4f2c]" />
-                <span className="capitalize">
-                    {isClientPortal ? `Período: ${period}` : period}
+                <span>
+                    {isClientPortal
+                        ? `Período: ${period}`
+                        : period.charAt(0).toUpperCase() + period.slice(1)}
                 </span>
             </div>
 

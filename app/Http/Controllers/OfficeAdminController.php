@@ -11,6 +11,7 @@ use App\Services\WorkManagement\CompanyAssignmentService;
 use App\Services\WorkManagement\OfficeAdminService;
 use App\Services\WorkManagement\OfficeInvitationService;
 use App\Services\WorkManagement\OfficeScopeService;
+use App\Services\WorkManagement\SetupChecklistService;
 use App\Services\WorkManagement\UserAdministrationService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkManagement\WorkTaskService;
@@ -58,8 +59,31 @@ class OfficeAdminController extends Controller
         return Inertia::render('office/users', [
             'officeScope' => $this->scopeProps($scope, $selected),
             'users' => $this->admin->users($organization->id, $officeIds),
-            'invitations' => $this->admin->invitations($organization->id, $officeIds, 60, false),
             'selectedUser' => $userId > 0 ? $this->admin->userDetail($organization, $userId, $officeIds, $administration) : null,
+            'formOptions' => $this->admin->formOptions($organization, $request->user(), $officeIds),
+            'permissions' => $this->permissions($organization, $request, $selected),
+        ]);
+    }
+
+    /** Guided start of the firm: what is already set up and what is missing, from the real records. */
+    public function setup(Request $request, SetupChecklistService $checklist): Response
+    {
+        [$organization, $scope, $selected] = $this->context($request, 'office.dashboard.view');
+
+        return Inertia::render('office/setup', [
+            'officeScope' => $this->scopeProps($scope, $selected),
+            'setup' => $checklist->payload($organization, $this->scope->officeIds($scope, $selected)),
+        ]);
+    }
+
+    public function invitations(Request $request): Response
+    {
+        [$organization, $scope, $selected] = $this->context($request, 'office.users.view');
+        $officeIds = $this->scope->officeIds($scope, $selected);
+
+        return Inertia::render('office/invitations', [
+            'officeScope' => $this->scopeProps($scope, $selected),
+            'invitations' => $this->admin->invitations($organization->id, $officeIds, null, false),
             'formOptions' => $this->admin->formOptions($organization, $request->user(), $officeIds),
             'permissions' => $this->permissions($organization, $request, $selected),
         ]);
@@ -105,6 +129,8 @@ class OfficeAdminController extends Controller
         return Inertia::render('office/team-workload', [
             'officeScope' => $this->scopeProps($scope, $selected),
             'team' => $this->admin->teamPage($organization, $scope, $selected),
+            'unassignedTasks' => $this->admin->unassignedTasks($organization->id, $this->scope->officeIds($scope, $selected)),
+            'tasksByUser' => (object) $this->admin->openTasksByUser($organization->id, $this->scope->officeIds($scope, $selected)),
             'permissions' => $this->permissions($organization, $request, $selected),
         ]);
     }
@@ -120,15 +146,10 @@ class OfficeAdminController extends Controller
         ]);
     }
 
-    public function unassignedTasks(Request $request): Response
+    /** Unassigned tasks are now distributed from the workload screen; the old address keeps working. */
+    public function unassignedTasks(Request $request): RedirectResponse
     {
-        [$organization, $scope, $selected] = $this->context($request, 'office.workload.view');
-
-        return Inertia::render('office/unassigned-tasks', [
-            'officeScope' => $this->scopeProps($scope, $selected),
-            'tasks' => $this->admin->unassignedTasks($organization->id, $this->scope->officeIds($scope, $selected)),
-            'permissions' => $this->permissions($organization, $request, $selected),
-        ]);
+        return redirect()->route('office.admin.teamWorkload', $request->query());
     }
 
     public function audit(Request $request): Response

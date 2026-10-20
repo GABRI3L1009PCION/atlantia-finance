@@ -4,17 +4,24 @@ use App\Jobs\LuzmaMaintenanceJob;
 use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\User;
+use App\Services\Accounting\FixedAssetService;
 use App\Services\AccountingAutomationService;
+use App\Services\Luzma\GeminiLuzmaProvider;
+use App\Services\Luzma\LuzmaConversationService;
 use App\Services\Luzma\LuzmaDateParser;
 use App\Services\Luzma\LuzmaInsightService;
 use App\Services\Luzma\LuzmaPromptService;
 use App\Services\Luzma\LuzmaReminderService;
+use App\Services\Luzma\LuzmaSwitch;
+use App\Services\Luzma\LuzmaUnavailableException;
 use App\Services\Payables\PayablesLedgerReconciliationService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use Carbon\CarbonImmutable;
 use Database\Seeders\PlanCatalogSeeder;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -24,6 +31,10 @@ beforeEach(function () {
     $this->seed(PlanCatalogSeeder::class);
     $this->travelTo(CarbonImmutable::parse('2026-09-27 10:00', 'America/Guatemala'));
     $this->withoutMiddleware(ThrottleRequests::class);
+    // The "provider is down" memory lives in the cache and must not leak from one test into the next.
+    foreach (['luzma.gateway.down', 'luzma.gemini.backoff', 'luzma.watchdog.restart', 'luzma.last_provider'] as $key) {
+        Cache::forget($key);
+    }
 });
 
 test('the context is resolved on the server: inaccessible companies, other tenants and roles without Luzma are refused', function () {
@@ -67,10 +78,72 @@ test('Luzma explains official figures computed by Laravel and only sends minimiz
             && str_contains($body, 'Asiento pendiente de contabilizar')
             && ! str_contains($body, 'tax_id') && str_contains($body, 'Nunca inventes cifras');
     });
-    Http::assertNotSent(fn (HttpRequest $request): bool => str_ends_with($request->url(), '/ai/luzma/plan'));
+    // The network reads the question first (and here it has no opinion), so the keyword rules still choose the tool.
+    Http::assertSent(fn (HttpRequest $request): bool => str_ends_with($request->url(), '/ai/luzma/plan'));
     $this->assertDatabaseHas('audit_logs', ['action' => 'luzma.tool.executed', 'user_id' => $f['payables']->id]);
     $this->assertDatabaseHas('audit_logs', ['action' => 'luzma.query', 'user_id' => $f['payables']->id]);
     expect(DB::table('luzma_messages')->where('role', 'assistant')->value('status'))->toBe('ok');
+});
+
+test('a question about invoices to pay reaches the payables summary even from a generic accounting screen', function () {
+    $f = luzmaFixture();
+    luzmaPurchase($f, 100000, '2026-09-05', '2026-10-05');
+    luzmaFakeModel();
+
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => '¿Qué facturas por pagar tengo pendientes y cuánto es el total?', 'company' => luzmaCompanyUuid($f['mayaId']), 'module' => 'accounting'])
+        ->assertOk()->assertJsonPath('message.tools.0', 'get_payables_summary');
+});
+
+test('a doubtful neural opinion does not overrule keyword rules that are sure', function () {
+    $f = luzmaFixture();
+    luzmaPurchase($f, 100000, '2026-09-05', '2026-10-05');
+    Http::fake([
+        '*/ai/luzma/plan' => Http::response(['intent' => 'read', 'tool' => 'get_my_priorities', 'arguments' => [], 'confidence' => 0.85]),
+        '*/ai/luzma/answer' => Http::response(['status' => 'ok', 'model' => 'x', 'response' => 'Respuesta de Luzma.']),
+    ]);
+
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => '¿Qué facturas por pagar tengo pendientes y cuánto es el total?', 'company' => luzmaCompanyUuid($f['mayaId']), 'module' => 'accounting'])
+        ->assertOk()->assertJsonPath('message.tools.0', 'get_payables_summary');
+});
+
+test('a short follow-up leans on the previous answer, but a new topic is not hijacked by memory', function () {
+    $f = luzmaFixture();
+    luzmaPurchase($f, 100000, '2026-09-05', '2026-10-05');
+    luzmaFakeModel();
+    $company = luzmaCompanyUuid($f['mayaId']);
+    $this->actingAs($f['payables']);
+
+    $first = $this->postJson(route('luzma.chat'), ['message' => '¿Qué obligaciones vencen primero?', 'company' => $company, 'module' => 'accounting'])->assertOk();
+    $conversation = $first->json('conversation.id');
+    $first->assertJsonPath('message.tools.0', 'get_payables_summary');
+
+    $this->postJson(route('luzma.chat'), ['message' => 'y por qué?', 'conversation_id' => $conversation, 'company' => $company, 'module' => 'accounting'])
+        ->assertOk()->assertJsonPath('message.tools.0', 'get_payables_summary');
+    $this->postJson(route('luzma.chat'), ['message' => 'y de las obligaciones fiscales vencidas?', 'conversation_id' => $conversation, 'company' => $company, 'module' => 'accounting'])
+        ->assertOk()->assertJsonMissingPath('message.tools.1');
+    expect(app(LuzmaConversationService::class)->lastTool(DB::table('luzma_conversations')->where('public_id', $conversation)->value('id')))->not->toBeNull();
+});
+
+test('Luzma answers accounting questions about assets, indicators, income tax, checks, withholdings, cost centers and reconciliations', function () {
+    $f = luzmaFixture();
+    luzmaFakeModel();
+    $company = luzmaCompanyUuid($f['mayaId']);
+    app(FixedAssetService::class)->create($f['org'], $f['owner'], $f['mayaId'], ['name' => 'Camión', 'category' => 'vehicles', 'acquired_on' => '2026-08-01', 'in_service_on' => '2026-08-01', 'cost' => '120000.00']);
+    $this->actingAs($f['accountant']);
+
+    $expected = [
+        '¿Cuál es el valor en libros de mis activos fijos?' => 'get_fixed_assets_summary',
+        '¿Cómo van los indicadores de margen y liquidez?' => 'get_financial_ratios',
+        '¿Cuánto pagaré de ISR este año según la renta imponible?' => 'get_isr_estimate',
+        '¿Qué cheques emitidos siguen pendientes?' => 'get_checks_summary',
+        '¿Cuánto hemos retenido de ISR y IVA a proveedores?' => 'get_withholdings_summary',
+        '¿Cuál es el resultado por centro de costo?' => 'get_cost_centers_result',
+        '¿Qué conciliaciones de cuentas están pendientes?' => 'get_account_reconciliations',
+    ];
+    foreach ($expected as $question => $tool) {
+        $this->postJson(route('luzma.chat'), ['message' => $question, 'company' => $company, 'module' => 'accounting'])->assertOk()->assertJsonPath('message.tools.0', $tool)->assertJsonPath('message.status', 'ok');
+    }
+    Http::assertSent(fn (HttpRequest $request): bool => str_ends_with($request->url(), '/ai/luzma/answer') && str_contains(json_encode($request->data(), JSON_UNESCAPED_UNICODE), 'valor en libros Q'));
 });
 
 test('when the model is offline Luzma shows the official facts and accounting keeps working', function () {
@@ -81,8 +154,134 @@ test('when the model is offline Luzma shows the official facts and accounting ke
     $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => '¿Por qué CxP no coincide con el Mayor?', 'company' => luzmaCompanyUuid($f['mayaId']), 'module' => 'payables'])
         ->assertOk()->assertJsonPath('message.status', 'fallback')
         ->assertJsonPath('message.content', fn (string $content) => str_contains($content, 'Luzma no está disponible temporalmente') && str_contains($content, 'diferencia Q 1,000.00'));
-    $this->postJson(route('luzma.chat'), ['message' => 'Hola, ¿cómo estás?'])->assertOk()->assertJsonPath('message.status', 'error');
+    // Even a general question is answered (basic mode): a failing model never leaves the user with an error.
+    $this->postJson(route('luzma.chat'), ['message' => 'Hola, ¿cómo estás?'])->assertOk()->assertJsonPath('message.status', 'fallback')
+        ->assertJsonPath('message.content', fn (string $content) => str_contains($content, 'modo básico'));
     $this->get(route('payables.dashboard'))->assertOk();
+});
+
+test('only the SaaS administrator switch turns Luzma off, and it is audited', function () {
+    $f = luzmaFixture();
+    luzmaFakeModel();
+    $owner = ccOwner();
+
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola'])->assertOk();
+
+    $this->actingAs($owner)->post('/control-center/luzma/switch', ['enabled' => false, 'reason' => 'Mantenimiento del servidor'])->assertSessionHasNoErrors();
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola'])->assertStatus(503)
+        ->assertJsonPath('message', fn (string $message) => str_contains($message, 'mantenimiento'));
+    expect(DB::table('platform_audit_events')->where('action', 'luzma.switched_off')->exists())->toBeTrue();
+
+    $this->actingAs($owner)->post('/control-center/luzma/switch', ['enabled' => true, 'reason' => 'Servidor listo'])->assertSessionHasNoErrors();
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola'])->assertOk();
+    expect(DB::table('platform_audit_events')->where('action', 'luzma.switched_on')->exists())->toBeTrue();
+
+    // Staff without the manage permission and firm members cannot flip it.
+    $this->actingAs($f['payables'])->post('/control-center/luzma/switch', ['enabled' => false, 'reason' => 'Intento indebido'])->assertForbidden();
+    $this->actingAs($owner)->post('/control-center/luzma/switch', ['enabled' => false])->assertSessionHasErrors('reason');
+});
+
+test('a question that finds the gateway dead asks for its restart once', function () {
+    $f = luzmaFixture();
+    config(['luzma.restart_command' => 'echo reiniciar-gateway']);
+    Cache::forget('luzma.gateway.down');
+    Cache::forget('luzma.watchdog.restart');
+    Http::fake(fn () => throw new ConnectionException('cURL error 7: Failed to connect to 127.0.0.1 port 8100: Connection refused'));
+
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola, ¿cómo estás?'])->assertOk()->assertJsonPath('message.status', 'fallback');
+    expect(Cache::has('luzma.watchdog.restart'))->toBeTrue();
+});
+
+test('the date and the time are answered from the server clock in the user timezone, without calling any model', function () {
+    $f = luzmaFixture();
+    Http::fake(fn () => throw new RuntimeException('the model must not be called for the clock'));
+    $this->travelTo(CarbonImmutable::parse('2026-10-19 14:35', 'America/Guatemala'));
+
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => '¿Qué hora es?'])->assertOk()->assertJsonPath('message.status', 'ok')
+        ->assertJsonPath('message.content', fn (string $content) => str_contains($content, '14:35') && str_contains($content, 'America/Guatemala') && str_contains($content, 'UTC-06:00'));
+    $this->postJson(route('luzma.chat'), ['message' => 'hola, ¿qué día es hoy?'])->assertOk()
+        ->assertJsonPath('message.content', fn (string $content) => str_contains($content, 'lunes 19 de octubre de 2026') && str_contains($content, '14:35'));
+});
+
+test('a dead gateway is detected once and the next questions are answered at once in basic mode', function () {
+    $f = luzmaFixture();
+    Cache::forget('luzma.gateway.down');
+    Http::fake(fn () => throw new ConnectionException('cURL error 7: Failed to connect to 127.0.0.1 port 8100: Connection refused'));
+
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola, ¿cómo estás?'])->assertOk()->assertJsonPath('message.status', 'fallback');
+    expect(Cache::has('luzma.gateway.down'))->toBeTrue();
+
+    Http::fake(fn () => throw new RuntimeException('the model must not be called while the gateway is known to be down'));
+    $this->postJson(route('luzma.chat'), ['message' => 'Hola otra vez'])->assertOk()->assertJsonPath('message.status', 'fallback');
+});
+
+test('the watchdog restarts a dead gateway, but only once inside its throttle window', function () {
+    Cache::forget('luzma.watchdog.restart');
+    config(['luzma.restart_command' => 'echo luzma-restart']);
+    Http::fake(['*/health' => Http::response(['detail' => 'down'], 500)]);
+
+    $this->artisan('luzma:watchdog')->expectsOutputToContain('reinicio')->assertSuccessful();
+    $this->artisan('luzma:watchdog')->assertFailed();
+});
+
+test('the watchdog loads the model again when it fell out of memory', function () {
+    Cache::forget('luzma.gateway.down');
+    Http::fake([
+        '*/health' => Http::response(['status' => 'healthy', 'model' => 'qwen3', 'model_loaded' => true, 'model_resident' => false]),
+        '*/ai/warmup' => Http::response(['status' => 'ok']),
+    ]);
+
+    $this->artisan('luzma:watchdog')->expectsOutputToContain('calentado')->assertSuccessful();
+    Http::assertSent(fn (HttpRequest $request): bool => str_ends_with($request->url(), '/ai/warmup'));
+});
+
+test('the watchdog stays quiet while the SaaS administrator has Luzma switched off', function () {
+    Http::fake(['*' => Http::response([], 500)]);
+    app(LuzmaSwitch::class)->set(ccOwner(), false, 'Pausa programada');
+
+    $this->artisan('luzma:watchdog')->assertSuccessful();
+    Http::assertNothingSent();
+});
+
+test('when the first model provider fails the next one answers, with the minimized data and the key in the header', function () {
+    $f = luzmaFixture();
+    luzmaPurchase($f, 100000, '2026-09-05', '2026-10-05');
+    config(['luzma.providers' => ['ollama', 'gemini'], 'luzma.gemini.key' => 'clave-de-prueba', 'luzma.gemini.model' => 'gemini-prueba']);
+    Cache::forget('luzma.gateway.down');
+    Cache::forget('luzma.gemini.backoff');
+    Http::fake([
+        '*/ai/luzma/answer' => Http::response(['detail' => 'down'], 503),
+        'generativelanguage.googleapis.com/*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => 'Respuesta de Gemini.']]]]]]),
+    ]);
+
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => '¿Por qué CxP no coincide con el Mayor?', 'company' => luzmaCompanyUuid($f['mayaId']), 'module' => 'payables'])
+        ->assertOk()->assertJsonPath('message.status', 'ok')->assertJsonPath('message.content', 'Respuesta de Gemini.');
+    Http::assertSent(fn (HttpRequest $request): bool => str_contains($request->url(), 'models/gemini-prueba:generateContent') && $request->hasHeader('x-goog-api-key', 'clave-de-prueba')
+        && isset($request->data()['systemInstruction']) && ! str_contains(json_encode($request->data()), 'clave-de-prueba'));
+    expect(Cache::get('luzma.last_provider'))->toBe('gemini');
+});
+
+test('Gemini without a key is reported as unavailable and Luzma falls back to basic mode', function () {
+    $f = luzmaFixture();
+    config(['luzma.providers' => ['gemini'], 'luzma.gemini.key' => null]);
+    Http::fake();
+
+    expect(app(GeminiLuzmaProvider::class)->health())->toMatchArray(['available' => false, 'provider' => 'gemini'])
+        ->and(fn () => app(GeminiLuzmaProvider::class)->answer('sistema', [['role' => 'user', 'content' => 'hola']]))->toThrow(LuzmaUnavailableException::class);
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola, ¿cómo estás?'])->assertOk()->assertJsonPath('message.status', 'fallback');
+    Http::assertNothingSent();
+});
+
+test('the Gemini planner only accepts tools that were offered and tolerates fenced JSON', function () {
+    config(['luzma.gemini.key' => 'clave-de-prueba']);
+    $tools = [['name' => 'get_payables_summary', 'description' => 'CxP', 'parameters' => []]];
+    $reply = fn (string $text): array => ['candidates' => [['content' => ['parts' => [['text' => $text]]]]]];
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+        ->push($reply("```json\n{\"intent\":\"read\",\"tool\":\"get_payables_summary\",\"arguments\":{},\"confidence\":0.9}\n```"))
+        ->push($reply('{"intent":"read","tool":"drop_database","arguments":{},"confidence":1}'))]);
+
+    expect(app(GeminiLuzmaProvider::class)->plan('¿Cuánto debo?', $tools, ['module' => 'payables']))->toMatchArray(['tool' => 'get_payables_summary', 'intent' => 'read']);
+    expect(app(GeminiLuzmaProvider::class)->plan('borra todo', $tools, []))->toMatchArray(['tool' => null, 'intent' => 'general']);
 });
 
 test('a failing tool is reported as a failure, never as a positive answer', function () {

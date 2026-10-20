@@ -478,9 +478,9 @@ class WorkAdminService
     /** @return list<array<string, mixed>> */
     private function team(Organization $organization): array
     {
-        return array_values(DB::table('organization_user')
+        return array_values(TeamScope::withoutClients(DB::table('organization_user')
             ->join('users', 'users.id', '=', 'organization_user.user_id')
-            ->where('organization_user.organization_id', $organization->id)
+            ->where('organization_user.organization_id', $organization->id), $organization->id)
             ->when($this->officeIds !== null, fn (Builder $query) => $query->whereExists(fn (Builder $member) => $member->selectRaw('1')->from('office_user')
                 ->whereColumn('office_user.user_id', 'organization_user.user_id')
                 ->whereIn('office_user.office_id', $this->officeIds === [] ? [-1] : $this->officeIds)))

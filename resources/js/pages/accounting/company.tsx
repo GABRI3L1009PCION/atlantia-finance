@@ -74,6 +74,14 @@ type Account = {
     created_at?: string;
     updated_at?: string;
 };
+type CloseCheck = {
+    key: string;
+    label: string;
+    status: 'passed' | 'warning' | 'blocked';
+    count: number;
+    message: string;
+};
+
 type Period = {
     id: number;
     name: string;
@@ -2865,6 +2873,86 @@ function AccountingPeriodsView({
             year: 'numeric',
         }).format(new Date(`${value.slice(0, 10)}T12:00:00`));
 
+    // Every check that gates the close comes from the server, so the list shows what really blocks the period.
+    const [loaded, setLoaded] = useState<{
+        key: string;
+        checks: CloseCheck[];
+    } | null>(null);
+    const selectedId = selected?.id;
+    const selectedMovements = `${selected?.draft_count}-${selected?.posted_count}-${selected?.closed_at}`;
+
+    const checksKey = `${uuid}:${selectedId}:${selectedMovements}`;
+    const serverChecks = loaded?.key === checksKey ? loaded.checks : null;
+
+    useEffect(() => {
+        if (!selectedId) {
+            return;
+        }
+
+        let active = true;
+        fetch(`/accounting/companies/${uuid}/periods/${selectedId}/checks`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data: { checks?: CloseCheck[] } | null) => {
+                if (active) {
+                    setLoaded({ key: checksKey, checks: data?.checks ?? [] });
+                }
+            })
+            .catch(() => {
+                if (active) {
+                    setLoaded({ key: checksKey, checks: [] });
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [uuid, selectedId, checksKey]);
+
+    const closeItems: {
+        key: string;
+        label: string;
+        message: string;
+        tone: 'ok' | 'warning' | 'blocked';
+    }[] =
+        serverChecks !== null && serverChecks.length > 0
+            ? serverChecks.map((check) => ({
+                  key: check.key,
+                  label: check.label,
+                  message: check.message,
+                  tone:
+                      check.status === 'passed'
+                          ? 'ok'
+                          : check.status === 'blocked'
+                            ? 'blocked'
+                            : 'warning',
+              }))
+            : [
+                  {
+                      key: 'balanced',
+                      label: 'Débitos y créditos cuadran',
+                      message: '',
+                      tone: selectedDifference === 0 ? 'ok' : 'blocked',
+                  },
+                  {
+                      key: 'pending',
+                      label: 'No existen asientos pendientes',
+                      message: '',
+                      tone: selected?.draft_count === 0 ? 'ok' : 'blocked',
+                  },
+                  {
+                      key: 'posted',
+                      label: 'Asientos contabilizados',
+                      message: '',
+                      tone:
+                          selected?.entries_count === selected?.posted_count
+                              ? 'ok'
+                              : 'warning',
+                  },
+              ];
+
     return (
         <div id="periodos-contables" className="scroll-mt-20 space-y-4">
             <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_310px]">
@@ -3267,51 +3355,41 @@ function AccountingPeriodsView({
                                         Checklist de cierre
                                     </h3>
                                     <div className="overflow-hidden rounded-xl border border-slate-200">
-                                        {[
-                                            {
-                                                label: 'Débitos y créditos cuadran',
-                                                complete:
-                                                    selectedDifference === 0,
-                                            },
-                                            {
-                                                label: 'No existen asientos pendientes',
-                                                complete:
-                                                    selected.draft_count === 0,
-                                            },
-                                            {
-                                                label: 'No existen asientos descartados',
-                                                complete:
-                                                    selected.void_count === 0,
-                                            },
-                                            {
-                                                label: 'Asientos contabilizados',
-                                                complete:
-                                                    selected.entries_count ===
-                                                    selected.posted_count,
-                                            },
-                                        ].map((item) => (
+                                        {closeItems.map((item) => (
                                             <div
-                                                key={item.label}
-                                                className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2.5 last:border-0"
+                                                key={item.key}
+                                                className="flex items-start justify-between gap-3 border-b border-slate-100 px-3 py-2.5 last:border-0"
                                             >
-                                                <span className="flex items-center gap-2 text-[10px]">
+                                                <span className="flex items-start gap-2 text-[10px]">
                                                     <span
-                                                        className={`grid size-4 place-items-center rounded-full ${item.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}
+                                                        className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full ${item.tone === 'ok' ? 'bg-emerald-100 text-emerald-700' : item.tone === 'blocked' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}
                                                     >
-                                                        {item.complete ? (
+                                                        {item.tone === 'ok' ? (
                                                             <Check size={10} />
                                                         ) : (
                                                             <Clock3 size={10} />
                                                         )}
                                                     </span>
-                                                    {item.label}
+                                                    <span>
+                                                        <b className="block font-semibold">
+                                                            {item.label}
+                                                        </b>
+                                                        {item.message && (
+                                                            <span className="block text-[9px] text-slate-500">
+                                                                {item.message}
+                                                            </span>
+                                                        )}
+                                                    </span>
                                                 </span>
                                                 <strong
-                                                    className={`text-[9px] ${item.complete ? 'text-emerald-700' : 'text-orange-700'}`}
+                                                    className={`shrink-0 text-[9px] ${item.tone === 'ok' ? 'text-emerald-700' : item.tone === 'blocked' ? 'text-red-700' : 'text-orange-700'}`}
                                                 >
-                                                    {item.complete
+                                                    {item.tone === 'ok'
                                                         ? 'Completado'
-                                                        : 'Pendiente'}
+                                                        : item.tone ===
+                                                            'blocked'
+                                                          ? 'Bloquea el cierre'
+                                                          : 'Advertencia'}
                                                 </strong>
                                             </div>
                                         ))}
@@ -3848,9 +3926,9 @@ export default function CompanyAccounting(props: Props) {
             title: 'Centros de Costos',
             subtitle: 'Control por área o proyecto',
             icon: Building2,
-            action: () => openPreparedModule('centros-costos'),
+            action: () =>
+                router.visit(`/accounting/companies/${uuid}/cost-centers`),
             tone: 'wine',
-            requiredFeature: 'advanced_reports',
         },
         {
             title: 'Presupuestos',
@@ -3864,9 +3942,9 @@ export default function CompanyAccounting(props: Props) {
             title: 'Activos Fijos',
             subtitle: 'Control de bienes y vida útil',
             icon: Landmark,
-            action: () => openPreparedModule('activos-fijos'),
+            action: () =>
+                router.visit(`/accounting/companies/${uuid}/fixed-assets`),
             tone: 'blue',
-            requiredFeature: 'advanced_reports',
         },
         {
             title: 'Asientos Recurrentes',

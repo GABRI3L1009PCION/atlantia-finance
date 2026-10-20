@@ -2,7 +2,6 @@ import { Form, Head } from '@inertiajs/react';
 import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
-import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
@@ -18,7 +17,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
@@ -66,15 +64,6 @@ export default function Login({ status, canResetPassword }: Props) {
                             <div className="grid gap-1.5">
                                 <div className="flex items-center">
                                     <Label htmlFor="password">Contraseña</Label>
-                                    {canResetPassword && (
-                                        <TextLink
-                                            href={request()}
-                                            className="ml-auto text-sm font-medium text-emerald-700!"
-                                            tabIndex={5}
-                                        >
-                                            ¿Olvidaste tu contraseña?
-                                        </TextLink>
-                                    )}
                                 </div>
                                 <PasswordInput
                                     id="password"
@@ -87,15 +76,26 @@ export default function Login({ status, canResetPassword }: Props) {
                                 <InputError message={errors.password} />
                             </div>
 
-                            <div className="flex items-center space-x-3">
-                                <Checkbox
-                                    id="remember"
-                                    name="remember"
-                                    tabIndex={3}
-                                />
-                                <Label htmlFor="remember">
-                                    Recordar este equipo
-                                </Label>
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="flex items-center space-x-3">
+                                    <Checkbox
+                                        id="remember"
+                                        name="remember"
+                                        tabIndex={3}
+                                    />
+                                    <Label htmlFor="remember">
+                                        Recordar este equipo
+                                    </Label>
+                                </span>
+                                {canResetPassword && (
+                                    <TextLink
+                                        href={request()}
+                                        className="text-sm font-semibold text-[#640000]!"
+                                        tabIndex={6}
+                                    >
+                                        Olvidé mi contraseña
+                                    </TextLink>
+                                )}
                             </div>
 
                             <Button
@@ -112,60 +112,6 @@ export default function Login({ status, canResetPassword }: Props) {
                     </>
                 )}
             </Form>
-
-            <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                    <Separator className="w-full" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                    <span className="bg-white px-3 text-slate-500">
-                        o continúa con
-                    </span>
-                </div>
-            </div>
-
-            <div className="grid gap-2">
-                <Button
-                    type="button"
-                    variant="outline"
-                    disabled
-                    className="relative w-full border-slate-300 bg-white! text-slate-950! opacity-100!"
-                    aria-label="Continuar con Google, próximamente"
-                >
-                    <span className="text-base font-extrabold text-[#4285f4]">
-                        G
-                    </span>
-                    Continuar con Google
-                    <span className="absolute right-3 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold tracking-wide text-slate-500 uppercase">
-                        Próximamente
-                    </span>
-                </Button>
-
-                <Button
-                    type="button"
-                    variant="outline"
-                    disabled
-                    className="relative w-full border-slate-300 bg-white! text-slate-950! opacity-100!"
-                    aria-label="Continuar con Microsoft, próximamente"
-                >
-                    <span className="grid size-4 grid-cols-2 gap-0.5">
-                        <span className="bg-[#f25022]" />
-                        <span className="bg-[#7fba00]" />
-                        <span className="bg-[#00a4ef]" />
-                        <span className="bg-[#ffb900]" />
-                    </span>
-                    Continuar con Microsoft
-                    <span className="absolute right-3 rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold tracking-wide text-slate-500 uppercase">
-                        Próximamente
-                    </span>
-                </Button>
-
-                <PasskeyVerify
-                    label="Ingresar con passkey"
-                    loadingLabel="Verificando..."
-                    showSeparator={false}
-                />
-            </div>
 
             <div className="mt-4 text-center text-sm text-slate-500">
                 ¿Aún no tienes una cuenta?{' '}

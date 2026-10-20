@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
@@ -58,6 +60,26 @@ class SupplierController extends ApiController
         }
 
         return $this->item($this->resources->supplier($this->find((int) $record->id, $supplier)));
+    }
+
+    /** A supplier is removed only while it has no history; with documents it must be kept (the documents are annulled, never deleted). */
+    public function destroy(Request $request, string $company, int $supplier): Response|JsonResponse
+    {
+        $record = $this->company($request, $company, 'suppliers:write');
+        $this->find((int) $record->id, $supplier);
+        if (DB::table('purchase_documents')->where('purchase_supplier_id', $supplier)->exists()) {
+            $this->fail(409, 'has_history', 'El proveedor tiene documentos y no se puede eliminar. Conserva el registro: los documentos se anulan, no se borran.');
+        }
+        try {
+            DB::transaction(function () use ($request, $record, $supplier): void {
+                DB::table('purchase_suppliers')->where('company_id', $record->id)->where('id', $supplier)->delete();
+                $this->accounting->audit($this->organization($request), $this->user($request), 'purchase.supplier.deleted', 'purchase_suppliers', $supplier, $this->via($request));
+            });
+        } catch (QueryException) {
+            $this->fail(409, 'has_history', 'El proveedor tiene movimientos relacionados y no se puede eliminar.');
+        }
+
+        return response()->noContent();
     }
 
     private function find(int $companyId, int $supplier): stdClass

@@ -5,14 +5,29 @@ import {
     Building2,
     CalendarClock,
     CircleDollarSign,
+    Eye,
     HandCoins,
+    History,
+    MessageSquarePlus,
+    Pencil,
     Plus,
     RefreshCcw,
-    Search,
     Users,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import {
+    TableFilterSelect,
+    TablePagination,
+    TableToolbar,
+    useTableControls,
+} from '@/components/table-controls';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 type Row = {
     kind: 'client' | 'prospect';
@@ -119,10 +134,6 @@ const formatDate = (value: string | null) =>
           })
         : '—';
 
-function normalize(value: string): string {
-    return value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
-
 function Kpi({
     icon,
     tone,
@@ -141,19 +152,19 @@ function Kpi({
     return (
         <div className={`${card} flex min-w-0 items-center gap-3 !p-4`}>
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-12 shrink-0 place-items-center rounded-2xl ${tone}`}
             >
                 {icon}
             </span>
-            <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-[#8a0b0b]">
+            <div className="min-w-0 flex-1">
+                <p className="text-sm leading-tight font-bold text-[#8a0b0b]">
                     {label}
                 </p>
-                <p className="text-3xl leading-tight font-black text-[#061633]">
+                <p className="truncate text-2xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
                 <p
-                    className={`truncate text-xs font-semibold ${bad ? 'text-red-600' : 'text-slate-500'}`}
+                    className={`text-xs leading-tight font-semibold ${bad ? 'text-red-600' : 'text-slate-500'}`}
                 >
                     {hint}
                 </p>
@@ -279,12 +290,69 @@ function OfficeDonut({ rows }: { rows: Props['by_office'] }) {
     );
 }
 
-function ManagePanel({
-    companies,
-    staff,
-    prospectOptions,
-}: Pick<Props, 'companies' | 'staff'> & {
-    prospectOptions: Props['prospect_options'];
+type CrmDialog =
+    | { kind: 'prospect' }
+    | { kind: 'contract'; companyId?: string }
+    | { kind: 'interaction'; companyId?: string; prospectId?: string }
+    | { kind: 'pipeline' }
+    | { kind: 'detail'; row: Row }
+    | { kind: 'renewals' }
+    | { kind: 'interactions' }
+    | null;
+
+const label = 'block text-sm font-semibold text-[#061633]';
+const iconButton =
+    'inline-grid size-9 place-items-center rounded-lg border border-slate-300 bg-white text-[#8a0b0b] transition hover:border-[#c9a36a] hover:bg-amber-50';
+
+type Submittable = {
+    post: (url: string, options: object) => void;
+    reset: () => void;
+};
+
+function useSubmit(onDone: () => void) {
+    return (form: Submittable, url: string) => (event: FormEvent) => {
+        event.preventDefault();
+        form.post(url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                onDone();
+            },
+        });
+    };
+}
+
+function FormActions({
+    processing,
+    onCancel,
+    children,
+}: {
+    processing: boolean;
+    onCancel: () => void;
+    children: ReactNode;
+}) {
+    return (
+        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <button
+                type="button"
+                onClick={onCancel}
+                className="inline-flex h-10 items-center rounded-xl border border-[#8a0b0b] px-5 text-sm font-bold text-[#8a0b0b]"
+            >
+                Cancelar
+            </button>
+            <button className={button} disabled={processing}>
+                {children}
+            </button>
+        </div>
+    );
+}
+
+function ProspectForm({
+    onDone,
+    onCancel,
+}: {
+    onDone: () => void;
+    onCancel: () => void;
 }) {
     const prospect = useForm({
         name: '',
@@ -294,74 +362,48 @@ function ManagePanel({
         estimated_value: '',
         expected_close_on: '',
     });
-    const contract = useForm({
-        company_id: '',
-        services: '',
-        monthly_fee: '',
-        starts_on: '',
-        renews_on: '',
-        status: 'active',
-        owner_id: '',
-    });
-    const interaction = useForm({
-        company_id: '',
-        crm_prospect_id: '',
-        kind: 'meeting',
-        summary: '',
-        next_action: '',
-        next_action_on: '',
-    });
-
-    const submit =
-        (
-            form: {
-                post: (url: string, options: object) => void;
-                reset: () => void;
-            },
-            url: string,
-        ) =>
-        (event: FormEvent) => {
-            event.preventDefault();
-            form.post(url, {
-                preserveScroll: true,
-                onSuccess: () => form.reset(),
-            });
-        };
+    const submit = useSubmit(onDone);
 
     return (
-        <div className="grid gap-4 xl:grid-cols-3">
-            <form
-                onSubmit={submit(prospect, '/office/crm/prospects')}
-                className={`${card} space-y-3`}
-            >
-                <h3 className="font-black">Registrar prospecto</h3>
+        <form
+            onSubmit={submit(prospect, '/office/crm/prospects')}
+            className="space-y-4"
+        >
+            <label className={label}>
+                Empresa o persona
                 <input
-                    className={field}
-                    placeholder="Empresa o persona"
+                    className={`${field} mt-1`}
                     value={prospect.data.name}
                     onChange={(e) => prospect.setData('name', e.target.value)}
                     required
                 />
-                <input
-                    className={field}
-                    placeholder="Contacto"
-                    value={prospect.data.contact_name}
-                    onChange={(e) =>
-                        prospect.setData('contact_name', e.target.value)
-                    }
-                />
-                <input
-                    className={field}
-                    type="email"
-                    placeholder="Correo"
-                    value={prospect.data.contact_email}
-                    onChange={(e) =>
-                        prospect.setData('contact_email', e.target.value)
-                    }
-                />
-                <div className="grid grid-cols-2 gap-3">
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+                <label className={label}>
+                    Contacto
+                    <input
+                        className={`${field} mt-1`}
+                        value={prospect.data.contact_name}
+                        onChange={(e) =>
+                            prospect.setData('contact_name', e.target.value)
+                        }
+                    />
+                </label>
+                <label className={label}>
+                    Correo
+                    <input
+                        className={`${field} mt-1`}
+                        type="email"
+                        value={prospect.data.contact_email}
+                        onChange={(e) =>
+                            prospect.setData('contact_email', e.target.value)
+                        }
+                    />
+                </label>
+                <label className={label}>
+                    Etapa
                     <select
-                        className={field}
+                        className={`${field} mt-1`}
                         value={prospect.data.stage}
                         onChange={(e) =>
                             prospect.setData('stage', e.target.value)
@@ -372,74 +414,114 @@ function ManagePanel({
                         <option value="proposal">Propuesta</option>
                         <option value="negotiation">Negociación</option>
                     </select>
+                </label>
+                <label className={label}>
+                    Valor estimado (Q)
                     <input
-                        className={field}
+                        className={`${field} mt-1`}
                         type="number"
                         min="0"
-                        placeholder="Valor estimado (Q)"
                         value={prospect.data.estimated_value}
                         onChange={(e) =>
                             prospect.setData('estimated_value', e.target.value)
                         }
                     />
-                </div>
+                </label>
+            </div>
+            <label className={label}>
+                Cierre esperado
                 <input
-                    className={field}
+                    className={`${field} mt-1`}
                     type="date"
                     value={prospect.data.expected_close_on}
                     onChange={(e) =>
                         prospect.setData('expected_close_on', e.target.value)
                     }
                 />
-                <button className={button} disabled={prospect.processing}>
-                    <Plus className="size-4" /> Guardar prospecto
-                </button>
-            </form>
+            </label>
+            <FormActions processing={prospect.processing} onCancel={onCancel}>
+                <Plus className="size-4" /> Guardar prospecto
+            </FormActions>
+        </form>
+    );
+}
 
-            <form
-                onSubmit={submit(contract, '/office/crm/contracts')}
-                className={`${card} space-y-3`}
-            >
-                <h3 className="font-black">Contrato de un cliente</h3>
+function ContractForm({
+    companies,
+    staff,
+    initialCompany,
+    onDone,
+    onCancel,
+}: Pick<Props, 'companies' | 'staff'> & {
+    initialCompany: string;
+    onDone: () => void;
+    onCancel: () => void;
+}) {
+    const contract = useForm({
+        company_id: initialCompany,
+        services: '',
+        monthly_fee: '',
+        starts_on: '',
+        renews_on: '',
+        status: 'active',
+        owner_id: '',
+    });
+    const submit = useSubmit(onDone);
+
+    return (
+        <form
+            onSubmit={submit(contract, '/office/crm/contracts')}
+            className="space-y-4"
+        >
+            <label className={label}>
+                Empresa cliente
                 <select
-                    className={field}
+                    className={`${field} mt-1`}
                     value={contract.data.company_id}
                     onChange={(e) =>
                         contract.setData('company_id', e.target.value)
                     }
                     required
                 >
-                    <option value="">Empresa cliente</option>
+                    <option value="">Selecciona una empresa</option>
                     {companies.map((company) => (
                         <option key={company.id} value={company.id}>
                             {company.name}
                         </option>
                     ))}
                 </select>
+            </label>
+            <label className={label}>
+                Servicios
                 <input
-                    className={field}
-                    placeholder="Servicios (ej. Contabilidad + Impuestos)"
+                    className={`${field} mt-1`}
+                    placeholder="Ej. Contabilidad + Impuestos"
                     value={contract.data.services}
                     onChange={(e) =>
                         contract.setData('services', e.target.value)
                     }
                     required
                 />
-                <div className="grid grid-cols-2 gap-3">
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+                <label className={label}>
+                    Cuota mensual (Q)
                     <input
-                        className={field}
+                        className={`${field} mt-1`}
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="Cuota mensual (Q)"
                         value={contract.data.monthly_fee}
                         onChange={(e) =>
                             contract.setData('monthly_fee', e.target.value)
                         }
                         required
                     />
+                </label>
+                <label className={label}>
+                    Estado
                     <select
-                        className={field}
+                        className={`${field} mt-1`}
                         value={contract.data.status}
                         onChange={(e) =>
                             contract.setData('status', e.target.value)
@@ -450,126 +532,556 @@ function ManagePanel({
                         <option value="at_risk">En riesgo</option>
                         <option value="cancelled">Cancelado</option>
                     </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                    <label className="text-xs text-slate-500">
-                        Inicio
-                        <input
-                            className={field}
-                            type="date"
-                            value={contract.data.starts_on}
-                            onChange={(e) =>
-                                contract.setData('starts_on', e.target.value)
-                            }
-                            required
-                        />
-                    </label>
-                    <label className="text-xs text-slate-500">
-                        Renueva
-                        <input
-                            className={field}
-                            type="date"
-                            value={contract.data.renews_on}
-                            onChange={(e) =>
-                                contract.setData('renews_on', e.target.value)
-                            }
-                        />
-                    </label>
-                </div>
+                </label>
+                <label className={label}>
+                    Inicio
+                    <input
+                        className={`${field} mt-1`}
+                        type="date"
+                        value={contract.data.starts_on}
+                        onChange={(e) =>
+                            contract.setData('starts_on', e.target.value)
+                        }
+                        required
+                    />
+                </label>
+                <label className={label}>
+                    Renueva
+                    <input
+                        className={`${field} mt-1`}
+                        type="date"
+                        value={contract.data.renews_on}
+                        onChange={(e) =>
+                            contract.setData('renews_on', e.target.value)
+                        }
+                    />
+                </label>
+            </div>
+            <label className={label}>
+                Responsable{' '}
+                <span className="font-normal text-slate-500">(opcional)</span>
                 <select
-                    className={field}
+                    className={`${field} mt-1`}
                     value={contract.data.owner_id}
                     onChange={(e) =>
                         contract.setData('owner_id', e.target.value)
                     }
                 >
-                    <option value="">Responsable (opcional)</option>
+                    <option value="">Sin responsable</option>
                     {staff.map((person) => (
                         <option key={person.id} value={person.id}>
                             {person.name}
                         </option>
                     ))}
                 </select>
-                <button className={button} disabled={contract.processing}>
-                    <HandCoins className="size-4" /> Guardar contrato
-                </button>
-            </form>
+            </label>
+            <FormActions processing={contract.processing} onCancel={onCancel}>
+                <HandCoins className="size-4" /> Guardar contrato
+            </FormActions>
+        </form>
+    );
+}
 
-            <form
-                onSubmit={submit(interaction, '/office/crm/interactions')}
-                className={`${card} space-y-3`}
-            >
-                <h3 className="font-black">Registrar interacción</h3>
+function InteractionForm({
+    companies,
+    prospectOptions,
+    initialCompany,
+    initialProspect,
+    onDone,
+    onCancel,
+}: Pick<Props, 'companies'> & {
+    prospectOptions: Props['prospect_options'];
+    initialCompany: string;
+    initialProspect: string;
+    onDone: () => void;
+    onCancel: () => void;
+}) {
+    const interaction = useForm({
+        company_id: initialCompany,
+        crm_prospect_id: initialProspect,
+        kind: 'meeting',
+        summary: '',
+        next_action: '',
+        next_action_on: '',
+    });
+    const submit = useSubmit(onDone);
+
+    return (
+        <form
+            onSubmit={submit(interaction, '/office/crm/interactions')}
+            className="space-y-4"
+        >
+            <div className="grid gap-4 sm:grid-cols-2">
+                <label className={label}>
+                    Cliente{' '}
+                    <span className="font-normal text-slate-500">
+                        (opcional)
+                    </span>
+                    <select
+                        className={`${field} mt-1`}
+                        value={interaction.data.company_id}
+                        onChange={(e) =>
+                            interaction.setData('company_id', e.target.value)
+                        }
+                    >
+                        <option value="">Ninguno</option>
+                        {companies.map((company) => (
+                            <option key={company.id} value={company.id}>
+                                {company.name}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label className={label}>
+                    Prospecto{' '}
+                    <span className="font-normal text-slate-500">
+                        (opcional)
+                    </span>
+                    <select
+                        className={`${field} mt-1`}
+                        value={interaction.data.crm_prospect_id}
+                        onChange={(e) =>
+                            interaction.setData(
+                                'crm_prospect_id',
+                                e.target.value,
+                            )
+                        }
+                    >
+                        <option value="">Ninguno</option>
+                        {prospectOptions.map((item) => (
+                            <option key={item.id} value={item.id}>
+                                {item.name}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            </div>
+            <label className={label}>
+                Tipo de interacción
                 <select
-                    className={field}
-                    value={interaction.data.company_id}
-                    onChange={(e) =>
-                        interaction.setData('company_id', e.target.value)
-                    }
-                >
-                    <option value="">Cliente (opcional)</option>
-                    {companies.map((company) => (
-                        <option key={company.id} value={company.id}>
-                            {company.name}
-                        </option>
-                    ))}
-                </select>
-                <select
-                    className={field}
-                    value={interaction.data.crm_prospect_id}
-                    onChange={(e) =>
-                        interaction.setData('crm_prospect_id', e.target.value)
-                    }
-                >
-                    <option value="">Prospecto (opcional)</option>
-                    {prospectOptions.map((item) => (
-                        <option key={item.id} value={item.id}>
-                            {item.name}
-                        </option>
-                    ))}
-                </select>
-                <select
-                    className={field}
+                    className={`${field} mt-1`}
                     value={interaction.data.kind}
                     onChange={(e) =>
                         interaction.setData('kind', e.target.value)
                     }
                 >
-                    {Object.entries(KIND).map(([key, label]) => (
+                    {Object.entries(KIND).map(([key, text]) => (
                         <option key={key} value={key}>
-                            {label}
+                            {text}
                         </option>
                     ))}
                 </select>
-                <input
-                    className={field}
-                    placeholder="Resumen"
+            </label>
+            <label className={label}>
+                Resumen
+                <textarea
+                    className={`${field} mt-1 h-24 py-2`}
                     value={interaction.data.summary}
                     onChange={(e) =>
                         interaction.setData('summary', e.target.value)
                     }
                     required
                 />
-                <input
-                    className={field}
-                    placeholder="Próxima acción"
-                    value={interaction.data.next_action}
-                    onChange={(e) =>
-                        interaction.setData('next_action', e.target.value)
-                    }
-                />
-                <input
-                    className={field}
-                    type="date"
-                    value={interaction.data.next_action_on}
-                    onChange={(e) =>
-                        interaction.setData('next_action_on', e.target.value)
-                    }
-                />
-                <button className={button} disabled={interaction.processing}>
-                    <Plus className="size-4" /> Guardar interacción
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+                <label className={label}>
+                    Próxima acción
+                    <input
+                        className={`${field} mt-1`}
+                        value={interaction.data.next_action}
+                        onChange={(e) =>
+                            interaction.setData('next_action', e.target.value)
+                        }
+                    />
+                </label>
+                <label className={label}>
+                    Fecha de la próxima acción
+                    <input
+                        className={`${field} mt-1`}
+                        type="date"
+                        value={interaction.data.next_action_on}
+                        onChange={(e) =>
+                            interaction.setData(
+                                'next_action_on',
+                                e.target.value,
+                            )
+                        }
+                    />
+                </label>
+            </div>
+            <FormActions
+                processing={interaction.processing}
+                onCancel={onCancel}
+            >
+                <Plus className="size-4" /> Guardar interacción
+            </FormActions>
+        </form>
+    );
+}
+
+function PipelineMover({
+    prospectOptions,
+    stages,
+    onClose,
+}: {
+    prospectOptions: Props['prospect_options'];
+    stages: Props['stages'];
+    onClose: () => void;
+}) {
+    return (
+        <div className="space-y-4">
+            <ul className="divide-y divide-slate-100 text-sm">
+                {prospectOptions.map((item) => (
+                    <li
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 py-2.5"
+                    >
+                        <span className="font-bold">{item.name}</span>
+                        <select
+                            className="rounded-lg border border-[#e4dbd6] px-2 py-1.5 text-sm"
+                            value={item.stage}
+                            onChange={(e) =>
+                                router.patch(
+                                    `/office/crm/prospects/${item.id}`,
+                                    { stage: e.target.value },
+                                    { preserveScroll: true },
+                                )
+                            }
+                        >
+                            {Object.entries(stages).map(([key, text]) => (
+                                <option key={key} value={key}>
+                                    {text}
+                                </option>
+                            ))}
+                            <option value="lost">Perdido</option>
+                        </select>
+                    </li>
+                ))}
+                {prospectOptions.length === 0 && (
+                    <li className="py-6 text-center text-slate-500">
+                        No hay prospectos abiertos en el pipeline.
+                    </li>
+                )}
+            </ul>
+            <div className="flex justify-end border-t border-slate-200 pt-4">
+                <button type="button" onClick={onClose} className={button}>
+                    Listo
                 </button>
-            </form>
+            </div>
+        </div>
+    );
+}
+
+function RowDetail({ row, stages }: { row: Row; stages: Props['stages'] }) {
+    const items: [string, ReactNode][] = [
+        ['Tipo', row.kind === 'client' ? 'Empresa cliente' : 'Prospecto'],
+        [
+            'Estado',
+            <span
+                key="status"
+                className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS[row.status].style}`}
+            >
+                {STATUS[row.status].label}
+            </span>,
+        ],
+        [
+            row.kind === 'client' ? 'Oficina' : 'Etapa',
+            row.kind === 'client'
+                ? (row.office ?? '—')
+                : row.stage
+                  ? (stages[row.stage] ?? row.stage)
+                  : '—',
+        ],
+        ['Responsable', row.owner ?? 'Sin asignar'],
+        [
+            'Servicio contratado',
+            row.services ??
+                (row.kind === 'prospect' ? 'Propuesta en revisión' : '—'),
+        ],
+        [
+            row.kind === 'client' ? 'Cuota mensual' : 'Valor estimado',
+            row.fee_cents > 0 ? money(row.fee_cents) : '—',
+        ],
+        [
+            row.kind === 'client' ? 'Renovación' : 'Cierre esperado',
+            formatDate(row.renews_on),
+        ],
+        [
+            'Riesgo',
+            row.risk ? (
+                <span
+                    key="risk"
+                    className={`rounded-md px-2.5 py-1 text-xs font-bold ${RISK[row.risk].style}`}
+                >
+                    {RISK[row.risk].label}
+                </span>
+            ) : (
+                '—'
+            ),
+        ],
+    ];
+
+    return (
+        <dl className="divide-y divide-slate-100 text-sm">
+            {items.map(([term, value]) => (
+                <div
+                    key={term}
+                    className="grid grid-cols-[10rem_1fr] items-center gap-3 py-2.5"
+                >
+                    <dt className="text-slate-500">{term}</dt>
+                    <dd className="font-semibold">{value}</dd>
+                </div>
+            ))}
+        </dl>
+    );
+}
+
+const DIALOG_COPY: Record<
+    NonNullable<CrmDialog>['kind'],
+    { title: string; description: string }
+> = {
+    prospect: {
+        title: 'Registrar prospecto',
+        description: 'Agrega una empresa o persona al pipeline comercial.',
+    },
+    contract: {
+        title: 'Contrato de un cliente',
+        description: 'Registra o actualiza el contrato de una empresa cliente.',
+    },
+    interaction: {
+        title: 'Registrar interacción',
+        description: 'Deja constancia de una reunión, llamada o correo.',
+    },
+    pipeline: {
+        title: 'Mover prospectos en el pipeline',
+        description: 'Cambia la etapa de cada prospecto abierto.',
+    },
+    detail: {
+        title: 'Detalle',
+        description: 'Información comercial de este registro.',
+    },
+    renewals: {
+        title: 'Próximas renovaciones',
+        description:
+            'Contratos que vencen pronto, del más cercano al más lejano.',
+    },
+    interactions: {
+        title: 'Interacciones recientes',
+        description:
+            'Lo último que el equipo registró con clientes y prospectos.',
+    },
+};
+
+function RenewalsList({ renewals }: { renewals: Props['renewals'] }) {
+    return (
+        <table className="w-full text-sm">
+            <thead>
+                <tr className="text-left text-xs text-slate-500">
+                    <th className="py-1">Empresa</th>
+                    <th>Servicio</th>
+                    <th>Vence</th>
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+                {renewals.map((item) => (
+                    <tr key={`${item.company}-${item.renews_on}`}>
+                        <td className="py-2.5 font-bold">{item.company}</td>
+                        <td className="text-slate-600">{item.services}</td>
+                        <td className="font-bold whitespace-nowrap text-[#8a0b0b]">
+                            {formatDate(item.renews_on)}
+                        </td>
+                    </tr>
+                ))}
+                {renewals.length === 0 && (
+                    <tr>
+                        <td
+                            colSpan={3}
+                            className="py-8 text-center text-slate-500"
+                        >
+                            Sin renovaciones próximas.
+                        </td>
+                    </tr>
+                )}
+            </tbody>
+        </table>
+    );
+}
+
+function InteractionsList({
+    interactions,
+}: {
+    interactions: Props['interactions'];
+}) {
+    return (
+        <ul className="space-y-3">
+            {interactions.map((item, index) => (
+                <li key={index} className="flex items-start gap-3 text-sm">
+                    <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-[#f6e6e4] text-xs font-black text-[#8a0b0b]">
+                        {item.user.charAt(0)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <p className="font-black">
+                            {item.user}
+                            {item.about ? ` · ${item.about}` : ''}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                            {KIND[item.kind as keyof typeof KIND] ?? 'Nota'}:{' '}
+                            {item.summary}
+                        </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-slate-400">
+                        {formatDate(item.at)}
+                    </span>
+                </li>
+            ))}
+            {interactions.length === 0 && (
+                <li className="py-6 text-center text-sm text-slate-500">
+                    Aún no hay interacciones registradas.
+                </li>
+            )}
+        </ul>
+    );
+}
+
+function CrmDialogs({
+    dialog,
+    onClose,
+    ...props
+}: {
+    dialog: CrmDialog;
+    onClose: () => void;
+} & Pick<
+    Props,
+    | 'companies'
+    | 'staff'
+    | 'prospect_options'
+    | 'stages'
+    | 'renewals'
+    | 'interactions'
+>) {
+    return (
+        <Dialog open={dialog !== null} onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-2xl">
+                {dialog && (
+                    <>
+                        <DialogTitle>
+                            {dialog.kind === 'detail'
+                                ? dialog.row.name
+                                : DIALOG_COPY[dialog.kind].title}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {DIALOG_COPY[dialog.kind].description}
+                        </DialogDescription>
+                        {dialog.kind === 'prospect' && (
+                            <ProspectForm onDone={onClose} onCancel={onClose} />
+                        )}
+                        {dialog.kind === 'contract' && (
+                            <ContractForm
+                                companies={props.companies}
+                                staff={props.staff}
+                                initialCompany={dialog.companyId ?? ''}
+                                onDone={onClose}
+                                onCancel={onClose}
+                            />
+                        )}
+                        {dialog.kind === 'interaction' && (
+                            <InteractionForm
+                                companies={props.companies}
+                                prospectOptions={props.prospect_options}
+                                initialCompany={dialog.companyId ?? ''}
+                                initialProspect={dialog.prospectId ?? ''}
+                                onDone={onClose}
+                                onCancel={onClose}
+                            />
+                        )}
+                        {dialog.kind === 'pipeline' && (
+                            <PipelineMover
+                                prospectOptions={props.prospect_options}
+                                stages={props.stages}
+                                onClose={onClose}
+                            />
+                        )}
+                        {dialog.kind === 'detail' && (
+                            <RowDetail row={dialog.row} stages={props.stages} />
+                        )}
+                        {dialog.kind === 'renewals' && (
+                            <RenewalsList renewals={props.renewals} />
+                        )}
+                        {dialog.kind === 'interactions' && (
+                            <InteractionsList
+                                interactions={props.interactions}
+                            />
+                        )}
+                    </>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function ManageButtons({
+    onOpen,
+    hasProspects,
+    canManage,
+}: {
+    onOpen: (dialog: CrmDialog) => void;
+    hasProspects: boolean;
+    canManage: boolean;
+}) {
+    const ghost =
+        'inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#e4dbd6] bg-white px-3 text-sm font-bold whitespace-nowrap text-[#8a0b0b] transition hover:border-[#c9a36a]';
+
+    return (
+        <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+            <button
+                type="button"
+                className={ghost}
+                onClick={() => onOpen({ kind: 'renewals' })}
+            >
+                <CalendarClock className="size-4" /> Próximas renovaciones
+            </button>
+            <button
+                type="button"
+                className={ghost}
+                onClick={() => onOpen({ kind: 'interactions' })}
+            >
+                <History className="size-4" /> Interacciones recientes
+            </button>
+            {canManage && hasProspects && (
+                <button
+                    type="button"
+                    className={ghost}
+                    onClick={() => onOpen({ kind: 'pipeline' })}
+                >
+                    <ArrowRight className="size-4" /> Mover en el pipeline
+                </button>
+            )}
+            {canManage && (
+                <>
+                    <button
+                        type="button"
+                        className={ghost}
+                        onClick={() => onOpen({ kind: 'interaction' })}
+                    >
+                        <MessageSquarePlus className="size-4" /> Registrar
+                        interacción
+                    </button>
+                    <button
+                        type="button"
+                        className={ghost}
+                        onClick={() => onOpen({ kind: 'contract' })}
+                    >
+                        <HandCoins className="size-4" /> Contrato de un cliente
+                    </button>
+                    <button
+                        type="button"
+                        className={`${button} !gap-1.5 !px-3 whitespace-nowrap`}
+                        onClick={() => onOpen({ kind: 'prospect' })}
+                    >
+                        <Plus className="size-4" /> Registrar prospecto
+                    </button>
+                </>
+            )}
         </div>
     );
 }
@@ -582,28 +1094,23 @@ export default function Crm(props: Props) {
         by_owner,
         rows,
         offices,
-        alerts,
-        renewals,
-        interactions,
         stages,
         canManage,
     } = props;
-    const [search, setSearch] = useState('');
     const [office, setOffice] = useState('');
     const [status, setStatus] = useState('');
-    const visible = useMemo(() => {
-        const term = normalize(search.trim());
-
-        return rows.filter(
-            (row) =>
-                (term === '' ||
-                    normalize(
-                        `${row.name} ${row.location ?? ''} ${row.owner ?? ''}`,
-                    ).includes(term)) &&
-                (office === '' || row.office === office) &&
-                (status === '' || row.status === status),
-        );
-    }, [rows, search, office, status]);
+    const [dialog, setDialog] = useState<CrmDialog>(null);
+    const predicate = useMemo(
+        () => (row: Row) =>
+            (office === '' || row.office === office) &&
+            (status === '' || row.status === status),
+        [office, status],
+    );
+    const table = useTableControls(rows, {
+        searchText: (row: Row) =>
+            `${row.name} ${row.location ?? ''} ${row.owner ?? ''} ${row.services ?? ''}`,
+        predicate,
+    });
     const maxOwner = Math.max(1, ...by_owner.map((owner) => owner.value));
 
     return (
@@ -611,19 +1118,26 @@ export default function Crm(props: Props) {
             <Head title="Clientes (CRM)" />
             <main className="min-h-full flex-1 bg-[#faf8f7] p-4 text-[#152033] sm:p-6">
                 <div className="mx-auto max-w-[1600px] space-y-4">
-                    <header className="flex items-center gap-3">
-                        <span className="grid size-12 place-items-center rounded-xl bg-[#f6e6e4] text-[#8a0b0b]">
-                            <Users className="size-7" />
-                        </span>
-                        <div>
-                            <h1 className="text-3xl font-black tracking-tight">
-                                Clientes (CRM)
-                            </h1>
-                            <p className="text-sm text-slate-600">
-                                Relaciones comerciales y seguimiento del ciclo
-                                de vida de cada cliente.
-                            </p>
+                    <header className="flex flex-col gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="grid size-12 place-items-center rounded-xl bg-[#f6e6e4] text-[#8a0b0b]">
+                                <Users className="size-7" />
+                            </span>
+                            <div>
+                                <h1 className="text-3xl font-black tracking-tight">
+                                    Clientes (CRM)
+                                </h1>
+                                <p className="text-sm text-slate-600">
+                                    Relaciones comerciales y seguimiento del
+                                    ciclo de vida de cada cliente.
+                                </p>
+                            </div>
                         </div>
+                        <ManageButtons
+                            onOpen={setDialog}
+                            hasProspects={props.prospect_options.length > 0}
+                            canManage={canManage}
+                        />
                     </header>
 
                     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
@@ -720,317 +1234,238 @@ export default function Crm(props: Props) {
                         </div>
                     </section>
 
-                    <section className={`${card} overflow-x-auto`}>
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <section className={`${card} overflow-hidden !p-0`}>
+                        <div className="p-5 pb-3">
                             <h2 className="text-lg font-black">
-                                Empresas cliente ({visible.length})
+                                Empresas cliente ({table.count}
+                                {table.count !== table.total
+                                    ? ` de ${table.total}`
+                                    : ''}
+                                )
                             </h2>
-                            <div className="flex flex-wrap gap-2">
-                                <label className="relative">
-                                    <Search className="absolute top-3 left-3 size-4 text-slate-400" />
-                                    <input
-                                        className={`${field} w-60 pl-9`}
-                                        placeholder="Buscar empresa o contacto..."
-                                        value={search}
-                                        onChange={(e) =>
-                                            setSearch(e.target.value)
-                                        }
-                                    />
-                                </label>
-                                <select
-                                    className={`${field} w-auto`}
-                                    value={office}
-                                    onChange={(e) => setOffice(e.target.value)}
-                                >
-                                    <option value="">Todas las oficinas</option>
-                                    {offices.map((name) => (
-                                        <option key={name}>{name}</option>
-                                    ))}
-                                </select>
-                                <select
-                                    className={`${field} w-auto`}
-                                    value={status}
-                                    onChange={(e) => setStatus(e.target.value)}
-                                >
-                                    <option value="">Todos los estados</option>
-                                    {Object.entries(STATUS).map(
-                                        ([key, value]) => (
-                                            <option key={key} value={key}>
-                                                {value.label}
-                                            </option>
-                                        ),
-                                    )}
-                                </select>
-                            </div>
                         </div>
-                        <table className="w-full min-w-[860px] text-sm">
-                            <thead>
-                                <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                                    <th className="px-3 py-2">Empresa</th>
-                                    <th className="px-3 py-2">Responsable</th>
-                                    <th className="px-3 py-2">Estado</th>
-                                    <th className="px-3 py-2">
-                                        Servicio contratado
-                                    </th>
-                                    <th className="px-3 py-2">Cuota mensual</th>
-                                    <th className="px-3 py-2">Vencimiento</th>
-                                    <th className="px-3 py-2">Riesgo</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {visible.map((row) => (
-                                    <tr key={`${row.kind}-${row.id}`}>
-                                        <td className="px-3 py-3">
-                                            <p className="font-black">
-                                                {row.name}
-                                            </p>
-                                            <p className="text-xs text-slate-500">
-                                                {row.kind === 'client'
-                                                    ? row.location
-                                                    : row.stage
-                                                      ? stages[row.stage]
-                                                      : ''}
-                                            </p>
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            {row.owner ?? (
-                                                <span className="text-slate-400">
-                                                    Sin asignar
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            <span
-                                                className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS[row.status].style}`}
-                                            >
-                                                {STATUS[row.status].label}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            {row.services ??
-                                                (row.kind === 'prospect'
-                                                    ? 'Propuesta en revisión'
-                                                    : '—')}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            {row.fee_cents > 0
-                                                ? money(row.fee_cents)
-                                                : '—'}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            {formatDate(row.renews_on)}
-                                        </td>
-                                        <td className="px-3 py-3">
-                                            {row.risk ? (
-                                                <span
-                                                    className={`rounded-md px-2.5 py-1 text-xs font-bold ${RISK[row.risk].style}`}
-                                                >
-                                                    {RISK[row.risk].label}
-                                                </span>
-                                            ) : (
-                                                '—'
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {visible.length === 0 && (
-                                    <tr>
-                                        <td
-                                            colSpan={7}
-                                            className="px-3 py-10 text-center text-slate-500"
-                                        >
-                                            No hay clientes con esos criterios.
-                                        </td>
-                                    </tr>
+                        <TableToolbar
+                            search={table.search}
+                            onSearch={table.setSearch}
+                            placeholder="Buscar empresa o contacto…"
+                            pageSize={table.pageSize}
+                            onPageSize={table.setPageSize}
+                        >
+                            <TableFilterSelect
+                                label="Todas las oficinas"
+                                value={office}
+                                onChange={setOffice}
+                                options={offices.map((name) => ({
+                                    value: name,
+                                    label: name,
+                                }))}
+                            />
+                            <TableFilterSelect
+                                label="Todos los estados"
+                                value={status}
+                                onChange={setStatus}
+                                options={Object.entries(STATUS).map(
+                                    ([key, value]) => ({
+                                        value: key,
+                                        label: value.label,
+                                    }),
                                 )}
-                            </tbody>
-                        </table>
-                    </section>
-
-                    <section className="grid gap-4 xl:grid-cols-3">
-                        <div className={card}>
-                            <h2 className="mb-3 flex items-center gap-2 font-black">
-                                <AlertTriangle className="size-5 text-red-500" />{' '}
-                                Alertas y pendientes{' '}
-                                <span className="rounded-full bg-red-50 px-2 text-xs text-red-600">
-                                    {alerts.length}
-                                </span>
-                            </h2>
-                            <ul className="space-y-2.5">
-                                {alerts.map((alert) => (
-                                    <li
-                                        key={alert.title}
-                                        className="flex items-center gap-3 rounded-xl border border-slate-100 p-3"
-                                    >
-                                        <span
-                                            className={`grid size-9 shrink-0 place-items-center rounded-lg ${alert.tone === 'red' ? 'bg-red-50 text-red-600' : alert.tone === 'amber' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}
-                                        >
-                                            <AlertTriangle className="size-5" />
-                                        </span>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-sm font-black">
-                                                {alert.title}
-                                            </p>
-                                            <p className="text-xs text-slate-500">
-                                                {alert.detail}
-                                            </p>
-                                        </div>
-                                        <b className="rounded-full bg-slate-50 px-2.5 py-1 text-sm">
-                                            {alert.count}
-                                        </b>
-                                    </li>
-                                ))}
-                                {alerts.length === 0 && (
-                                    <li className="text-sm text-slate-500">
-                                        Sin alertas comerciales.
-                                    </li>
-                                )}
-                            </ul>
-                        </div>
-                        <div className={card}>
-                            <h2 className="mb-3 flex items-center gap-2 font-black">
-                                <CalendarClock className="size-5 text-[#8a0b0b]" />{' '}
-                                Próximas renovaciones
-                            </h2>
-                            <table className="w-full text-sm">
+                            />
+                        </TableToolbar>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[960px] text-sm">
                                 <thead>
-                                    <tr className="text-left text-xs text-slate-500">
-                                        <th className="py-1">Empresa</th>
-                                        <th>Servicio</th>
-                                        <th>Vence</th>
+                                    <tr className="bg-slate-50 text-left text-xs text-slate-600">
+                                        <th className="px-3 py-2">Empresa</th>
+                                        <th className="px-3 py-2">
+                                            Responsable
+                                        </th>
+                                        <th className="px-3 py-2">Estado</th>
+                                        <th className="px-3 py-2">
+                                            Servicio contratado
+                                        </th>
+                                        <th className="px-3 py-2">
+                                            Cuota mensual
+                                        </th>
+                                        <th className="px-3 py-2">
+                                            Vencimiento
+                                        </th>
+                                        <th className="px-3 py-2">Riesgo</th>
+                                        <th className="px-3 py-2">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {renewals.map((item) => (
-                                        <tr
-                                            key={`${item.company}-${item.renews_on}`}
-                                        >
-                                            <td className="py-2 font-bold">
-                                                {item.company}
+                                    {table.pageRows.map((row) => (
+                                        <tr key={`${row.kind}-${row.id}`}>
+                                            <td className="px-3 py-3">
+                                                <p className="font-black">
+                                                    {row.name}
+                                                </p>
+                                                <p className="text-xs text-slate-500">
+                                                    {row.kind === 'client'
+                                                        ? row.location
+                                                        : row.stage
+                                                          ? stages[row.stage]
+                                                          : ''}
+                                                </p>
                                             </td>
-                                            <td className="text-slate-600">
-                                                {item.services}
+                                            <td className="px-3 py-3">
+                                                {row.owner ?? (
+                                                    <span className="text-slate-400">
+                                                        Sin asignar
+                                                    </span>
+                                                )}
                                             </td>
-                                            <td className="font-bold text-[#8a0b0b]">
-                                                {formatDate(item.renews_on)}
+                                            <td className="px-3 py-3">
+                                                <span
+                                                    className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS[row.status].style}`}
+                                                >
+                                                    {STATUS[row.status].label}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                {row.services ??
+                                                    (row.kind === 'prospect'
+                                                        ? 'Propuesta en revisión'
+                                                        : '—')}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                {row.fee_cents > 0
+                                                    ? money(row.fee_cents)
+                                                    : '—'}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                {formatDate(row.renews_on)}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                {row.risk ? (
+                                                    <span
+                                                        className={`rounded-md px-2.5 py-1 text-xs font-bold ${RISK[row.risk].style}`}
+                                                    >
+                                                        {RISK[row.risk].label}
+                                                    </span>
+                                                ) : (
+                                                    '—'
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        className={iconButton}
+                                                        title="Ver detalle"
+                                                        aria-label={`Ver ${row.name}`}
+                                                        onClick={() =>
+                                                            setDialog({
+                                                                kind: 'detail',
+                                                                row,
+                                                            })
+                                                        }
+                                                    >
+                                                        <Eye className="size-4" />
+                                                    </button>
+                                                    {canManage && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className={
+                                                                    iconButton
+                                                                }
+                                                                title={
+                                                                    row.kind ===
+                                                                    'client'
+                                                                        ? 'Editar contrato'
+                                                                        : 'Mover en el pipeline'
+                                                                }
+                                                                aria-label={`Editar ${row.name}`}
+                                                                onClick={() =>
+                                                                    setDialog(
+                                                                        row.kind ===
+                                                                            'client'
+                                                                            ? {
+                                                                                  kind: 'contract',
+                                                                                  companyId:
+                                                                                      String(
+                                                                                          row.id,
+                                                                                      ),
+                                                                              }
+                                                                            : {
+                                                                                  kind: 'pipeline',
+                                                                              },
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Pencil className="size-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className={
+                                                                    iconButton
+                                                                }
+                                                                title="Registrar interacción"
+                                                                aria-label={`Registrar interacción con ${row.name}`}
+                                                                onClick={() =>
+                                                                    setDialog({
+                                                                        kind: 'interaction',
+                                                                        companyId:
+                                                                            row.kind ===
+                                                                            'client'
+                                                                                ? String(
+                                                                                      row.id,
+                                                                                  )
+                                                                                : undefined,
+                                                                        prospectId:
+                                                                            row.kind ===
+                                                                            'prospect'
+                                                                                ? String(
+                                                                                      row.id,
+                                                                                  )
+                                                                                : undefined,
+                                                                    })
+                                                                }
+                                                            >
+                                                                <MessageSquarePlus className="size-4" />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
-                                    {renewals.length === 0 && (
+                                    {table.pageRows.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={3}
-                                                className="py-6 text-center text-slate-500"
+                                                colSpan={8}
+                                                className="px-3 py-10 text-center text-slate-500"
                                             >
-                                                Sin renovaciones próximas.
+                                                No hay clientes con esos
+                                                criterios.
                                             </td>
                                         </tr>
                                     )}
                                 </tbody>
                             </table>
                         </div>
-                        <div className={card}>
-                            <h2 className="mb-3 font-black">
-                                Interacciones recientes
-                            </h2>
-                            <ul className="space-y-3">
-                                {interactions.map((item, index) => (
-                                    <li
-                                        key={index}
-                                        className="flex items-start gap-3 text-sm"
-                                    >
-                                        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-[#f6e6e4] text-xs font-black text-[#8a0b0b]">
-                                            {item.user.charAt(0)}
-                                        </span>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-black">
-                                                {item.user}
-                                                {item.about
-                                                    ? ` · ${item.about}`
-                                                    : ''}
-                                            </p>
-                                            <p className="text-xs text-slate-600">
-                                                {KIND[
-                                                    item.kind as keyof typeof KIND
-                                                ] ?? 'Nota'}
-                                                : {item.summary}
-                                            </p>
-                                        </div>
-                                        <span className="shrink-0 text-xs text-slate-400">
-                                            {formatDate(item.at)}
-                                        </span>
-                                    </li>
-                                ))}
-                                {interactions.length === 0 && (
-                                    <li className="text-sm text-slate-500">
-                                        Aún no hay interacciones registradas.
-                                    </li>
-                                )}
-                            </ul>
-                        </div>
+                        <TablePagination
+                            page={table.page}
+                            pages={table.pages}
+                            pageSize={table.pageSize}
+                            count={table.count}
+                            onPage={table.setPage}
+                            noun="empresas"
+                        />
                     </section>
 
-                    {canManage && (
-                        <section>
-                            <h2 className="mb-3 text-lg font-black">
-                                Gestión comercial
-                            </h2>
-                            <ManagePanel
-                                companies={props.companies}
-                                staff={props.staff}
-                                prospectOptions={props.prospect_options}
-                            />
-                            {props.prospect_options.length > 0 && (
-                                <div className={`${card} mt-4`}>
-                                    <h3 className="mb-3 font-black">
-                                        Mover prospectos en el pipeline
-                                    </h3>
-                                    <ul className="divide-y divide-slate-100 text-sm">
-                                        {props.prospect_options.map((item) => (
-                                            <li
-                                                key={item.id}
-                                                className="flex items-center justify-between gap-3 py-2"
-                                            >
-                                                <span className="font-bold">
-                                                    {item.name}
-                                                </span>
-                                                <select
-                                                    className="rounded-lg border border-[#e4dbd6] px-2 py-1 text-xs"
-                                                    value={item.stage}
-                                                    onChange={(e) =>
-                                                        router.patch(
-                                                            `/office/crm/prospects/${item.id}`,
-                                                            {
-                                                                stage: e.target
-                                                                    .value,
-                                                            },
-                                                            {
-                                                                preserveScroll: true,
-                                                            },
-                                                        )
-                                                    }
-                                                >
-                                                    {Object.entries(stages).map(
-                                                        ([key, label]) => (
-                                                            <option
-                                                                key={key}
-                                                                value={key}
-                                                            >
-                                                                {label}
-                                                            </option>
-                                                        ),
-                                                    )}
-                                                    <option value="lost">
-                                                        Perdido
-                                                    </option>
-                                                </select>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </section>
-                    )}
+                    <CrmDialogs
+                        dialog={dialog}
+                        onClose={() => setDialog(null)}
+                        companies={props.companies}
+                        staff={props.staff}
+                        prospect_options={props.prospect_options}
+                        stages={stages}
+                        renewals={props.renewals}
+                        interactions={props.interactions}
+                    />
                 </div>
             </main>
         </>

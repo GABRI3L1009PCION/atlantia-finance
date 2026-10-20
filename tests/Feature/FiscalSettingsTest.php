@@ -29,7 +29,15 @@ test('owner manages tenant scoped Guatemala fiscal settings with immutable vigen
             ->has('taxes', 5)
             ->where('taxes.0.code', 'IVA_GENERAL')
             ->where('taxes.0.current.rate_basis_points', 1200)
-            ->where('canManage', true));
+            ->where('canManage', true)
+            ->where('overview.fel.configured', false)
+            ->where('overview.obligation', null)
+            ->has('overview.integrity.missing'));
+
+    DB::table('company_fel_settings')->insert(['company_id' => $fixture['companyId'], 'legal_name' => 'Emisor', 'nit' => '1234567', 'address' => 'Ciudad',
+        'provider' => 'sat_manual', 'certifier' => 'sat_manual', 'environment' => 'test', 'updated_by' => $fixture['owner']->id, 'created_at' => now(), 'updated_at' => now()]);
+    $this->get(route('accounting.fiscalSettings', $fixture['uuid']))
+        ->assertInertia(fn (Assert $page) => $page->where('overview.fel.mode', 'sat_manual')->where('overview.fel.configured', true));
 
     $this->patch(route('accounting.fiscalSettingsUpdate', $fixture['uuid']), [
         'country_code' => 'GT',

@@ -223,6 +223,114 @@ export function Shell({ children }: { children: ReactNode }) {
     );
 }
 
+/**
+ * Centered confirmation modal that replaces the browser's confirm/prompt boxes. With `noteLabel` it also asks for a
+ * written reason (required when `noteRequired`), which is handed to `onConfirm`.
+ */
+export function ConfirmDialog({
+    open,
+    title,
+    description,
+    confirmLabel,
+    tone = 'primary',
+    icon,
+    noteLabel,
+    noteRequired = false,
+    processing = false,
+    onConfirm,
+    onClose,
+    children,
+}: {
+    open: boolean;
+    title: string;
+    description: ReactNode;
+    confirmLabel: string;
+    tone?: 'primary' | 'danger';
+    icon?: ReactNode;
+    noteLabel?: string;
+    noteRequired?: boolean;
+    processing?: boolean;
+    onConfirm: (note: string) => void;
+    onClose: () => void;
+    children?: ReactNode;
+}) {
+    const [note, setNote] = useState('');
+    const blocked =
+        processing ||
+        (noteLabel !== undefined && noteRequired && note.trim().length < 3);
+
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(value) => {
+                if (!value) {
+                    setNote('');
+                    onClose();
+                }
+            }}
+        >
+            <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-md">
+                <div
+                    className={`h-1.5 ${tone === 'danger' ? 'bg-red-600' : 'bg-[#640000]'}`}
+                />
+                <div className="px-6 pt-3 pb-6">
+                    <div
+                        className={`mx-auto mb-4 grid size-14 place-items-center rounded-full ${tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-[#f6e4e4] text-[#640000]'}`}
+                    >
+                        {icon}
+                    </div>
+                    <DialogHeader className="text-center sm:text-center">
+                        <DialogTitle className="text-xl text-slate-950">
+                            {title}
+                        </DialogTitle>
+                        <DialogDescription className="mt-1.5 text-sm leading-6 text-slate-600">
+                            {description}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {children}
+                    {noteLabel !== undefined && (
+                        <label className="mt-4 block text-xs font-bold tracking-wide text-slate-600 uppercase">
+                            {noteLabel}
+                            <textarea
+                                value={note}
+                                onChange={(event) =>
+                                    setNote(event.target.value)
+                                }
+                                maxLength={500}
+                                rows={3}
+                                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal tracking-normal text-slate-900 normal-case outline-none focus:border-[#8a5b32] focus:ring-2 focus:ring-[#b8893f]/15"
+                            />
+                        </label>
+                    )}
+                    <DialogFooter className="mt-5 gap-2 sm:justify-center">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setNote('');
+                                onClose();
+                            }}
+                            className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="button"
+                            disabled={blocked}
+                            onClick={() => {
+                                onConfirm(note.trim());
+                                setNote('');
+                            }}
+                            className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-5 text-sm font-bold text-white transition disabled:opacity-50 ${tone === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-[#640000] hover:bg-[#7a0a0a]'}`}
+                        >
+                            {confirmLabel}
+                        </button>
+                    </DialogFooter>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export type AssignTarget = {
     company_id: number;
     company_name: string;
@@ -479,16 +587,28 @@ export function InviteDialog({
 
     return (
         <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
-            <DialogContent className="sm:max-w-xl">
+            <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Invitar usuario</DialogTitle>
-                    <DialogDescription>
-                        Recibirá un correo con un enlace seguro. Al aceptarlo
-                        quedará en la oficina con el rol y las empresas que
-                        elijas.
-                    </DialogDescription>
+                    <div className="flex items-center gap-3">
+                        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#f5e7e7] text-[#640000]">
+                            <UserPlus className="size-5" />
+                        </span>
+                        <div>
+                            <DialogTitle className="text-xl font-black">
+                                Nuevo colaborador
+                            </DialogTitle>
+                            <DialogDescription className="mt-0.5">
+                                Recibirá un correo con un enlace seguro. Al
+                                aceptarlo quedará en la oficina con el rol y las
+                                empresas que elijas.
+                            </DialogDescription>
+                        </div>
+                    </div>
                 </DialogHeader>
-                <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+                <form
+                    onSubmit={submit}
+                    className="grid gap-4 text-slate-700 sm:grid-cols-2 [&_input]:text-[#142135] [&_input]:normal-case [&_label]:text-xs [&_label]:font-bold [&_label]:tracking-wide [&_label]:text-slate-600 [&_label]:uppercase [&_select]:text-[#142135] [&_select]:normal-case"
+                >
                     <label className="text-sm font-semibold">
                         Nombre
                         <input
@@ -582,11 +702,16 @@ export function InviteDialog({
                             ))}
                         </select>
                     </label>
-                    <div className="sm:col-span-2">
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold">
-                                Empresas que tendrá asignadas (opcional)
-                            </p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:col-span-2">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-black text-[#142135]">
+                                    Empresas asignadas
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                    Opcional. Puedes asignarlas después.
+                                </p>
+                            </div>
                             <button
                                 type="button"
                                 className={secondaryButton}
@@ -695,7 +820,7 @@ export function InviteDialog({
                             ))}
                         </div>
                     </div>
-                    <DialogFooter className="sm:col-span-2">
+                    <DialogFooter className="border-t border-slate-100 pt-4 sm:col-span-2">
                         <button
                             type="button"
                             className={secondaryButton}

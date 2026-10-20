@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Organization;
+use App\Services\ClientPortal\ClientAccountService;
 use App\Services\WorkManagement\FirmRevenueService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkspaceContext;
@@ -17,6 +18,7 @@ class RevenueController extends Controller
         private WorkspaceContext $context,
         private WorkAuthorizationService $authorization,
         private FirmRevenueService $revenue,
+        private ClientAccountService $account,
     ) {}
 
     /** GET office/revenue: the firm's own income and collections. Whoever holds crm.manage also gets the forms. */
@@ -30,7 +32,17 @@ class RevenueController extends Controller
         return Inertia::render('work/revenue', [
             ...$this->revenue->overview($organization, $request->user(), $filters['month'] ?? null),
             'canManage' => $this->authorization->can($organization, $request->user(), 'crm.manage'),
+            'notices' => $this->account->pendingForOffice($organization->id),
         ]);
+    }
+
+    public function reviewNotice(Request $request, int $notice, string $action): RedirectResponse
+    {
+        $organization = $this->manage($request);
+        $data = $request->validate(['note' => [$action === 'reject' ? 'required' : 'nullable', 'string', 'max:500']]);
+        $this->account->review($organization, $request->user(), $notice, $action, $data['note'] ?? null);
+
+        return back()->with('workspace_notice', $action === 'confirm' ? 'Pago confirmado.' : 'Pago no confirmado; el cliente verá tu motivo.');
     }
 
     public function generate(Request $request): RedirectResponse

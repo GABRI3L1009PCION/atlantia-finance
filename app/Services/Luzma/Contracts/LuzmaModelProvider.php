@@ -13,9 +13,12 @@ use App\Services\Luzma\LuzmaUnavailableException;
 interface LuzmaModelProvider
 {
     /**
-     * @return array{available: bool, gateway: bool, model: string|null, model_loaded: bool, latency_ms: int|null, detail: string|null}
+     * @return array{available: bool, gateway: bool, model: string|null, model_loaded: bool, model_resident: bool, latency_ms: int|null, detail: string|null, provider?: string}
      */
     public function health(): array;
+
+    /** Loads the model into memory and keeps it there, so the next question needs no cold start. */
+    public function warmup(): bool;
 
     /**
      * Structured intent: which authorized tool answers the question. Returns null when the model cannot decide.
