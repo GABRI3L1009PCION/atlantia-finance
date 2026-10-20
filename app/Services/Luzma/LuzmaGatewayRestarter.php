@@ -74,8 +74,17 @@ class LuzmaGatewayRestarter
 
     protected function detach(string $command): void
     {
-        $detached = PHP_OS_FAMILY === 'Windows' ? 'start "" /B '.$command : $command.' > /dev/null 2>&1 &';
-        $process = Process::fromShellCommandline($detached)->setTimeout(15);
+        if (PHP_OS_FAMILY === 'Windows') {
+            // Its own console, so the script outlives this request instead of being stopped with the process object.
+            $process = Process::fromShellCommandline($command);
+            $process->setOptions(['create_new_console' => true]);
+            $process->disableOutput();
+            $process->start();
+
+            return;
+        }
+
+        $process = Process::fromShellCommandline($command.' > /dev/null 2>&1 &')->setTimeout(15);
         $process->disableOutput();
         $process->run();
     }
