@@ -20,7 +20,7 @@ import {
 import * as fel from '@/routes/accounting/fel';
 import { FelInvoiceForm } from './create';
 import { FelIssuerForm } from './settings';
-import { labels, TestNotice } from './types';
+import { labels, statusLabel, TestNotice } from './types';
 import type { Customer, Document } from './types';
 
 export default function FelIndex({
@@ -48,7 +48,7 @@ export default function FelIndex({
     customers: Customer[];
     canWrite: boolean;
     canManage: boolean;
-    notice: string;
+    notice: string | null;
     issuer: {
         name: string;
         nit: string;
@@ -295,7 +295,7 @@ export default function FelIndex({
                                         {money(doc.total_cents)}
                                     </td>
                                     <td className="p-3">
-                                        {labels[doc.status]}
+                                        {statusLabel(doc.status, doc.provider)}
                                     </td>
                                     <td className="p-3">
                                         <Link
@@ -317,7 +317,7 @@ export default function FelIndex({
                                         className="p-10 text-center text-slate-500"
                                     >
                                         No hay documentos para estos filtros.
-                                        Crea tu primera factura de prueba.
+                                        Crea tu primera factura.
                                     </td>
                                 </tr>
                             )}
@@ -353,7 +353,7 @@ export default function FelIndex({
                     <DialogTitle>Nueva factura</DialogTitle>
                     <DialogDescription>
                         Completa los datos del receptor, líneas e impuestos
-                        antes de emitir la factura de prueba.
+                        antes de emitirla.
                     </DialogDescription>
                     <TestNotice notice={notice} compact />
                     <FelInvoiceForm
@@ -362,6 +362,7 @@ export default function FelIndex({
                         document={null}
                         today={today}
                         notice={notice}
+                        satManual={issuer.provider === 'sat_manual'}
                     />
                 </DialogContent>
             </Dialog>

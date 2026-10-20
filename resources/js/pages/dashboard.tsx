@@ -845,7 +845,7 @@ export default function Dashboard({
                                                         {workspace.invitations
                                                             .length
                                                             ? 'No hay cupos disponibles. Puedes revocar una invitación pendiente para liberar su cupo.'
-                                                            : 'Todos los cupos del plan están ocupados por miembros activos.'}
+                                                            : 'Todos los cupos del plan están ocupados por colaboradores activos.'}
                                                     </p>
                                                 )}
                                                 {invitation.errors.email && (

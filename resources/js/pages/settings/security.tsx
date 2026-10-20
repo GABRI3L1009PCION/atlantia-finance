@@ -15,6 +15,7 @@ import { edit } from '@/routes/security';
 
 type Props = {
     passwordRules: string;
+    twoFactorRequired?: boolean;
 } & ManagePasskeysProps &
     ManageTwoFactorProps;
 
@@ -54,6 +55,20 @@ export default function Security(props: Props) {
                         </p>
                     </div>
                 ))}
+
+            {props.twoFactorRequired && !props.twoFactorEnabled && (
+                <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                    <p className="font-semibold">
+                        Activa la verificación en dos pasos para continuar.
+                    </p>
+                    <p className="mt-1">
+                        Baja a «Autenticación de dos factores» y pulsa «Activar
+                        2FA». Escanea el código QR con Google Authenticator (o
+                        Microsoft Authenticator o Authy) y escribe el código de
+                        6 dígitos para confirmar.
+                    </p>
+                </div>
+            )}
 
             <SettingsCard
                 icon={Lock}

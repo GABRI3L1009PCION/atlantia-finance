@@ -34,10 +34,24 @@ class NormativeLibraryController extends Controller
         $organization = $this->workspace->organization($request->user());
         $path = is_string($request->query('path')) ? $request->query('path') : null;
         $search = is_string($request->query('q')) ? $request->query('q') : null;
-        $data = $this->library->read($organization->id, $code, $path, $search);
+        // The reader paginates the whole document in the browser; the path or search only decides where it opens.
+        $data = $this->library->read($organization->id, $code, null, null, 5000);
         abort_if($data === null, 404);
 
-        return Inertia::render('library/show', [...$data, 'path' => $path, 'query' => $search]);
+        $start = null;
+        if ($path !== null && $path !== '') {
+            foreach ($data['sections'] as $section) {
+                if (str_starts_with((string) $section['path'], $path)) {
+                    $start = (string) $section['key'];
+
+                    break;
+                }
+            }
+        } elseif ($search !== null && trim($search) !== '') {
+            $start = $this->library->read($organization->id, $code, null, $search, 1)['sections'][0]['key'] ?? null;
+        }
+
+        return Inertia::render('library/show', [...$data, 'path' => $path, 'query' => $search, 'start' => $start]);
     }
 
     public function search(Request $request): JsonResponse

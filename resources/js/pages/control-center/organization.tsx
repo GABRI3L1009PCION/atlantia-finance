@@ -184,11 +184,12 @@ function UsageList({ usage }: { usage: Usage[] }) {
             {usage.map((row) => (
                 <li
                     key={row.metric}
-                    className="grid grid-cols-[160px_1fr_160px_110px] items-center gap-3 text-xs"
+                    className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 text-xs"
                 >
-                    <span className="text-slate-300">{row.label}</span>
-                    <Progress percent={row.percent} />
-                    <span className="text-right text-slate-400">
+                    <span className="min-w-0 truncate text-slate-300">
+                        {row.label}
+                    </span>
+                    <span className="text-right whitespace-nowrap text-slate-400">
                         {row.metric === 'storage_bytes'
                             ? bytes(row.value)
                             : row.value}{' '}
@@ -199,17 +200,22 @@ function UsageList({ usage }: { usage: Usage[] }) {
                               ? bytes(row.limit)
                               : row.limit}
                     </span>
-                    <Pill tone={statusTone[row.status]}>
-                        {{
-                            ok: 'Normal',
-                            warning: 'Advertencia',
-                            high: 'Alto',
-                            at_limit: 'En el límite',
-                            over_limit: 'OVER_LIMIT',
-                            unlimited: 'Ilimitado',
-                            not_included: 'No incluido',
-                        }[row.status] ?? row.status}
-                    </Pill>
+                    <span className="justify-self-end">
+                        <Pill tone={statusTone[row.status]}>
+                            {{
+                                ok: 'Normal',
+                                warning: 'Advertencia',
+                                high: 'Alto',
+                                at_limit: 'En el límite',
+                                over_limit: 'Excedido',
+                                unlimited: 'Ilimitado',
+                                not_included: 'No incluido',
+                            }[row.status] ?? row.status}
+                        </Pill>
+                    </span>
+                    <div className="col-span-3">
+                        <Progress percent={row.percent} />
+                    </div>
                 </li>
             ))}
         </ul>

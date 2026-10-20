@@ -47,7 +47,7 @@ class AccountingDashboardService
         $pending = $this->pendingAccounting($companyId, $period);
         $unsupported = $this->unsupportedEntries($periodIds);
         $reconciliations = $this->reconciliations($companyId, $periodIds);
-        $checklist = $this->checklist($pending, $unsupported, $reconciliations);
+        $checklist = $this->checklist($pending, $unsupported, $reconciliations, $companyId, $period);
         $blocking = collect($checklist)->where('status', 'blocking')->count();
         $warnings = collect($checklist)->where('status', 'warning')->count();
         $totalChecks = max(1, count($checklist));
@@ -246,21 +246,26 @@ class AccountingDashboardService
      * @param  list<Reconciliation>  $reconciliations
      * @return list<ChecklistItem>
      */
-    private function checklist(array $pending, int $unsupported, array $reconciliations): array
+    private function checklist(array $pending, int $unsupported, array $reconciliations, int $companyId, stdClass $period): array
     {
+        $facts = app(PeriodLedgerFacts::class);
+        $cost = $facts->costOfSales($companyId, (int) $period->id, (string) $period->ends_on);
+        $depreciation = $facts->depreciation($companyId, (int) $period->id, (string) $period->ends_on);
+        $posted = $facts->postedEntries((int) $period->id);
         $bank = collect($reconciliations)->firstWhere('label', 'Bancos');
         $ar = collect($reconciliations)->firstWhere('label', 'CxC');
         $ap = collect($reconciliations)->firstWhere('label', 'CxP');
 
         return [
+            ['label' => 'Movimientos registrados', 'status' => $posted > 0 ? 'ok' : 'warning', 'detail' => $posted > 0 ? $posted.' asiento(s) contabilizado(s)' : 'Sin asientos contabilizados en el período'],
             ['label' => 'Ventas contabilizadas', 'status' => collect($pending)->where('origin', 'Ventas')->isEmpty() ? 'ok' : 'warning', 'detail' => collect($pending)->where('origin', 'Ventas')->count().' venta(s) pendientes'],
             ['label' => 'Compras contabilizadas', 'status' => collect($pending)->where('origin', 'Compras')->isEmpty() ? 'ok' : 'warning', 'detail' => collect($pending)->where('origin', 'Compras')->count().' compra(s) pendientes'],
             ['label' => 'Bancos conciliados', 'status' => ($bank['difference_cents'] ?? 0) === 0 ? 'ok' : 'warning', 'detail' => 'Diferencia '.($bank['difference_cents'] ?? 0)],
             ['label' => 'CxC conciliada', 'status' => ($ar['difference_cents'] ?? 0) === 0 ? 'ok' : 'warning', 'detail' => 'Diferencia '.($ar['difference_cents'] ?? 0)],
             ['label' => 'CxP conciliada', 'status' => ($ap['difference_cents'] ?? 0) === 0 ? 'ok' : 'warning', 'detail' => 'Diferencia '.($ap['difference_cents'] ?? 0)],
             ['label' => 'Documentos soporte', 'status' => $unsupported === 0 ? 'ok' : 'blocking', 'detail' => $unsupported.' asiento(s) sin soporte'],
-            ['label' => 'Inventario revisado', 'status' => 'warning', 'detail' => 'No fue posible verificar con auxiliar operativo'],
-            ['label' => 'Depreciación procesada', 'status' => 'warning', 'detail' => 'No fue posible verificar depreciación del período'],
+            ['label' => 'Costo de ventas e inventario', 'status' => $cost['missing'] ? 'blocking' : 'ok', 'detail' => $cost['missing'] ? 'Hay ventas e inventarios sin costo de ventas registrado' : ($cost['applies'] ? 'Costo de ventas registrado' : 'La empresa no maneja inventarios')],
+            ['label' => 'Depreciación procesada', 'status' => $depreciation['depreciable'] && ! $depreciation['charged'] ? 'warning' : 'ok', 'detail' => $depreciation['depreciable'] ? ($depreciation['charged'] ? 'Depreciación del período registrada' : 'Hay activos depreciables sin depreciación del período') : 'La empresa no tiene activos por depreciar'],
         ];
     }
 

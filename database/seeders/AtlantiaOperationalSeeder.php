@@ -12,8 +12,12 @@ use Ramsey\Uuid\Uuid;
 
 class AtlantiaOperationalSeeder extends Seeder
 {
+    use RefusesProduction;
+
     public function run(): void
     {
+        $this->refuseInProduction();
+
         $company = DB::table('companies')->where('tax_id', '97655988')->first();
         $user = DB::table('users')->where('email', 'demo@atlantia.test')->first();
         if (! $company || ! $user) {

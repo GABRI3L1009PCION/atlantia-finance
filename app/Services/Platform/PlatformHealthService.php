@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Platform;
 
 use App\Services\Luzma\Contracts\LuzmaModelProvider;
+use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -53,7 +54,7 @@ class PlatformHealthService
             try {
                 [$status, $detail, $data] = $this->check($service);
             } catch (Throwable $exception) {
-                [$status, $detail, $data] = ['down', mb_strimwidth(SystemLogService::sanitize($exception->getMessage()), 0, 480, '…'), null];
+                [$status, $detail, $data] = ['down', mb_strimwidth(PlatformLogReader::sanitize($exception->getMessage()), 0, 480, '…'), null];
             }
             $latency = (int) round((microtime(true) - $started) * 1000);
             $results[] = ['service' => $service, 'status' => $status, 'latency_ms' => $latency, 'detail' => $detail];
@@ -218,8 +219,8 @@ class PlatformHealthService
     /** @return array{0: string, 1: string|null, 2: array<string, mixed>|null} */
     private function luzma(string $service): array
     {
-        if (! (bool) config('luzma.enabled')) {
-            return ['maintenance', 'Luzma está deshabilitada en la configuración.', null];
+        if (! app(LuzmaSwitch::class)->enabled()) {
+            return ['maintenance', 'Luzma fue apagada por el administrador del SaaS.', null];
         }
         $health = $this->luzma->health();
         if ($service === 'luzma_gateway') {
@@ -252,6 +253,11 @@ class PlatformHealthService
         $stuck = DB::table('fel_documents')->where('status', 'processing')->where('processing_at', '<', now()->subMinutes(30))->count();
         if ($provider === 'mock') {
             return ['degraded', 'Proveedor FEL de prueba (mock): no certifica ante SAT.', ['provider' => $provider]];
+        }
+        if ($provider === 'sat_manual') {
+            $waiting = DB::table('fel_documents')->where('status', 'awaiting_sat')->where('awaiting_sat_at', '<', now()->subDays((int) config('fel.sat_pending_alert_days', 2)))->count();
+
+            return [$waiting > 0 ? 'degraded' : 'healthy', 'Emisión en el portal SAT · '.$waiting.' facturas esperando emisión más de '.config('fel.sat_pending_alert_days', 2).' días', ['provider' => $provider, 'waiting' => $waiting]];
         }
 
         return [$stuck > 0 ? 'degraded' : ($failures > 5 ? 'degraded' : 'healthy'), 'Proveedor '.$provider.' · '.$failures.' fallidos en 24 h · '.$stuck.' atascados', ['provider' => $provider]];

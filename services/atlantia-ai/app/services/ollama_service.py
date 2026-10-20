@@ -40,6 +40,7 @@ class OllamaService:
             "model": settings.AI_MODEL,
             "stream": False,
             "think": False,
+            "keep_alive": settings.AI_KEEP_ALIVE,
             "messages": messages,
             "options": {
                 "temperature": settings.AI_TEMPERATURE,
@@ -98,8 +99,30 @@ class OllamaService:
             response = await client.get(f"{settings.OLLAMA_URL}/api/tags")
             response.raise_for_status()
             models = [model.get("name") for model in response.json().get("models", [])]
+            try:
+                running = await client.get(f"{settings.OLLAMA_URL}/api/ps")
+                resident = settings.AI_MODEL in [model.get("name") for model in running.json().get("models", [])]
+            except Exception:
+                resident = False
 
-        return {"ollama": True, "model_loaded": settings.AI_MODEL in models}
+        # model_loaded: the model is installed and can answer; model_resident: it is already in memory (no cold start).
+        return {"ollama": True, "model_loaded": settings.AI_MODEL in models, "model_resident": resident}
+
+    async def warmup(self) -> bool:
+        """Loads the model into memory and keeps it there, so the next question is answered without a cold start."""
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            response = await client.post(
+                f"{settings.OLLAMA_URL}/api/generate",
+                # Same context size the chats use: a different one would make Ollama reload the model on the first question.
+                json={
+                    "model": settings.AI_MODEL,
+                    "keep_alive": settings.AI_KEEP_ALIVE,
+                    "options": {"num_ctx": settings.AI_CONTEXT_LENGTH},
+                },
+            )
+            response.raise_for_status()
+
+        return True
 
 
 ollama_service = OllamaService()

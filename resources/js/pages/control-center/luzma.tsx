@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { Bot } from 'lucide-react';
+import { Bot, Power } from 'lucide-react';
+import { useState } from 'react';
 import {
     CCPage,
     Panel,
@@ -11,9 +12,12 @@ import {
     panel,
     statusTone,
 } from '@/components/control-center/kit';
+import { ConfirmDialog } from '@/components/office-admin/kit';
 
 type Status = {
     enabled: boolean;
+    resident: boolean;
+    disabled_message: string;
     gateway: boolean;
     model_loaded: boolean;
     status: string;
@@ -69,6 +73,80 @@ const riskTone: Record<string, string> = {
     critical: 'red',
 };
 
+function LuzmaSwitchCard({
+    status,
+    canManage,
+}: {
+    status: Status;
+    canManage: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div
+            className={`rounded-xl border p-4 ${status.enabled ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/40 bg-red-500/10'}`}
+        >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <span
+                        className={`grid size-10 place-items-center rounded-full ${status.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}
+                    >
+                        <Power className="size-5" />
+                    </span>
+                    <div>
+                        <p className="font-black text-white">
+                            Luzma está{' '}
+                            {status.enabled ? 'encendida' : 'apagada'} para
+                            todas las firmas
+                        </p>
+                        <p className="text-xs text-slate-400">
+                            {status.enabled
+                                ? 'Solo este interruptor la apaga. Si el modelo falla, sigue respondiendo en modo básico y el sistema la reinicia sola.'
+                                : status.disabled_message}
+                        </p>
+                    </div>
+                </div>
+                {canManage && (
+                    <button
+                        type="button"
+                        onClick={() => setOpen(true)}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold text-white ${status.enabled ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                    >
+                        {status.enabled ? 'Apagar Luzma' : 'Encender Luzma'}
+                    </button>
+                )}
+            </div>
+            <ConfirmDialog
+                open={open}
+                tone={status.enabled ? 'danger' : 'primary'}
+                icon={<Power className="size-7" />}
+                title={
+                    status.enabled
+                        ? '¿Apagar Luzma para todas las firmas?'
+                        : '¿Encender Luzma?'
+                }
+                description={
+                    status.enabled
+                        ? 'Ninguna firma ni usuario podrá usar Luzma mientras esté apagada, y los recordatorios e insights automáticos se detienen. El resto de Atlantia sigue funcionando.'
+                        : 'Luzma volverá a estar disponible de inmediato para todas las firmas.'
+                }
+                noteLabel="Motivo (queda en la bitácora)"
+                noteRequired
+                confirmLabel={status.enabled ? 'Sí, apagar' : 'Sí, encender'}
+                onConfirm={(reason) => {
+                    router.post(
+                        '/control-center/luzma/switch',
+                        { enabled: !status.enabled, reason },
+                        { preserveScroll: true },
+                    );
+                    setOpen(false);
+                }}
+                onClose={() => setOpen(false)}
+            />
+        </div>
+    );
+}
+
 export default function Luzma({
     section,
     status,
@@ -103,6 +181,9 @@ export default function Luzma({
                     ))}
                 </nav>
                 {section === 'status' && (
+                    <LuzmaSwitchCard status={status} canManage={can_manage} />
+                )}
+                {section === 'status' && (
                     <div className="grid gap-3 xl:grid-cols-3">
                         <Panel
                             title="Estado"
@@ -120,7 +201,8 @@ export default function Luzma({
                                                 healthy: 'Saludable',
                                                 degraded: 'Degradado',
                                                 down: 'Caído',
-                                                maintenance: 'Deshabilitado',
+                                                maintenance:
+                                                    'Apagada por el administrador',
                                             }[status.status] ?? status.status}
                                         </Pill>,
                                     ],
@@ -131,8 +213,12 @@ export default function Luzma({
                                             : 'No responde',
                                     ],
                                     [
-                                        'Ollama / modelo cargado',
+                                        'Ollama / modelo instalado',
                                         status.model_loaded ? 'Sí' : 'No',
+                                    ],
+                                    [
+                                        'Modelo en memoria (sin arranque en frío)',
+                                        status.resident ? 'Sí' : 'No',
                                     ],
                                     ['Modelo', status.model ?? 'No reportado'],
                                     [

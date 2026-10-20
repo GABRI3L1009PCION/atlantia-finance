@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Monitor, Settings, Shield, User } from 'lucide-react';
+import { Bell, Monitor, Settings, Shield, User } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { cn, toUrl } from '@/lib/utils';
@@ -10,6 +10,7 @@ import { edit as editSecurity } from '@/routes/security';
 const sidebarNavItems = [
     { title: 'Perfil', href: edit(), icon: User },
     { title: 'Seguridad', href: editSecurity(), icon: Shield },
+    { title: 'Alertas', href: '/settings/notifications', icon: Bell },
     { title: 'Apariencia', href: editAppearance(), icon: Monitor },
 ];
 

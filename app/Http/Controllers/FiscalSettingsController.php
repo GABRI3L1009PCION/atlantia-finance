@@ -43,7 +43,34 @@ class FiscalSettingsController extends Controller
             'exchangeRates' => DB::table('company_exchange_rates')->where('company_id', $record->id)
                 ->orderByDesc('effective_on')->orderBy('currency')->limit(40)->get(),
             'canManage' => $this->accounting->canModule($organization, $record->id, $request->user(), 'fiscal.manage'),
+            'overview' => $this->overview($record, $today),
         ]);
+    }
+
+    /**
+     * Real status shown in the summary cards: next statutory deadline, how invoices are issued and how complete the setup is.
+     *
+     * @return array{obligation: array{name: string, due_on: string, period: string}|null, fel: array{configured: bool, mode: string|null}, integrity: array{percent: int, missing: list<string>}}
+     */
+    private function overview(stdClass $record, string $today): array
+    {
+        $obligation = DB::table('fiscal_obligations')->where('company_id', $record->id)
+            ->whereNotIn('status', ['filed', 'completed', 'cancelled'])->whereNull('completed_at')->orderBy('due_on')->first(['name', 'due_on', 'reference_period']);
+        $fel = DB::table('company_fel_settings')->where('company_id', $record->id)->first(['certifier']);
+        $mode = $fel === null || $fel->certifier === null || $fel->certifier === 'none' ? null : (string) $fel->certifier;
+        $checks = [
+            'Emisor de facturas (FEL)' => $mode !== null,
+            'Catálogo de cuentas' => DB::table('ledger_accounts')->where('company_id', $record->id)->exists(),
+            'Impuestos con vigencia' => $this->fiscal->taxes($record->id, $today)->isNotEmpty(),
+            'Período contable abierto' => DB::table('accounting_periods')->where('company_id', $record->id)->whereNull('closed_at')->exists(),
+        ];
+        $missing = array_keys(array_filter($checks, fn (bool $ok): bool => ! $ok));
+
+        return [
+            'obligation' => $obligation === null ? null : ['name' => (string) $obligation->name, 'due_on' => (string) $obligation->due_on, 'period' => (string) $obligation->reference_period],
+            'fel' => ['configured' => $mode !== null, 'mode' => $mode],
+            'integrity' => ['percent' => (int) round((count($checks) - count($missing)) / count($checks) * 100), 'missing' => $missing],
+        ];
     }
 
     public function storeTax(Request $request, string $company): RedirectResponse

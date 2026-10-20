@@ -59,8 +59,8 @@ export default function AuthSplitLayout({
                 </div>
             </aside>
 
-            <main className="flex min-h-svh items-center justify-center px-5 py-8 sm:px-10 lg:h-svh lg:min-h-0 lg:px-16 lg:py-4">
-                <div className="w-full max-w-md">
+            <main className="flex min-h-svh overflow-y-auto px-5 py-8 sm:px-10 lg:h-svh lg:min-h-0 lg:px-16 lg:py-4">
+                <div className="m-auto w-full max-w-md">
                     <Link
                         href={home()}
                         className="mb-9 flex justify-center lg:hidden"
@@ -73,7 +73,7 @@ export default function AuthSplitLayout({
                     </Link>
 
                     <div className="mb-4">
-                        <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                        <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700 [@media(max-height:900px)]:hidden">
                             <CheckCircle2 className="size-3.5" /> Acceso
                             protegido
                         </div>
@@ -89,7 +89,7 @@ export default function AuthSplitLayout({
                         {children}
                     </div>
 
-                    <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+                    <p className="mt-3 text-center text-xs leading-5 text-slate-500 [@media(max-height:900px)]:hidden">
                         Protegido con cifrado, control de sesiones y limitación
                         de intentos de acceso.
                     </p>

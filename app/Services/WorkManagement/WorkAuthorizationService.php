@@ -7,6 +7,7 @@ namespace App\Services\WorkManagement;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\WorkspaceContext;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -239,6 +240,9 @@ class WorkAuthorizationService
         'client.fel.documents.download' => ['Portal cliente', 'Descargar documentos FEL'],
         'client.financial_reports.view' => ['Portal cliente', 'Ver estados financieros'],
         'client.bank_documents.upload' => ['Portal cliente', 'Entregar estados de cuenta bancarios'],
+        'client.finances.view' => ['Portal cliente', 'Ver resumen financiero'],
+        'client.account.view' => ['Portal cliente', 'Ver su cuenta con la oficina (honorarios)'],
+        'client.account.report_payment' => ['Portal cliente', 'Informar pagos a la oficina'],
         'integrations.api.manage' => ['Integraciones', 'Gestionar llaves de API'],
         'integrations.webhooks.manage' => ['Integraciones', 'Gestionar webhooks'],
         'integrations.logs.view' => ['Integraciones', 'Ver uso de la API y entregas de webhooks'],
@@ -268,7 +272,7 @@ class WorkAuthorizationService
     public const AUDITOR_PERMISSIONS = ['audit.dashboard.view', 'audit.engagements.view', 'audit.engagements.manage', 'audit.plans.view', 'audit.plans.manage', 'audit.risks.view', 'audit.risks.manage', 'audit.controls.view', 'audit.controls.assess', 'audit.procedures.view', 'audit.procedures.execute', 'audit.samples.view', 'audit.samples.create', 'audit.samples.confirm', 'audit.evidence.view', 'audit.evidence.request', 'audit.evidence.review', 'audit.working_papers.view', 'audit.working_papers.manage', 'audit.findings.view', 'audit.findings.create', 'audit.findings.update', 'audit.findings.verify', 'audit.findings.close', 'audit.accounting_review.view', 'audit.reconciliations.view', 'audit.period_close.view', 'audit.documents.view', 'audit.traceability.view', 'audit.system_events.view', 'audit.sensitive_changes.view', 'audit.reports.view', 'audit.reports.create', 'audit.reports.issue', 'audit.activity.view'];
 
     /** Capabilities of external client users; each company narrows them further by the contact role. */
-    public const CLIENT_PERMISSIONS = ['client.dashboard.view', 'client.company.view', 'client.company.change_request', 'client.pending.view', 'client.calendar.view', 'client.documents.view', 'client.documents.upload', 'client.documents.replace', 'client.document_requests.view', 'client.document_requests.respond', 'client.approvals.view', 'client.approvals.respond', 'client.obligations.view', 'client.fel.view', 'client.reports.view', 'client.reports.download', 'client.history.view', 'client.messages.view', 'client.messages.send', 'client.luzma.use', 'client.reminders.create', 'client.payroll.view', 'client.payroll.respond', 'client.fiscal.view', 'client.fel.documents.download', 'client.financial_reports.view', 'client.bank_documents.upload'];
+    public const CLIENT_PERMISSIONS = ['client.dashboard.view', 'client.company.view', 'client.company.change_request', 'client.pending.view', 'client.calendar.view', 'client.documents.view', 'client.documents.upload', 'client.documents.replace', 'client.document_requests.view', 'client.document_requests.respond', 'client.approvals.view', 'client.approvals.respond', 'client.obligations.view', 'client.fel.view', 'client.reports.view', 'client.reports.download', 'client.history.view', 'client.messages.view', 'client.messages.send', 'client.luzma.use', 'client.reminders.create', 'client.payroll.view', 'client.payroll.respond', 'client.fiscal.view', 'client.fel.documents.download', 'client.financial_reports.view', 'client.bank_documents.upload', 'client.finances.view', 'client.account.view', 'client.account.report_payment'];
 
     public const ROLE_PRESETS = [
         'owner_director' => [
@@ -299,12 +303,12 @@ class WorkAuthorizationService
         'accountant_in_charge' => [
             'name' => 'Contador Encargado',
             'description' => 'Responsable directo de empresas asignadas y revisión operativa.',
-            'permissions' => [...self::LUZMA_PERMISSIONS, 'client_portal.view', 'client_portal.requests.manage', 'client_portal.documents.review', 'client_portal.approvals.request', 'client_portal.reports.publish', 'client_portal.messages.manage', 'client_portal.company_data.review', 'payroll.approve', 'payroll.dashboard.view', 'payroll.reports.view', 'payables.payment_proposals.approve', 'payables.adjustments.create', 'payables.payment.unapply', 'receivables.adjustment.create', 'receivables.receipt.unapply', 'treasury.payments.approve', 'treasury.reconciliation.approve', 'fiscal.obligations.review', 'fiscal.obligations.mark_filed', 'accountant.dashboard.view', 'reviews.start', 'reviews.request_changes', 'reviews.first_level_approve', 'periods.request_close', 'periods.request_reopen', 'communications.send', 'operations.incidents.manage', 'journal.approve', 'vat_books.export', 'reports.export', 'vat_books.view', 'tasks.view', 'tasks.create', 'tasks.assign', 'tasks.review', 'tasks.request_changes', 'tasks.approve', 'reviews.view', 'reviews.submit', 'sales.view', 'sales.manage', 'purchases.view', 'purchases.manage', 'banks.view', 'banks.manage', 'fiscal.view', 'fel.view', 'fel.manage', 'journal.view', 'journal.create', 'journal.attach_support', 'journal.submit', 'journal.review', 'journal.reject', 'ledger.view', 'trial_balance.view', 'documents.view', 'documents.manage', 'reports.view', 'operations.view', 'operations.manage'],
+            'permissions' => [...self::LUZMA_PERMISSIONS, 'client_portal.view', 'client_portal.requests.manage', 'client_portal.documents.review', 'client_portal.approvals.request', 'client_portal.reports.publish', 'client_portal.messages.manage', 'client_portal.company_data.review', 'payroll.approve', 'payroll.dashboard.view', 'payroll.reports.view', 'payables.payment_proposals.approve', 'payables.adjustments.create', 'payables.payment.unapply', 'receivables.adjustment.create', 'receivables.receipt.unapply', 'treasury.payments.approve', 'treasury.reconciliation.approve', 'fiscal.obligations.review', 'fiscal.obligations.mark_filed', 'accountant.dashboard.view', 'reviews.start', 'reviews.request_changes', 'reviews.first_level_approve', 'periods.request_close', 'periods.request_reopen', 'communications.send', 'operations.incidents.manage', 'journal.approve', 'vat_books.export', 'reports.export', 'vat_books.view', 'tasks.view', 'tasks.create', 'tasks.assign', 'tasks.start', 'tasks.submit', 'tasks.review', 'tasks.request_changes', 'tasks.approve', 'reviews.view', 'reviews.submit', 'sales.view', 'sales.manage', 'purchases.view', 'purchases.manage', 'banks.view', 'banks.manage', 'fiscal.view', 'fel.view', 'fel.manage', 'fel.certify', 'journal.view', 'journal.create', 'journal.import', 'journal.attach_support', 'journal.submit', 'journal.review', 'journal.reject', 'ledger.view', 'trial_balance.view', 'documents.view', 'documents.manage', 'reports.view', 'operations.view', 'operations.manage'],
         ],
         'accounting_assistant' => [
             'name' => 'Auxiliar Contable',
             'description' => 'Ejecuta operación contable y prepara empresas para revisión.',
-            'permissions' => [...self::LUZMA_PERMISSIONS, 'client_portal.view', 'client_portal.requests.manage', 'client_portal.documents.review', 'client_portal.messages.manage', 'assistant.dashboard.view', 'communications.send', 'vat_books.view', 'tasks.view', 'tasks.start', 'tasks.submit', 'tasks.complete', 'reviews.submit', 'sales.view', 'sales.manage', 'purchases.view', 'purchases.manage', 'banks.view', 'banks.manage', 'fiscal.view', 'fel.view', 'fel.manage', 'journal.view', 'journal.create', 'journal.attach_support', 'journal.submit', 'ledger.view', 'trial_balance.view', 'documents.view', 'documents.manage', 'operations.view', 'operations.manage'],
+            'permissions' => [...self::LUZMA_PERMISSIONS, 'client_portal.view', 'client_portal.requests.manage', 'client_portal.documents.review', 'client_portal.messages.manage', 'assistant.dashboard.view', 'communications.send', 'vat_books.view', 'tasks.view', 'tasks.start', 'tasks.submit', 'tasks.complete', 'reviews.submit', 'sales.view', 'sales.manage', 'purchases.view', 'purchases.manage', 'banks.view', 'banks.manage', 'fiscal.view', 'fel.view', 'fel.manage', 'journal.view', 'journal.create', 'journal.import', 'journal.attach_support', 'journal.submit', 'ledger.view', 'trial_balance.view', 'documents.view', 'documents.manage', 'operations.view', 'operations.manage'],
         ],
         'tax_specialist' => [
             'name' => 'Encargado Fiscal',
@@ -559,7 +563,14 @@ class WorkAuthorizationService
 
     public function dashboardPathFor(Organization $organization, User $user): string
     {
-        return match ($this->primaryRole($organization, $user)) {
+        $role = $this->primaryRole($organization, $user);
+
+        // The Esencial plan has no per-role panels: its two seats share one workspace sized for a small practice.
+        if (in_array($role, ['owner_director', 'office_admin', 'accountant_in_charge', 'accounting_assistant'], true) && $this->planCode($organization) === 'essential') {
+            return '/essential/dashboard';
+        }
+
+        return match ($role) {
             'owner_director' => '/office/executive-dashboard',
             'office_admin' => '/office/dashboard',
             'accounting_manager' => '/operations/dashboard',
@@ -571,11 +582,32 @@ class WorkAuthorizationService
             'treasury' => $this->hasActiveRole($organization, $user, 'treasury') ? '/treasury/dashboard' : '/work/treasury',
             'accounts_receivable' => $this->hasActiveRole($organization, $user, 'accounts_receivable') ? '/receivables/dashboard' : '/work/receivables',
             'accounts_payable' => $this->hasActiveRole($organization, $user, 'accounts_payable') ? '/payables/dashboard' : '/work/payables',
-            'payroll' => $this->hasActiveRole($organization, $user, 'payroll') ? '/payroll/dashboard' : '/work/payroll',
+            'payroll' => $this->hasActiveRole($organization, $user, 'payroll') && app(WorkspaceContext::class)->hasFeature($organization, 'payroll') ? '/payroll/dashboard' : '/work/payroll',
             'auditor' => $this->hasActiveRole($organization, $user, 'auditor') ? '/work/audit' : '/audit/dashboard',
             'client_user' => '/client',
             default => '/work/dashboard',
         };
+    }
+
+    /** Roles a team can hold when its plan has no roles and permissions module: the two seats of a small practice. */
+    public const SMALL_PLAN_ROLES = ['accountant_in_charge', 'accounting_assistant'];
+
+    /** Roles whose work lives in a module the plan may not include. */
+    private const ROLE_FEATURES = ['payroll' => 'payroll'];
+
+    public function roleAllowedByPlan(Organization $organization, string $roleCode): bool
+    {
+        $workspace = app(WorkspaceContext::class);
+        if (isset(self::ROLE_FEATURES[$roleCode]) && ! $workspace->hasFeature($organization, self::ROLE_FEATURES[$roleCode])) {
+            return false;
+        }
+
+        return $workspace->hasFeature($organization, 'roles_and_permissions') || in_array($roleCode, self::SMALL_PLAN_ROLES, true);
+    }
+
+    private function planCode(Organization $organization): ?string
+    {
+        return app(WorkspaceContext::class)->price($organization)?->plan?->code;
     }
 
     /** The role is really assigned (not the fallback used for members without roles). */
@@ -593,7 +625,8 @@ class WorkAuthorizationService
 
     private function organizationRole(Organization $organization, User $user): string
     {
-        if ($organization->relationLoaded('pivot') && $organization->pivot->role) {
+        // The loaded pivot belongs to the signed-in user; it must never answer for someone else being evaluated.
+        if ($organization->relationLoaded('pivot') && $organization->pivot->role && (int) $organization->pivot->user_id === $user->id) {
             return (string) $organization->pivot->role;
         }
 

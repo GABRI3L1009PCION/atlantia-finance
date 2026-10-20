@@ -43,7 +43,7 @@ class LuzmaIntentService
     /**
      * @return array{kind: string, tool: string|null, arguments: array<string, mixed>, critical: string|null, source: string}
      */
-    public function route(LuzmaContext $context, string $message): array
+    public function route(LuzmaContext $context, string $message, ?string $previousTool = null): array
     {
         $text = $this->contexts->normalize($message);
         $available = $this->tools->available($context);
@@ -53,6 +53,11 @@ class LuzmaIntentService
             if (! $isQuestion && preg_match($pattern, $text) === 1) {
                 return ['kind' => 'critical', 'tool' => $type === 'close_period' && isset($available['get_close_checklist']) ? 'get_close_checklist' : null, 'arguments' => [], 'critical' => $type, 'source' => 'rules'];
             }
+        }
+        // Greetings and "what can you do" are presentations, not data requests: no tool is run for them.
+        if ((mb_strlen($text) <= 40 && preg_match('/^(hola|buenas|buenos dias|buen dia|buenas tardes|buenas noches|hey|gracias|muchas gracias)\b/u', $text) === 1)
+            || preg_match('/\bque (puedes|sabes) hacer\b|\bcomo me (puedes )?ayud|\bpara que sirves\b|\bquien eres\b|\bque eres\b/u', $text) === 1) {
+            return ['kind' => 'general', 'tool' => null, 'arguments' => [], 'critical' => null, 'source' => 'rules'];
         }
         if (preg_match('/\b(recuerdame|recordarme|avisame|avisarme|recordatorio|notificame)\b/u', $text) === 1) {
             return $this->prepare('prepare_reminder', $available);
@@ -64,15 +69,27 @@ class LuzmaIntentService
             return $this->prepare('prepare_payment_proposal', $available);
         }
 
+        // Memory of the conversation: a short follow-up that names no topic ("¿y los vencidos?", "dame más detalle", "¿por qué?")
+        // is about the tool that answered the previous question.
+        if ($previousTool !== null && isset($available[$previousTool]) && $this->isFollowUp($text) && $this->score($text, $available)[1] < 2) {
+            return ['kind' => 'read', 'tool' => $previousTool, 'arguments' => [], 'critical' => null, 'source' => 'memory'];
+        }
+
+        // The neural network of the gateway reads the question and the keyword rules read it too. When the rules are sure
+        // and the network disagrees, the network needs near certainty to overrule them; otherwise the rules decide.
+        $planned = $this->plan($context, $message, $available);
         [$tool, $score, $tie] = $this->score($text, $available);
         $arguments = $this->arguments($tool, $text, $message);
-        if ($tool !== null && $score >= 2 && ! $tie) {
+        $rulesSure = $tool !== null && $score >= 2 && ! $tie;
+        if ($planned !== null && $planned['confidence'] >= 0.8 && (! $rulesSure || $planned['route']['tool'] === $tool || $planned['confidence'] >= 0.95)) {
+            return $planned['route'];
+        }
+        if ($rulesSure) {
             return ['kind' => 'read', 'tool' => $tool, 'arguments' => $arguments, 'critical' => null, 'source' => 'rules'];
         }
 
-        $planned = $this->plan($context, $message, $available);
         if ($planned !== null) {
-            return $planned;
+            return $planned['route'];
         }
         if ($tool !== null) {
             return ['kind' => 'read', 'tool' => $tool, 'arguments' => $arguments, 'critical' => null, 'source' => 'rules'];
@@ -83,6 +100,17 @@ class LuzmaIntentService
         }
 
         return ['kind' => 'general', 'tool' => null, 'arguments' => [], 'critical' => null, 'source' => 'rules'];
+    }
+
+    /** Short messages that lean on the previous answer instead of naming a topic. */
+    private function isFollowUp(string $text): bool
+    {
+        if (mb_strlen($text) > 70) {
+            return false;
+        }
+
+        return preg_match('/^y (el |la |los |las |de |del |en |con |tambien |entonces )?/u', $text) === 1 && mb_strlen($text) <= 45
+            || preg_match('/\b(eso|esto|esos|esas|ese|esa|mas detalle|mas informacion|dame detalle|el detalle|explicame|explicamelo|por que|cuales son|cuales|de quien|de cual|cuanto es|cuanto son|y que mas)\b/u', $text) === 1;
     }
 
     /**
@@ -151,7 +179,7 @@ class LuzmaIntentService
 
     /**
      * @param  array<string, LuzmaTool>  $available
-     * @return array{kind: string, tool: string|null, arguments: array<string, mixed>, critical: string|null, source: string}|null
+     * @return array{confidence: float, route: array{kind: string, tool: string|null, arguments: array<string, mixed>, critical: string|null, source: string}}|null
      */
     private function plan(LuzmaContext $context, string $message, array $available): ?array
     {
@@ -170,6 +198,6 @@ class LuzmaIntentService
         }
         $arguments = array_intersect_key($plan['arguments'], $tool->parameters);
 
-        return ['kind' => 'read', 'tool' => $tool->name, 'arguments' => array_map(fn ($value) => is_scalar($value) ? $value : null, $arguments), 'critical' => null, 'source' => 'model'];
+        return ['confidence' => (float) $plan['confidence'], 'route' => ['kind' => 'read', 'tool' => $tool->name, 'arguments' => array_map(fn ($value) => is_scalar($value) ? $value : null, $arguments), 'critical' => null, 'source' => 'model']];
     }
 }

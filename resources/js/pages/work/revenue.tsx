@@ -7,11 +7,14 @@ import {
     HandCoins,
     Hourglass,
     Plus,
+    ShieldX,
     TrendingUp,
     Users,
     WalletCards,
 } from 'lucide-react';
+import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { ConfirmDialog } from '@/components/office-admin/kit';
 
 type Invoice = {
     id: number;
@@ -63,6 +66,16 @@ type Props = {
         amount_cents: number;
     }[];
     invoices: Invoice[];
+    notices?: {
+        id: number;
+        company: string;
+        invoice_number: string;
+        amount_cents: number;
+        paid_on: string;
+        method: string;
+        reference: string;
+        reporter: string;
+    }[];
     companies: { id: number; name: string }[];
     canManage: boolean;
 };
@@ -473,7 +486,11 @@ export default function Revenue(props: Props) {
         renewals,
         invoices,
         canManage,
+        notices,
     } = props;
+    const [declining, setDeclining] = useState<
+        NonNullable<Props['notices']>[number] | null
+    >(null);
 
     return (
         <>
@@ -748,6 +765,91 @@ export default function Revenue(props: Props) {
                         </div>
                     </section>
 
+                    {(notices ?? []).length > 0 && (
+                        <section className={`${card} overflow-x-auto`}>
+                            <h2 className="mb-1 font-black">
+                                Pagos informados por clientes (
+                                {(notices ?? []).length})
+                            </h2>
+                            <p className="mb-3 text-xs text-slate-500">
+                                Confirma el pago cuando lo veas reflejado en tu
+                                banco; el cobro se marca como pagado al
+                                completar su monto.
+                            </p>
+                            <table className="w-full min-w-[760px] text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 text-left text-xs text-slate-600">
+                                        <th className="px-3 py-2">Empresa</th>
+                                        <th className="px-3 py-2"># Cobro</th>
+                                        <th className="px-3 py-2">Monto</th>
+                                        <th className="px-3 py-2">Fecha</th>
+                                        <th className="px-3 py-2">Forma</th>
+                                        <th className="px-3 py-2">
+                                            Referencia
+                                        </th>
+                                        <th className="px-3 py-2">Informó</th>
+                                        {canManage && <th />}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {(notices ?? []).map((notice) => (
+                                        <tr key={notice.id}>
+                                            <td className="px-3 py-2 font-bold">
+                                                {notice.company}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {notice.invoice_number}
+                                            </td>
+                                            <td className="px-3 py-2 font-black tabular-nums">
+                                                {money(notice.amount_cents)}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {notice.paid_on}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {notice.method}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {notice.reference}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {notice.reporter}
+                                            </td>
+                                            {canManage && (
+                                                <td className="space-x-2 px-3 py-2 text-right whitespace-nowrap">
+                                                    <button
+                                                        type="button"
+                                                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"
+                                                        onClick={() =>
+                                                            router.post(
+                                                                `/office/revenue/notices/${notice.id}/confirm`,
+                                                                {},
+                                                                {
+                                                                    preserveScroll: true,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        Confirmar
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-bold text-red-700"
+                                                        onClick={() =>
+                                                            setDeclining(notice)
+                                                        }
+                                                    >
+                                                        No confirmar
+                                                    </button>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </section>
+                    )}
+
                     <section className={`${card} overflow-x-auto`}>
                         <h2 className="mb-3 font-black">Cobros recientes</h2>
                         <table className="w-full min-w-[760px] text-sm">
@@ -856,6 +958,36 @@ export default function Revenue(props: Props) {
                     )}
                 </div>
             </main>
+
+            <ConfirmDialog
+                open={declining !== null}
+                tone="danger"
+                icon={<ShieldX className="size-7" />}
+                title="No confirmar este pago"
+                description={
+                    <>
+                        El pago de <strong>{declining?.company}</strong> por{' '}
+                        <strong>{money(declining?.amount_cents ?? 0)}</strong>{' '}
+                        (ref. {declining?.reference}) quedará como no confirmado
+                        y el cliente verá tu motivo.
+                    </>
+                }
+                noteLabel="Motivo (lo verá el cliente)"
+                noteRequired
+                confirmLabel="No confirmar pago"
+                onConfirm={(note) => {
+                    if (declining) {
+                        router.post(
+                            `/office/revenue/notices/${declining.id}/reject`,
+                            { note },
+                            { preserveScroll: true },
+                        );
+                    }
+
+                    setDeclining(null);
+                }}
+                onClose={() => setDeclining(null)}
+            />
         </>
     );
 }

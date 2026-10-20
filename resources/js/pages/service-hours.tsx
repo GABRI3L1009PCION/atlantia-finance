@@ -87,23 +87,15 @@ export default function ServiceHours({ hours }: { hours: Hours }) {
                 <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-8 sm:px-10">
                     <header className="flex items-start justify-between gap-4">
                         <div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-col gap-1.5">
                                 <img
                                     src="/images/atlantia-finance-logo.png"
-                                    alt=""
-                                    className="size-12 object-contain"
+                                    alt="Atlantia Finance"
+                                    className="h-16 w-auto self-start object-contain sm:h-24"
                                 />
-                                <div>
-                                    <p className="text-3xl leading-none font-bold tracking-tight sm:text-4xl">
-                                        Atlantia{' '}
-                                        <span className="font-light">
-                                            Finance
-                                        </span>
-                                    </p>
-                                    <p className="mt-2 text-[10px] tracking-[0.28em] text-white/70 uppercase sm:text-xs">
-                                        Finanzas hoy, más posibilidades mañana
-                                    </p>
-                                </div>
+                                <p className="ml-1.5 text-[10px] tracking-[0.28em] text-white/70 uppercase sm:text-xs">
+                                    Finanzas hoy, más posibilidades mañana
+                                </p>
                             </div>
                             <div className="mt-4 h-px w-12 bg-[#e2354f]" />
                         </div>

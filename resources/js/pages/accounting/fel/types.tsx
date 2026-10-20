@@ -30,6 +30,10 @@ export type Document = {
     document_type: string;
     sales_invoice_id: number | null;
     status: string;
+    provider: string;
+    awaiting_sat_at: string | null;
+    sat_source: string | null;
+    certified_at: string | null;
     subtotal_cents: number;
     discount_cents: number;
     tax_cents: number;
@@ -53,21 +57,31 @@ export type Document = {
 };
 export const labels: Record<string, string> = {
     draft: 'Borrador',
+    awaiting_sat: 'Pendiente de emitir en SAT',
     pending: 'Pendiente',
     processing: 'Procesando',
     certified: 'Certificada (simulada)',
     failed: 'Fallida',
     cancelled: 'Anulada',
 };
+/** "Certificada (simulada)" only makes sense for the test provider; a document registered from the SAT portal is simply issued. */
+export const statusLabel = (status: string, provider?: string): string =>
+    status === 'certified' && provider === 'sat_manual'
+        ? 'Emitida en SAT'
+        : (labels[status] ?? status);
 export const decimal = (cents: number) =>
     `${Math.trunc(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
 export function TestNotice({
     notice,
     compact = false,
 }: {
-    notice: string;
+    notice: string | null;
     compact?: boolean;
 }) {
+    if (!notice) {
+        return null;
+    }
+
     return (
         <div
             role="status"

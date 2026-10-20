@@ -42,7 +42,7 @@ test('owner sees setup and actual catalog and saving does not duplicate the prim
     expect($organization->fresh()->status)->toBe('active');
     $this->assertDatabaseCount('offices', 1);
     $this->assertDatabaseHas('offices', ['organization_id' => $organization->id, 'name' => 'Sede Puerto Barrios', 'status' => 'active']);
-    $this->get(route('dashboard'))->assertRedirect(route('office.executive'));
+    $this->get(route('dashboard'))->assertRedirect(route('essential.dashboard'));
     $this->get(route('dashboard', ['organization' => 1]))->assertInertia(fn (Assert $p) => $p->where('workspace.needsSetup', false));
 });
 
@@ -100,7 +100,7 @@ test('signed invitation creates a verified collaborator without another plan and
     $this->assertDatabaseHas('office_user', ['office_id' => $office->id, 'user_id' => $member->id, 'role' => 'member']);
     $this->assertDatabaseCount('subscriptions', 1);
     $this->post($url)->assertStatus(410);
-    $this->actingAs($member)->get(route('dashboard'))->assertRedirect(route('work.dashboard'));
+    $this->actingAs($member)->get(route('dashboard'))->assertRedirect(route('essential.dashboard'));
 });
 
 test('forged and expired invitations cannot be accepted', function () {

@@ -37,8 +37,12 @@ class TreasuryCloseReadinessService
         }
         $pendingMovements = DB::table('bank_transactions')->whereIn('bank_account_id', $accounts === [] ? [-1] : $accounts)->where('transaction_date', '<=', $period->ends_on)->where('reconciliation_status', '!=', 'matched')->count();
         $cashDifferences = DB::table('operational_incidents')->where('company_id', $companyId)->where('source_type', 'cash_counts')->whereIn('status', ['open', 'in_progress', 'blocked'])->count();
+        // Movements in the Bancos accounts of the ledger with no bank account registered cannot be reconciled at all.
+        $unregisteredBank = $accounts === [] && DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')
+            ->where('a.company_id', $companyId)->where('a.type', 'asset')->where('a.code', 'like', '1102%')->where('e.accounting_period_id', $periodId)->whereIn('e.status', ['posted', 'reversed'])
+            ->where('e.kind', '<>', 'opening')->exists();
         $details = ['accounts' => count($accounts), 'unreconciled' => $unreconciled, 'pending_movements' => $pendingMovements, 'cash_differences' => $cashDifferences];
-        $problems = $unreconciled + $pendingMovements + $cashDifferences;
+        $problems = $unreconciled + $pendingMovements + $cashDifferences + ($unregisteredBank ? 1 : 0);
 
         if ($problems === 0) {
             return ['status' => 'passed', 'count' => 0, 'message' => $accounts === [] ? 'La empresa no tiene cuentas bancarias activas.' : 'Cuentas conciliadas y aprobadas al cierre del período.', 'details' => $details];
@@ -47,7 +51,7 @@ class TreasuryCloseReadinessService
         return [
             'status' => $period->treasury_close_policy === 'block' ? 'blocked' : 'warning',
             'count' => $problems,
-            'message' => trim(($unreconciled > 0 ? $unreconciled.' cuenta(s) sin conciliación aprobada al cierre. ' : '').($pendingMovements > 0 ? $pendingMovements.' movimiento(s) bancario(s) sin conciliar. ' : '').($cashDifferences > 0 ? $cashDifferences.' diferencia(s) de caja sin resolver.' : '')),
+            'message' => trim(($unregisteredBank ? 'El Mayor tiene movimientos en Bancos, pero la empresa no tiene una cuenta bancaria registrada para conciliar. ' : '').($unreconciled > 0 ? $unreconciled.' cuenta(s) sin conciliación aprobada al cierre. ' : '').($pendingMovements > 0 ? $pendingMovements.' movimiento(s) bancario(s) sin conciliar. ' : '').($cashDifferences > 0 ? $cashDifferences.' diferencia(s) de caja sin resolver.' : '')),
             'details' => $details,
         ];
     }

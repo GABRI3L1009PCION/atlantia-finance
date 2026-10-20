@@ -20,14 +20,16 @@ class FelIssuerSettings
     public function forCompany(stdClass $company): array
     {
         $settings = DB::table('company_fel_settings')->where('company_id', $company->id)->first();
+        $provider = (string) ($settings->provider ?? config('fel.provider'));
 
         return [
             'name' => $settings->legal_name ?? $company->name,
             'nit' => $settings->nit ?? $company->tax_id,
             'address' => $settings->address ?? '',
             'logo_data_uri' => $settings->logo_data_uri ?? null,
-            'provider' => $settings->provider ?? config('fel.provider'),
-            'environment' => $settings->environment ?? config('fel.environment'),
+            'provider' => $provider,
+            // Documents issued by hand in the SAT portal are real, not a test environment.
+            'environment' => $provider === FelProviderResolver::SAT_MANUAL ? 'production' : (string) ($settings->environment ?? config('fel.environment')),
             'certifier_environment' => $settings->certifier_environment ?? 'test',
             'establishment_code' => $settings->establishment_code ?? '1',
             'vat_affiliation' => $settings->vat_affiliation ?? 'GEN',

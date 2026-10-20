@@ -17,8 +17,12 @@ use Illuminate\Support\Str;
 
 class EnterprisePlanDemoUsersSeeder extends Seeder
 {
+    use RefusesProduction;
+
     public function run(): void
     {
+        $this->refuseInProduction();
+
         $organization = Organization::query()->where('name', 'Atlantia Systems')->first();
         $actor = User::query()->where('email', 'demo@atlantia.test')->first();
         $office = DB::table('offices')->where('organization_id', $organization?->id)->where('is_primary', true)->whereNull('deleted_at')->first();

@@ -2,13 +2,24 @@ import { Head, router, useForm } from '@inertiajs/react';
 import {
     Award,
     BookOpenCheck,
+    CalendarDays,
+    Clock3,
+    ClipboardList,
+    Download,
+    FileText,
+    Globe2,
     GraduationCap,
+    Info,
+    Monitor,
     Plus,
+    Search,
     Star,
     Users,
+    X,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { CertificatePreview } from '@/components/certificate';
 import {
     Dialog,
     DialogContent,
@@ -22,6 +33,9 @@ type Course = {
     area: string;
     modality: string;
     starts_on: string | null;
+    start_time: string | null;
+    duration_hours: number | null;
+    session_url: string | null;
     capacity: number | null;
     status: string;
     enrolled: number;
@@ -38,6 +52,9 @@ type Certification = {
     issued_on: string;
     expires_on: string | null;
     state: 'valid' | 'expiring' | 'expired';
+    code: string | null;
+    generated: boolean;
+    has_file: boolean;
 };
 
 type Need = {
@@ -47,6 +64,9 @@ type Need = {
     priority: 'high' | 'medium' | 'low';
     employees: number;
     status: 'pending' | 'planned' | 'done';
+    objective: string | null;
+    target_date: string | null;
+    participants: string[];
 };
 
 type Props = {
@@ -73,6 +93,8 @@ type Props = {
     staff: { id: number; name: string }[];
     canManage: boolean;
     areaOptions: string[];
+    next_certificate_code: string;
+    firm_name: string;
 };
 
 const card =
@@ -315,7 +337,8 @@ const DIALOG_COPY: Record<DialogKind, { title: string; description: string }> =
     {
         course: {
             title: 'Registrar curso',
-            description: 'Programa un curso para el equipo de la firma.',
+            description:
+                'Organiza una capacitación para el equipo de tu firma.',
         },
         enroll: {
             title: 'Inscribir participantes',
@@ -324,11 +347,12 @@ const DIALOG_COPY: Record<DialogKind, { title: string; description: string }> =
         cert: {
             title: 'Registrar certificación',
             description:
-                'Guarda una certificación obtenida por un colaborador.',
+                'Completa los datos y revisa el certificado antes de guardarlo.',
         },
         need: {
             title: 'Registrar necesidad de capacitación',
-            description: 'Anota un tema que el equipo necesita aprender.',
+            description:
+                'Identifica qué necesita aprender el equipo y quiénes deben participar.',
         },
     };
 
@@ -352,87 +376,325 @@ function useSubmit(onDone: () => void) {
         };
 }
 
+const COURSE_STATUS_OPTIONS: Record<string, string> = {
+    scheduled: 'Programado',
+    open: 'Inscripciones abiertas',
+    in_progress: 'En curso',
+    completed: 'Completado',
+};
+
+const COURSE_MODALITY = [
+    { value: 'virtual', label: 'Virtual', icon: Monitor },
+    { value: 'presencial', label: 'Presencial', icon: Users },
+    { value: 'híbrido', label: 'Híbrida', icon: Globe2 },
+];
+
 function CourseForm({
     areaOptions,
     onDone,
+    onCancel,
 }: {
     areaOptions: string[];
     onDone: () => void;
+    onCancel: () => void;
 }) {
     const course = useForm({
         title: '',
         area: areaOptions[0] ?? '',
         modality: 'virtual',
         starts_on: '',
-        capacity: '',
+        start_time: '09:00',
+        duration_hours: '2',
+        capacity: '20',
+        session_url: '',
         status: 'scheduled',
         description: '',
     });
     const submit = useSubmit(onDone);
+    const label = 'block text-sm font-semibold text-[#061633]';
+    const required = <span className="text-red-600"> *</span>;
+    const modality =
+        COURSE_MODALITY.find((item) => item.value === course.data.modality) ??
+        COURSE_MODALITY[0];
+    const ModalityIcon = modality.icon;
+    const dateLabel = course.data.starts_on
+        ? new Date(`${course.data.starts_on}T12:00:00`).toLocaleDateString(
+              'es-GT',
+              { day: 'numeric', month: 'long', year: 'numeric' },
+          )
+        : 'Fecha por definir';
+    const hours = Number(course.data.duration_hours);
+    const seats = Number(course.data.capacity);
+    const statusStyle: Record<string, string> = {
+        scheduled: 'bg-emerald-50 text-emerald-700',
+        open: 'bg-blue-50 text-blue-700',
+        in_progress: 'bg-amber-50 text-amber-700',
+        completed: 'bg-slate-100 text-slate-600',
+    };
 
     return (
         <form
             onSubmit={submit(course, '/office/training/courses')}
-            className="space-y-3"
+            className="space-y-4"
         >
-            <input
-                className={field}
-                placeholder="Nombre del curso"
-                value={course.data.title}
-                onChange={(e) => course.setData('title', e.target.value)}
-                required
-            />
-            <div className="grid gap-3 sm:grid-cols-3">
-                <select
-                    className={field}
-                    value={course.data.area}
-                    onChange={(e) => course.setData('area', e.target.value)}
-                >
-                    {areaOptions.map((area) => (
-                        <option key={area}>{area}</option>
-                    ))}
-                </select>
-                <select
-                    className={field}
-                    value={course.data.modality}
-                    onChange={(e) => course.setData('modality', e.target.value)}
-                >
-                    <option value="virtual">Virtual</option>
-                    <option value="presencial">Presencial</option>
-                    <option value="híbrido">Híbrido</option>
-                </select>
-                <select
-                    className={field}
-                    value={course.data.status}
-                    onChange={(e) => course.setData('status', e.target.value)}
-                >
-                    <option value="scheduled">Programado</option>
-                    <option value="open">Inscripciones abiertas</option>
-                    <option value="in_progress">En curso</option>
-                    <option value="completed">Completado</option>
-                </select>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+                <div className="space-y-4">
+                    <h3 className="flex items-center gap-3 text-lg font-bold text-[#061633]">
+                        Información del curso
+                        <span className="h-px flex-1 bg-slate-200" />
+                    </h3>
+                    <label className={label}>
+                        Nombre del curso{required}
+                        <input
+                            className={`${field} mt-1`}
+                            placeholder="Ej. Actualización fiscal y declaración de ISR"
+                            value={course.data.title}
+                            onChange={(e) =>
+                                course.setData('title', e.target.value)
+                            }
+                            maxLength={160}
+                            required
+                        />
+                    </label>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className={label}>
+                            Área{required}
+                            <select
+                                className={`${field} mt-1`}
+                                value={course.data.area}
+                                onChange={(e) =>
+                                    course.setData('area', e.target.value)
+                                }
+                            >
+                                {areaOptions.map((area) => (
+                                    <option key={area}>{area}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className={label}>
+                            Estado{required}
+                            <select
+                                className={`${field} mt-1`}
+                                value={course.data.status}
+                                onChange={(e) =>
+                                    course.setData('status', e.target.value)
+                                }
+                            >
+                                {Object.entries(COURSE_STATUS_OPTIONS).map(
+                                    ([value, text]) => (
+                                        <option key={value} value={value}>
+                                            {text}
+                                        </option>
+                                    ),
+                                )}
+                            </select>
+                        </label>
+                    </div>
+                    <div className={label}>
+                        Modalidad{required}
+                        <div
+                            className="mt-1 grid grid-cols-3 gap-3"
+                            role="radiogroup"
+                            aria-label="Modalidad"
+                        >
+                            {COURSE_MODALITY.map((item) => {
+                                const Icon = item.icon;
+                                const active =
+                                    course.data.modality === item.value;
+
+                                return (
+                                    <button
+                                        key={item.value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={active}
+                                        onClick={() =>
+                                            course.setData(
+                                                'modality',
+                                                item.value,
+                                            )
+                                        }
+                                        className={`inline-flex h-12 items-center justify-center gap-2 rounded-xl border text-sm font-semibold transition ${active ? 'border-[#640000] bg-[#7a0a0a] text-white shadow' : 'border-slate-300 bg-white text-slate-700 hover:border-[#c9a36a]'}`}
+                                    >
+                                        <Icon className="size-4" /> {item.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <h3 className="flex items-center gap-3 pt-2 text-lg font-bold text-[#061633]">
+                        Programación y acceso
+                        <span className="h-px flex-1 bg-slate-200" />
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className={label}>
+                            Fecha{required}
+                            <input
+                                className={`${field} mt-1`}
+                                type="date"
+                                min={new Date().toLocaleDateString('en-CA')}
+                                value={course.data.starts_on}
+                                onChange={(e) =>
+                                    course.setData('starts_on', e.target.value)
+                                }
+                                required
+                            />
+                        </label>
+                        <label className={label}>
+                            Hora de inicio
+                            <input
+                                className={`${field} mt-1`}
+                                type="time"
+                                value={course.data.start_time}
+                                onChange={(e) =>
+                                    course.setData('start_time', e.target.value)
+                                }
+                            />
+                        </label>
+                        <label className={label}>
+                            Duración (horas)
+                            <input
+                                className={`${field} mt-1`}
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                value={course.data.duration_hours}
+                                onChange={(e) =>
+                                    course.setData(
+                                        'duration_hours',
+                                        e.target.value,
+                                    )
+                                }
+                            />
+                        </label>
+                        <label className={label}>
+                            Cupo máximo{required}
+                            <input
+                                className={`${field} mt-1`}
+                                type="number"
+                                min="1"
+                                value={course.data.capacity}
+                                onChange={(e) =>
+                                    course.setData('capacity', e.target.value)
+                                }
+                                required
+                            />
+                        </label>
+                    </div>
+                    <label className={label}>
+                        Enlace de la sesión
+                        <input
+                            className={`${field} mt-1`}
+                            type="url"
+                            placeholder="https://…"
+                            value={course.data.session_url}
+                            onChange={(e) =>
+                                course.setData('session_url', e.target.value)
+                            }
+                        />
+                        <span className="text-xs font-normal text-slate-500">
+                            Disponible para los participantes inscritos.
+                        </span>
+                        {course.errors.session_url && (
+                            <span className="block text-xs font-normal text-red-600">
+                                {course.errors.session_url}
+                            </span>
+                        )}
+                    </label>
+                    <label className={label}>
+                        Descripción{' '}
+                        <span className="font-normal text-slate-500">
+                            (opcional)
+                        </span>
+                        <textarea
+                            className={`${field} mt-1 h-20 py-2`}
+                            value={course.data.description}
+                            onChange={(e) =>
+                                course.setData('description', e.target.value)
+                            }
+                            maxLength={2000}
+                        />
+                    </label>
+                </div>
+
+                <aside className="h-fit rounded-2xl bg-slate-50 p-5">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-[#061633]">
+                            Así se verá el curso
+                        </h3>
+                        <span className="rounded-lg bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700">
+                            Vista previa
+                        </span>
+                    </div>
+                    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="grid h-36 place-items-center bg-[radial-gradient(circle_at_30%_20%,#a52a3b,#6b0f1c_70%)]">
+                            <GraduationCap className="size-16 text-white/80" />
+                        </div>
+                        <div className="space-y-3 p-4">
+                            <span className="inline-block rounded-md bg-[#fbe9e9] px-3 py-1 text-xs font-semibold text-[#8a0b0b]">
+                                {course.data.area}
+                            </span>
+                            <p className="text-xl leading-tight font-bold break-words text-[#061633]">
+                                {course.data.title || 'Nombre del curso'}
+                            </p>
+                            <span
+                                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${statusStyle[course.data.status] ?? ''}`}
+                            >
+                                <span className="size-2 rounded-full bg-current" />
+                                {COURSE_STATUS_OPTIONS[course.data.status]}
+                            </span>
+                            <ul className="space-y-2 text-sm text-slate-700">
+                                <li className="flex items-center gap-3">
+                                    <ModalityIcon className="size-4 text-slate-500" />
+                                    {modality.label}
+                                </li>
+                                <li className="flex items-center gap-3">
+                                    <CalendarDays className="size-4 text-slate-500" />
+                                    {dateLabel}
+                                </li>
+                                <li className="flex items-center gap-3">
+                                    <Clock3 className="size-4 text-slate-500" />
+                                    {course.data.start_time || '—'}
+                                    {hours > 0 &&
+                                        ` · ${hours} ${hours === 1 ? 'hora' : 'horas'}`}
+                                </li>
+                                <li className="flex items-center gap-3">
+                                    <Users className="size-4 text-slate-500" />
+                                    {seats > 0
+                                        ? `${seats} cupos disponibles`
+                                        : 'Sin cupo definido'}
+                                </li>
+                            </ul>
+                            <div className="rounded-lg border border-[#8a0b0b] py-2 text-center text-sm font-bold text-[#8a0b0b]">
+                                Ver detalles
+                            </div>
+                        </div>
+                    </div>
+                    <p className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+                        <Info className="size-4 shrink-0" /> La vista previa se
+                        actualiza al completar el formulario.
+                    </p>
+                </aside>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                    className={field}
-                    type="date"
-                    value={course.data.starts_on}
-                    onChange={(e) =>
-                        course.setData('starts_on', e.target.value)
-                    }
-                />
-                <input
-                    className={field}
-                    type="number"
-                    min="1"
-                    placeholder="Cupo"
-                    value={course.data.capacity}
-                    onChange={(e) => course.setData('capacity', e.target.value)}
-                />
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <p className="text-xs text-slate-500">
+                    Podrás gestionar las inscripciones después de guardar.
+                </p>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="inline-flex h-11 items-center rounded-xl border border-[#8a0b0b] px-6 text-sm font-bold text-[#8a0b0b]"
+                    >
+                        Cancelar
+                    </button>
+                    <button className={button} disabled={course.processing}>
+                        <Plus className="size-4" /> Guardar curso
+                    </button>
+                </div>
             </div>
-            <button className={button} disabled={course.processing}>
-                <Plus className="size-4" /> Guardar curso
-            </button>
         </form>
     );
 }
@@ -444,6 +706,38 @@ function EnrollForm({
 }: Pick<Props, 'courses' | 'staff'> & { onDone: () => void }) {
     const enroll = useForm({ course: '', user_ids: [] as string[] });
     const submit = useSubmit(onDone);
+    const [filter, setFilter] = useState('');
+    const selected = new Set(enroll.data.user_ids);
+    const shown = staff.filter((person) =>
+        person.name.toLowerCase().includes(filter.trim().toLowerCase()),
+    );
+    const allShown =
+        shown.length > 0 &&
+        shown.every((person) => selected.has(String(person.id)));
+    const toggle = (id: string) => {
+        const next = new Set(selected);
+
+        if (next.has(id)) {
+            next.delete(id);
+        } else {
+            next.add(id);
+        }
+
+        enroll.setData('user_ids', Array.from(next));
+    };
+    const toggleAll = () => {
+        const next = new Set(selected);
+
+        shown.forEach((person) => {
+            if (allShown) {
+                next.delete(String(person.id));
+            } else {
+                next.add(String(person.id));
+            }
+        });
+
+        enroll.setData('user_ids', Array.from(next));
+    };
 
     return (
         <form
@@ -466,31 +760,56 @@ function EnrollForm({
                     </option>
                 ))}
             </select>
-            <select
-                multiple
-                className={`${field} h-40 py-2`}
-                value={enroll.data.user_ids}
-                onChange={(e) =>
-                    enroll.setData(
-                        'user_ids',
-                        Array.from(
-                            e.target.selectedOptions,
-                            (option) => option.value,
-                        ),
-                    )
-                }
-                required
+            <div className="space-y-2">
+                <input
+                    className={field}
+                    type="search"
+                    placeholder="Buscar persona…"
+                    aria-label="Buscar persona"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                />
+                <div className="flex items-center justify-between text-xs">
+                    <label className="flex cursor-pointer items-center gap-2 font-bold text-[#061633]">
+                        <input
+                            type="checkbox"
+                            className="size-4 accent-[#640000]"
+                            checked={allShown}
+                            onChange={toggleAll}
+                        />
+                        Seleccionar todos
+                        {filter.trim() !== '' && ' los visibles'}
+                    </label>
+                    <span className="font-semibold text-[#640000]">
+                        {selected.size} seleccionada
+                        {selected.size === 1 ? '' : 's'}
+                    </span>
+                </div>
+                <ul className="max-h-56 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-300 bg-white">
+                    {shown.map((person) => (
+                        <li key={person.id}>
+                            <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-amber-50">
+                                <input
+                                    type="checkbox"
+                                    className="size-4 accent-[#640000]"
+                                    checked={selected.has(String(person.id))}
+                                    onChange={() => toggle(String(person.id))}
+                                />
+                                {person.name}
+                            </label>
+                        </li>
+                    ))}
+                    {shown.length === 0 && (
+                        <li className="px-3 py-4 text-center text-sm text-slate-500">
+                            Nadie coincide con la búsqueda.
+                        </li>
+                    )}
+                </ul>
+            </div>
+            <button
+                className={button}
+                disabled={enroll.processing || selected.size === 0}
             >
-                {staff.map((person) => (
-                    <option key={person.id} value={person.id}>
-                        {person.name}
-                    </option>
-                ))}
-            </select>
-            <p className="text-xs text-slate-500">
-                Mantén Ctrl para elegir varias personas.
-            </p>
-            <button className={button} disabled={enroll.processing}>
                 <Users className="size-4" /> Inscribir
             </button>
         </form>
@@ -499,138 +818,641 @@ function EnrollForm({
 
 function CertificationForm({
     staff,
+    nextCode,
+    firmName,
     onDone,
-}: Pick<Props, 'staff'> & { onDone: () => void }) {
+    onCancel,
+}: Pick<Props, 'staff'> & {
+    nextCode: string;
+    firmName: string;
+    onDone: () => void;
+    onCancel: () => void;
+}) {
     const cert = useForm({
         user_id: '',
         name: '',
-        issuer: '',
-        issued_on: '',
+        issuer: firmName,
+        issued_on: new Date().toLocaleDateString('en-CA'),
         expires_on: '',
+        code: nextCode,
+        attachment: null as File | null,
+        generated: true,
     });
+    const [noExpiry, setNoExpiry] = useState(true);
+    const [enlarged, setEnlarged] = useState(false);
     const submit = useSubmit(onDone);
+    const person = staff.find((item) => String(item.id) === cert.data.user_id);
+    const preview = {
+        person: person?.name ?? '',
+        course: cert.data.name,
+        issuer: cert.data.issuer || firmName,
+        code: cert.data.code || null,
+        issued_on: cert.data.issued_on,
+        firm: firmName,
+    };
+    const label = 'block text-sm font-medium text-slate-600';
 
     return (
         <form
             onSubmit={submit(cert, '/office/training/certifications')}
-            className="space-y-3"
+            className="space-y-4"
         >
-            <select
-                className={field}
-                value={cert.data.user_id}
-                onChange={(e) => cert.setData('user_id', e.target.value)}
-                required
-            >
-                <option value="">Colaborador</option>
-                {staff.map((person) => (
-                    <option key={person.id} value={person.id}>
-                        {person.name}
-                    </option>
-                ))}
-            </select>
-            <input
-                className={field}
-                placeholder="Certificación"
-                value={cert.data.name}
-                onChange={(e) => cert.setData('name', e.target.value)}
-                required
-            />
-            <input
-                className={field}
-                placeholder="Entidad emisora"
-                value={cert.data.issuer}
-                onChange={(e) => cert.setData('issuer', e.target.value)}
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs text-slate-500">
-                    Emitida
-                    <input
-                        className={field}
-                        type="date"
-                        value={cert.data.issued_on}
-                        onChange={(e) =>
-                            cert.setData('issued_on', e.target.value)
-                        }
-                        required
-                    />
-                </label>
-                <label className="text-xs text-slate-500">
-                    Vence
-                    <input
-                        className={field}
-                        type="date"
-                        value={cert.data.expires_on}
-                        onChange={(e) =>
-                            cert.setData('expires_on', e.target.value)
-                        }
-                    />
-                </label>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+                <div className="space-y-3">
+                    <h3 className="text-lg font-bold text-[#061633]">
+                        Datos de la certificación
+                    </h3>
+                    <label className={label}>
+                        Colaborador
+                        <select
+                            className={`${field} mt-1`}
+                            value={cert.data.user_id}
+                            onChange={(e) =>
+                                cert.setData('user_id', e.target.value)
+                            }
+                            required
+                        >
+                            <option value="">Selecciona un colaborador</option>
+                            {staff.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                    {item.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className={label}>
+                        Curso / certificación
+                        <input
+                            className={`${field} mt-1`}
+                            placeholder="Ej. Contabilidad y cumplimiento fiscal"
+                            value={cert.data.name}
+                            onChange={(e) =>
+                                cert.setData('name', e.target.value)
+                            }
+                            required
+                        />
+                    </label>
+                    <label className={label}>
+                        Entidad emisora
+                        <input
+                            className={`${field} mt-1`}
+                            value={cert.data.issuer}
+                            onChange={(e) =>
+                                cert.setData('issuer', e.target.value)
+                            }
+                        />
+                    </label>
+                    <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
+                        <label className={label}>
+                            Fecha de emisión
+                            <input
+                                className={`${field} mt-1`}
+                                type="date"
+                                value={cert.data.issued_on}
+                                onChange={(e) =>
+                                    cert.setData('issued_on', e.target.value)
+                                }
+                                required
+                            />
+                        </label>
+                        <label className="flex h-10 items-center gap-2 text-sm text-slate-700">
+                            <input
+                                type="checkbox"
+                                className="size-4 accent-[#640000]"
+                                checked={noExpiry}
+                                onChange={(e) => {
+                                    setNoExpiry(e.target.checked);
+
+                                    if (e.target.checked) {
+                                        cert.setData('expires_on', '');
+                                    }
+                                }}
+                            />
+                            Sin vencimiento
+                        </label>
+                        <label className={label}>
+                            Fecha de vencimiento
+                            <input
+                                className={`${field} mt-1 disabled:bg-slate-50 disabled:text-slate-400`}
+                                type="date"
+                                min={cert.data.issued_on}
+                                disabled={noExpiry}
+                                required={!noExpiry}
+                                value={cert.data.expires_on}
+                                onChange={(e) =>
+                                    cert.setData('expires_on', e.target.value)
+                                }
+                            />
+                        </label>
+                    </div>
+                    <label className={label}>
+                        Código del certificado
+                        <input
+                            className={`${field} mt-1`}
+                            value={cert.data.code}
+                            onChange={(e) =>
+                                cert.setData('code', e.target.value)
+                            }
+                            maxLength={40}
+                        />
+                        {cert.errors.code && (
+                            <span className="text-xs text-red-600">
+                                {cert.errors.code}
+                            </span>
+                        )}
+                    </label>
+                    <div className={label}>
+                        Adjuntar certificado existente
+                        <label className="mt-1 flex h-11 cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 hover:border-[#c9a36a]">
+                            <span className="truncate">
+                                {cert.data.attachment?.name ??
+                                    'Seleccionar archivo'}
+                            </span>
+                            <span className="shrink-0 text-xs text-slate-500">
+                                PDF, JPG o PNG · Opcional
+                            </span>
+                            <input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                className="sr-only"
+                                onChange={(e) =>
+                                    cert.setData(
+                                        'attachment',
+                                        e.target.files?.[0] ?? null,
+                                    )
+                                }
+                            />
+                        </label>
+                        {cert.errors.attachment && (
+                            <span className="text-xs text-red-600">
+                                {cert.errors.attachment}
+                            </span>
+                        )}
+                    </div>
+                    <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            className="mt-0.5 h-6 w-11 shrink-0 cursor-pointer appearance-none rounded-full bg-slate-300 transition before:m-0.5 before:block before:size-5 before:rounded-full before:bg-white before:transition checked:bg-[#640000] checked:before:translate-x-5"
+                            checked={cert.data.generated}
+                            onChange={(e) =>
+                                cert.setData('generated', e.target.checked)
+                            }
+                        />
+                        <span className="text-sm">
+                            <span className="block font-semibold text-[#061633]">
+                                Generar certificado con estos datos
+                            </span>
+                            <span className="text-xs text-slate-500">
+                                Se generará un certificado de {firmName} con la
+                                información ingresada.
+                            </span>
+                        </span>
+                    </label>
+                    <p className="flex gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-slate-600">
+                        <Info className="mt-0.5 size-4 shrink-0 text-blue-600" />
+                        <span>
+                            <b className="block text-slate-800">
+                                También puedes adjuntar un certificado ya
+                                emitido por otra entidad.
+                            </b>
+                            El archivo quedará como evidencia en el historial
+                            del colaborador.
+                        </span>
+                    </p>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <h3 className="flex items-center gap-2 text-lg font-bold text-[#061633]">
+                            Vista previa
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                Borrador
+                            </span>
+                        </h3>
+                        <button
+                            type="button"
+                            onClick={() => setEnlarged(true)}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium"
+                        >
+                            <Search className="size-4" /> Ampliar
+                        </button>
+                    </div>
+                    <div className="rounded-xl bg-slate-100 p-3">
+                        <CertificatePreview data={preview} draft />
+                    </div>
+                    <p className="text-xs text-slate-500">
+                        La vista previa se actualiza con los datos del
+                        formulario.
+                    </p>
+                </div>
             </div>
-            <button className={button} disabled={cert.processing}>
-                <Award className="size-4" /> Guardar certificación
-            </button>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <p className="flex items-center gap-2 text-xs text-slate-500">
+                    <Info className="size-4" /> Revisa el nombre y las fechas
+                    antes de guardar.
+                </p>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="inline-flex h-11 items-center rounded-xl border border-[#8a0b0b] px-6 text-sm font-bold text-[#8a0b0b]"
+                    >
+                        Cancelar
+                    </button>
+                    <button className={button} disabled={cert.processing}>
+                        <Award className="size-4" /> Guardar certificación
+                    </button>
+                </div>
+            </div>
+
+            {enlarged && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Vista previa ampliada"
+                    className="fixed inset-0 z-[60] grid place-items-center bg-black/70 p-4"
+                    onClick={() => setEnlarged(false)}
+                >
+                    <div
+                        className="w-full max-w-5xl rounded-xl bg-white p-3"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <CertificatePreview data={preview} draft />
+                        <button
+                            type="button"
+                            onClick={() => setEnlarged(false)}
+                            className="mt-3 inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-semibold"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            )}
         </form>
     );
 }
 
 function NeedForm({
     areaOptions,
+    staff,
     onDone,
-}: {
+    onCancel,
+}: Pick<Props, 'staff'> & {
     areaOptions: string[];
     onDone: () => void;
+    onCancel: () => void;
 }) {
     const need = useForm({
         area: areaOptions[0] ?? '',
         topic: '',
         priority: 'medium',
-        employees: '',
+        objective: '',
+        participants: [] as number[],
+        target_date: '',
     });
     const submit = useSubmit(onDone);
+    const [search, setSearch] = useState('');
+    const label = 'block text-sm font-semibold text-[#061633]';
+    const required = <span className="text-red-600"> *</span>;
+    const chosen = need.data.participants
+        .map((id) => staff.find((person) => person.id === id))
+        .filter((person): person is Props['staff'][number] => Boolean(person));
+    const suggestions =
+        search.trim().length === 0
+            ? []
+            : staff
+                  .filter(
+                      (person) =>
+                          !need.data.participants.includes(person.id) &&
+                          person.name
+                              .toLowerCase()
+                              .includes(search.trim().toLowerCase()),
+                  )
+                  .slice(0, 6);
+    const allChosen = staff.length > 0 && chosen.length === staff.length;
+    const initials = (name: string) =>
+        name
+            .split(' ')
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase())
+            .join('');
+    const priorities = [
+        {
+            value: 'low',
+            label: 'Baja',
+            active: 'bg-emerald-100 text-emerald-800',
+        },
+        {
+            value: 'medium',
+            label: 'Media',
+            active: 'bg-amber-200 text-amber-900',
+        },
+        { value: 'high', label: 'Alta', active: 'bg-red-100 text-red-800' },
+    ];
+    const priority = priorities.find(
+        (item) => item.value === need.data.priority,
+    );
+    const targetLabel = need.data.target_date
+        ? new Date(`${need.data.target_date}T12:00:00`).toLocaleDateString(
+              'es-GT',
+              { day: 'numeric', month: 'long', year: 'numeric' },
+          )
+        : 'Sin fecha';
+    const summaryRow = 'grid grid-cols-[6.5rem_1fr] items-start gap-3 text-sm';
 
     return (
         <form
             onSubmit={submit(need, '/office/training/needs')}
-            className="space-y-3"
+            className="space-y-4"
         >
-            <div className="grid gap-3 sm:grid-cols-2">
-                <select
-                    className={field}
-                    value={need.data.area}
-                    onChange={(e) => need.setData('area', e.target.value)}
-                >
-                    {areaOptions.map((area) => (
-                        <option key={area}>{area}</option>
-                    ))}
-                </select>
-                <select
-                    className={field}
-                    value={need.data.priority}
-                    onChange={(e) => need.setData('priority', e.target.value)}
-                >
-                    <option value="high">Prioridad alta</option>
-                    <option value="medium">Prioridad media</option>
-                    <option value="low">Prioridad baja</option>
-                </select>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                        <label className={label}>
+                            Área{required}
+                            <select
+                                className={`${field} mt-1`}
+                                value={need.data.area}
+                                onChange={(e) =>
+                                    need.setData('area', e.target.value)
+                                }
+                            >
+                                {areaOptions.map((area) => (
+                                    <option key={area}>{area}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <div className={label}>
+                            Prioridad{required}
+                            <div
+                                className="mt-1 flex h-11 overflow-hidden rounded-xl border border-slate-300 bg-slate-100"
+                                role="radiogroup"
+                                aria-label="Prioridad"
+                            >
+                                {priorities.map((item) => (
+                                    <button
+                                        key={item.value}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={
+                                            need.data.priority === item.value
+                                        }
+                                        onClick={() =>
+                                            need.setData('priority', item.value)
+                                        }
+                                        className={`min-w-20 px-4 text-sm font-semibold transition ${need.data.priority === item.value ? item.active : 'text-slate-600 hover:bg-white'}`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <label className={label}>
+                        Tema de capacitación{required}
+                        <input
+                            className={`${field} mt-1`}
+                            placeholder="Ej. Actualización fiscal y declaración de ISR"
+                            value={need.data.topic}
+                            onChange={(e) =>
+                                need.setData('topic', e.target.value)
+                            }
+                            maxLength={160}
+                            required
+                        />
+                    </label>
+                    <label className={label}>
+                        Objetivo o necesidad detectada{required}
+                        <textarea
+                            className={`${field} mt-1 h-24 py-2`}
+                            placeholder="¿Qué debe poder hacer el equipo después de la capacitación?"
+                            value={need.data.objective}
+                            onChange={(e) =>
+                                need.setData('objective', e.target.value)
+                            }
+                            maxLength={1000}
+                            required
+                        />
+                    </label>
+                    <div className={label}>
+                        Colaboradores que necesitan capacitación{required}
+                        <div className="relative mt-1">
+                            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                className={`${field} pl-9`}
+                                placeholder="Buscar por nombre…"
+                                aria-label="Buscar colaborador"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                            {suggestions.length > 0 && (
+                                <ul className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                                    {suggestions.map((person) => (
+                                        <li key={person.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    need.setData(
+                                                        'participants',
+                                                        [
+                                                            ...need.data
+                                                                .participants,
+                                                            person.id,
+                                                        ],
+                                                    );
+                                                    setSearch('');
+                                                }}
+                                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-normal hover:bg-amber-50"
+                                            >
+                                                <span className="grid size-7 place-items-center rounded-full bg-slate-100 text-[11px] font-bold">
+                                                    {initials(person.name)}
+                                                </span>
+                                                {person.name}
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {chosen.map((person) => (
+                                <span
+                                    key={person.id}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 py-1 pr-1.5 pl-3 text-sm font-normal"
+                                >
+                                    {person.name}
+                                    <button
+                                        type="button"
+                                        aria-label={`Quitar a ${person.name}`}
+                                        onClick={() =>
+                                            need.setData(
+                                                'participants',
+                                                need.data.participants.filter(
+                                                    (id) => id !== person.id,
+                                                ),
+                                            )
+                                        }
+                                        className="grid size-5 place-items-center rounded-full text-slate-500 hover:bg-slate-200"
+                                    >
+                                        <X className="size-3.5" />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-sm font-normal">
+                            <label className="flex cursor-pointer items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="size-4 accent-[#640000]"
+                                    checked={allChosen}
+                                    onChange={(e) =>
+                                        need.setData(
+                                            'participants',
+                                            e.target.checked
+                                                ? staff.map(
+                                                      (person) => person.id,
+                                                  )
+                                                : [],
+                                        )
+                                    }
+                                />
+                                Seleccionar a todo el equipo
+                            </label>
+                            <span className="text-slate-600">
+                                {chosen.length} seleccionado
+                                {chosen.length === 1 ? '' : 's'}
+                            </span>
+                        </div>
+                        {need.errors.participants && (
+                            <span className="text-xs font-normal text-red-600">
+                                {need.errors.participants}
+                            </span>
+                        )}
+                    </div>
+                    <label className={label}>
+                        Fecha objetivo{' '}
+                        <span className="font-normal text-slate-500">
+                            (opcional)
+                        </span>
+                        <input
+                            className={`${field} mt-1`}
+                            type="date"
+                            min={new Date().toLocaleDateString('en-CA')}
+                            value={need.data.target_date}
+                            onChange={(e) =>
+                                need.setData('target_date', e.target.value)
+                            }
+                        />
+                        {need.errors.target_date && (
+                            <span className="text-xs font-normal text-red-600">
+                                {need.errors.target_date}
+                            </span>
+                        )}
+                    </label>
+                </div>
+
+                <aside className="h-fit space-y-4 rounded-2xl bg-slate-50 p-5">
+                    <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
+                        <span className="grid size-11 place-items-center rounded-xl bg-[#fbe9e9] text-[#8a0b0b]">
+                            <ClipboardList className="size-5" />
+                        </span>
+                        <h3 className="text-lg font-bold text-[#061633]">
+                            Resumen de la solicitud
+                        </h3>
+                    </div>
+                    <dl className="space-y-4">
+                        <div className={summaryRow}>
+                            <dt className="text-slate-500">Área</dt>
+                            <dd>{need.data.area || '—'}</dd>
+                        </div>
+                        <div className={summaryRow}>
+                            <dt className="text-slate-500">Prioridad</dt>
+                            <dd>
+                                <span
+                                    className={`rounded-full px-3 py-1 text-xs font-bold ${priority?.active ?? ''}`}
+                                >
+                                    {priority?.label}
+                                </span>
+                            </dd>
+                        </div>
+                        <div className={summaryRow}>
+                            <dt className="text-slate-500">Tema</dt>
+                            <dd className="break-words">
+                                {need.data.topic || '—'}
+                            </dd>
+                        </div>
+                        <div className={summaryRow}>
+                            <dt className="text-slate-500">Participantes</dt>
+                            <dd>
+                                {chosen.length === 0 ? (
+                                    '—'
+                                ) : (
+                                    <>
+                                        <span className="flex flex-wrap gap-1.5">
+                                            {chosen
+                                                .slice(0, 6)
+                                                .map((person) => (
+                                                    <span
+                                                        key={person.id}
+                                                        title={person.name}
+                                                        className="grid size-9 place-items-center rounded-full bg-[#fbe9e9] text-xs font-bold text-[#8a0b0b]"
+                                                    >
+                                                        {initials(person.name)}
+                                                    </span>
+                                                ))}
+                                            {chosen.length > 6 && (
+                                                <span className="grid size-9 place-items-center rounded-full bg-slate-200 text-xs font-bold">
+                                                    +{chosen.length - 6}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="mt-1 block text-slate-600">
+                                            {chosen.length} colaborador
+                                            {chosen.length === 1 ? '' : 'es'}
+                                        </span>
+                                    </>
+                                )}
+                            </dd>
+                        </div>
+                        <div className={summaryRow}>
+                            <dt className="text-slate-500">Fecha objetivo</dt>
+                            <dd>{targetLabel}</dd>
+                        </div>
+                    </dl>
+                    <p className="flex gap-2 border-t border-slate-200 pt-4 text-xs text-slate-500">
+                        <Info className="mt-0.5 size-4 shrink-0" />
+                        Esta necesidad quedará disponible para planificar una
+                        capacitación.
+                    </p>
+                </aside>
             </div>
-            <input
-                className={field}
-                placeholder="Tema sugerido"
-                value={need.data.topic}
-                onChange={(e) => need.setData('topic', e.target.value)}
-                required
-            />
-            <input
-                className={field}
-                type="number"
-                min="0"
-                placeholder="Personas que lo necesitan"
-                value={need.data.employees}
-                onChange={(e) => need.setData('employees', e.target.value)}
-            />
-            <button className={button} disabled={need.processing}>
-                <Plus className="size-4" /> Guardar necesidad
-            </button>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <p className="text-xs text-slate-500">
+                    Puedes editar esta necesidad después de guardarla.
+                </p>
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="inline-flex h-11 items-center rounded-xl border border-[#8a0b0b] px-6 text-sm font-bold text-[#8a0b0b]"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        className={button}
+                        disabled={
+                            need.processing ||
+                            need.data.participants.length === 0
+                        }
+                    >
+                        <Plus className="size-4" /> Guardar necesidad
+                    </button>
+                </div>
+            </div>
         </form>
     );
 }
@@ -679,16 +1501,20 @@ function ManageDialog({
     courses,
     staff,
     areaOptions,
+    nextCode,
+    firmName,
 }: { kind: DialogKind | null; onClose: () => void } & Pick<
     Props,
     'courses' | 'staff' | 'areaOptions'
->) {
+> & { nextCode: string; firmName: string }) {
     return (
         <Dialog
             open={kind !== null}
             onOpenChange={(open) => !open && onClose()}
         >
-            <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-2xl">
+            <DialogContent
+                className={`max-h-[90dvh] overflow-y-auto bg-white text-[#142135] ${kind === 'cert' || kind === 'need' || kind === 'course' ? 'sm:max-w-5xl' : 'sm:max-w-2xl'}`}
+            >
                 {kind && (
                     <>
                         <DialogTitle>{DIALOG_COPY[kind].title}</DialogTitle>
@@ -699,6 +1525,7 @@ function ManageDialog({
                             <CourseForm
                                 areaOptions={areaOptions}
                                 onDone={onClose}
+                                onCancel={onClose}
                             />
                         )}
                         {kind === 'enroll' && (
@@ -709,12 +1536,20 @@ function ManageDialog({
                             />
                         )}
                         {kind === 'cert' && (
-                            <CertificationForm staff={staff} onDone={onClose} />
+                            <CertificationForm
+                                staff={staff}
+                                nextCode={nextCode}
+                                firmName={firmName}
+                                onDone={onClose}
+                                onCancel={onClose}
+                            />
                         )}
                         {kind === 'need' && (
                             <NeedForm
                                 areaOptions={areaOptions}
+                                staff={staff}
                                 onDone={onClose}
+                                onCancel={onClose}
                             />
                         )}
                     </>
@@ -1149,6 +1984,7 @@ export default function Training(props: Props) {
                                         <th>Emitida</th>
                                         <th>Vence</th>
                                         <th>Estado</th>
+                                        <th>Certificado</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -1177,12 +2013,40 @@ export default function Training(props: Props) {
                                                           : 'Vencida'}
                                                 </span>
                                             </td>
+                                            <td>
+                                                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#8a0b0b]">
+                                                    {item.generated && (
+                                                        <a
+                                                            href={`/office/training/certifications/${item.id}/certificate`}
+                                                            className="inline-flex items-center gap-1 hover:underline"
+                                                        >
+                                                            <FileText className="size-3.5" />{' '}
+                                                            Ver certificado
+                                                        </a>
+                                                    )}
+                                                    {item.has_file && (
+                                                        <a
+                                                            href={`/office/training/certifications/${item.id}/file`}
+                                                            className="inline-flex items-center gap-1 hover:underline"
+                                                        >
+                                                            <Download className="size-3.5" />{' '}
+                                                            Archivo
+                                                        </a>
+                                                    )}
+                                                    {!item.generated &&
+                                                        !item.has_file && (
+                                                            <span className="font-normal text-slate-400">
+                                                                —
+                                                            </span>
+                                                        )}
+                                                </div>
+                                            </td>
                                         </tr>
                                     ))}
                                     {certifications.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={6}
+                                                colSpan={7}
                                                 className="py-10 text-center text-slate-500"
                                             >
                                                 No hay certificaciones
@@ -1206,6 +2070,8 @@ export default function Training(props: Props) {
                             courses={courses}
                             staff={props.staff}
                             areaOptions={props.areaOptions}
+                            nextCode={props.next_certificate_code}
+                            firmName={props.firm_name}
                         />
                     )}
                 </div>
@@ -1238,7 +2104,28 @@ function NeedsTable({
                     {needs.map((need) => (
                         <tr key={need.id}>
                             <td className="py-2.5">{need.area}</td>
-                            <td className="font-bold">{need.topic}</td>
+                            <td>
+                                <p className="font-bold">{need.topic}</p>
+                                {need.objective && (
+                                    <p className="max-w-md text-xs text-slate-500">
+                                        {need.objective}
+                                    </p>
+                                )}
+                                {need.participants.length > 0 && (
+                                    <p
+                                        className="text-xs text-slate-500"
+                                        title={need.participants.join(', ')}
+                                    >
+                                        {need.participants
+                                            .slice(0, 3)
+                                            .join(', ')}
+                                        {need.participants.length > 3 &&
+                                            ` y ${need.participants.length - 3} más`}
+                                        {need.target_date &&
+                                            ` · Meta ${formatDate(need.target_date)}`}
+                                    </p>
+                                )}
+                            </td>
                             <td>
                                 <span
                                     className={`rounded-md px-2 py-1 text-xs font-bold ${PRIORITY[need.priority].style}`}

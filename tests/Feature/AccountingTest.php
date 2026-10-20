@@ -29,7 +29,7 @@ test('owner installs the professional starter chart without creating duplicates'
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
-    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(20);
+    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(27);
     $this->assertDatabaseHas('ledger_accounts', [
         'company_id' => $f['companyId'],
         'code' => '2102',
@@ -38,7 +38,7 @@ test('owner installs the professional starter chart without creating duplicates'
     ]);
 
     $this->post(route('accounting.accountTemplate', $f['uuid']))->assertSessionHasNoErrors();
-    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(20);
+    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(27);
 });
 
 test('draft entries keep references and secure support documents that become immutable after posting', function () {

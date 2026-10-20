@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AccountingService;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
@@ -70,6 +71,9 @@ class TrainingService
                 'area' => $course->area,
                 'modality' => $course->modality,
                 'starts_on' => $course->starts_on,
+                'start_time' => $course->start_time === null ? null : substr((string) $course->start_time, 0, 5),
+                'duration_hours' => $course->duration_hours === null ? null : (float) $course->duration_hours,
+                'session_url' => $course->session_url,
                 'capacity' => $course->capacity,
                 'status' => $course->status,
                 'enrolled' => ($byCourse->get($course->id) ?? collect())->count(),
@@ -85,7 +89,12 @@ class TrainingService
                 'issued_on' => $cert->issued_on,
                 'expires_on' => $cert->expires_on,
                 'state' => $state($cert),
+                'code' => $cert->code,
+                'generated' => (bool) $cert->generated,
+                'has_file' => $cert->attachment_path !== null,
             ])->values()->all(),
+            'next_certificate_code' => $this->nextCertificateCode($organization),
+            'firm_name' => $organization->name,
             'employees' => $staff->map(function (stdClass $member) use ($enrollments): array {
                 $mine = $enrollments->where('user_id', $member->id);
 
@@ -104,6 +113,9 @@ class TrainingService
                 'priority' => $need->priority,
                 'employees' => (int) $need->employees,
                 'status' => $need->status,
+                'objective' => $need->objective,
+                'target_date' => $need->target_date,
+                'participants' => $this->participantNames($need->participants, $staff),
             ])->all(),
             'staff' => $staff->map(fn (stdClass $member): array => ['id' => (int) $member->id, 'name' => $member->name])->all(),
         ];
@@ -118,7 +130,10 @@ class TrainingService
             'area' => $data['area'],
             'modality' => $data['modality'],
             'starts_on' => $data['starts_on'] ?? null,
+            'start_time' => $data['start_time'] ?? null,
+            'duration_hours' => $data['duration_hours'] ?? null,
             'capacity' => $data['capacity'] ?? null,
+            'session_url' => $data['session_url'] ?? null,
             'status' => $data['status'] ?? 'scheduled',
             'description' => $data['description'] ?? null,
             'created_by' => $actor->id,
@@ -169,6 +184,41 @@ class TrainingService
         $this->accounting->audit($organization, $actor, 'training.progress_updated', 'training_enrollments', $enrollmentId, ['progress' => $progress]);
     }
 
+    /**
+     * Names of the collaborators stored as a JSON list of user ids in a training need.
+     *
+     * @param  Collection<int, stdClass>  $staff
+     * @return list<string>
+     */
+    private function participantNames(?string $json, Collection $staff): array
+    {
+        $ids = $json === null ? [] : json_decode($json, true);
+        $names = [];
+
+        foreach (is_array($ids) ? $ids : [] as $id) {
+            $member = $staff->firstWhere('id', (int) $id);
+
+            if ($member !== null) {
+                $names[] = (string) $member->name;
+            }
+        }
+
+        return $names;
+    }
+
+    /** Next free certificate code of the year, such as AF-2026-00128. */
+    public function nextCertificateCode(Organization $organization): string
+    {
+        $prefix = 'AF-'.now()->year.'-';
+        $number = DB::table('training_certifications')->where('training_certifications.organization_id', $organization->id)->where('code', 'like', $prefix.'%')->count() + 1;
+
+        while (DB::table('training_certifications')->where('training_certifications.organization_id', $organization->id)->where('code', $prefix.str_pad((string) $number, 5, '0', STR_PAD_LEFT))->exists()) {
+            $number++;
+        }
+
+        return $prefix.str_pad((string) $number, 5, '0', STR_PAD_LEFT);
+    }
+
     /** @param array<string, mixed> $data */
     public function createCertification(Organization $organization, User $actor, array $data): int
     {
@@ -176,9 +226,13 @@ class TrainingService
             'organization_id' => $organization->id,
             'user_id' => $data['user_id'],
             'name' => $data['name'],
+            'code' => ($data['code'] ?? null) ?: $this->nextCertificateCode($organization),
             'issuer' => $data['issuer'] ?? null,
             'issued_on' => $data['issued_on'],
             'expires_on' => $data['expires_on'] ?? null,
+            'attachment_path' => $data['attachment_path'] ?? null,
+            'attachment_name' => $data['attachment_name'] ?? null,
+            'generated' => (bool) ($data['generated'] ?? false),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -195,7 +249,10 @@ class TrainingService
             'area' => $data['area'],
             'topic' => $data['topic'],
             'priority' => $data['priority'],
-            'employees' => $data['employees'] ?? 0,
+            'objective' => $data['objective'] ?? null,
+            'participants' => isset($data['participants']) ? json_encode(array_values(array_map('intval', $data['participants'])), JSON_THROW_ON_ERROR) : null,
+            'employees' => isset($data['participants']) ? count($data['participants']) : ($data['employees'] ?? 0),
+            'target_date' => $data['target_date'] ?? null,
             'status' => 'pending',
             'created_by' => $actor->id,
             'created_at' => now(),

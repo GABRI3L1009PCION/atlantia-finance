@@ -23,19 +23,23 @@ Route::prefix('v1')->name('api.v1.')->middleware(['api.token', 'throttle:atlanti
         Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
         Route::get('customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customers.show');
         Route::patch('customers/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->name('customers.update');
+        Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->whereNumber('customer')->name('customers.destroy');
 
         Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers.index');
         Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
         Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->whereNumber('supplier')->name('suppliers.show');
         Route::patch('suppliers/{supplier}', [SupplierController::class, 'update'])->whereNumber('supplier')->name('suppliers.update');
+        Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy'])->whereNumber('supplier')->name('suppliers.destroy');
 
         Route::get('sales-invoices', [SalesInvoiceController::class, 'index'])->name('salesInvoices.index');
         Route::post('sales-invoices', [SalesInvoiceController::class, 'store'])->name('salesInvoices.store');
         Route::get('sales-invoices/{invoice}', [SalesInvoiceController::class, 'show'])->whereUuid('invoice')->name('salesInvoices.show');
+        Route::post('sales-invoices/{invoice}/void', [SalesInvoiceController::class, 'void'])->whereUuid('invoice')->name('salesInvoices.void');
 
         Route::get('purchase-documents', [PurchaseDocumentController::class, 'index'])->name('purchaseDocuments.index');
         Route::post('purchase-documents', [PurchaseDocumentController::class, 'store'])->name('purchaseDocuments.store');
         Route::get('purchase-documents/{document}', [PurchaseDocumentController::class, 'show'])->whereUuid('document')->name('purchaseDocuments.show');
+        Route::post('purchase-documents/{document}/void', [PurchaseDocumentController::class, 'void'])->whereUuid('document')->name('purchaseDocuments.void');
 
         Route::get('receivables', [BalanceController::class, 'receivables'])->name('receivables');
         Route::get('payables', [BalanceController::class, 'payables'])->name('payables');

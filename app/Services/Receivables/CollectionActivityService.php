@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Receivables;
 
+use App\Events\Work\CollectionActivityRecorded;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
@@ -90,6 +91,8 @@ class CollectionActivityService
                     'invoice_ids' => $data['invoice_id'] === null ? [] : [(int) $data['invoice_id']], 'notes' => $data['notes'], 'collection_activity_id' => $id,
                 ]);
             }
+
+            event(new CollectionActivityRecorded($organization->id, $actor->id, null, 'collection_activities', $id, ['customer_id' => (int) $customer->id, 'invoice_id' => $data['invoice_id']]));
 
             return $id;
         });

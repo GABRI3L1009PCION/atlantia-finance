@@ -20,6 +20,8 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { InviteDialog } from '@/components/office-admin/kit';
+import type { FormOptions } from '@/components/office-admin/kit';
 import {
     TableFilterSelect,
     TablePagination,
@@ -38,6 +40,10 @@ type AnyRow = Record<string, any>;
 type Props = {
     screen: string;
     notice: string | null;
+    officeQuota?: { limit: number | null; used: number };
+    userQuota?: { limit: number | null; used: number } | null;
+    canCreateOffice?: boolean;
+    invite?: { officeIds: number[]; options: FormOptions } | null;
     admin: {
         summary: Record<string, number>;
         lookups: {
@@ -83,6 +89,7 @@ const iconButton =
 const screens = [
     ['offices', 'Oficinas'],
     ['users-roles', 'Personal'],
+    ['roles', 'Roles y permisos'],
     ['company-assignments', 'Asignaciones'],
     ['task-templates', 'Plantillas de tareas'],
     ['reviews', 'Revisiones'],
@@ -107,6 +114,16 @@ const statusLabels: Record<string, string> = {
     not_started: 'Sin iniciar',
     ready_to_close: 'Lista para cierre',
     closed: 'Cerrado',
+    accountant_in_charge: 'Contador encargado',
+    accounting_assistant: 'Auxiliar contable',
+    supervisor: 'Supervisor',
+    tax_specialist: 'Encargado fiscal',
+    treasury: 'Tesorería',
+    accounts_receivable: 'Cuentas por cobrar',
+    accounts_payable: 'Cuentas por pagar',
+    payroll: 'Nómina',
+    auditor: 'Auditor',
+    read_only: 'Consulta (solo lectura)',
 };
 
 function label(value?: string | null) {
@@ -273,49 +290,59 @@ export default function WorkAdmin(props: Props) {
     const readOnly = Boolean(usePage().props.executiveReadOnly);
     const [manageUser, setManageUser] = useState<string | null>(null);
     const [roleOpen, setRoleOpen] = useState(false);
-    const [rolesOpen, setRolesOpen] = useState(false);
-    const [roleView, setRoleView] = useState('');
+    const [inviteOpen, setInviteOpen] = useState(false);
+    const [assignOpen, setAssignOpen] = useState(false);
+    const [userLimitOpen, setUserLimitOpen] = useState(false);
+    const userLimitReached =
+        props.userQuota?.limit != null &&
+        props.userQuota.used >= props.userQuota.limit;
+    const inviteScope = {
+        global: true,
+        selected: null,
+        offices: props.admin.lookups.offices.filter((office) =>
+            props.invite?.officeIds.includes(Number(office.id)),
+        ) as { id: number; name: string }[],
+    };
 
     return (
         <>
             <AdminShell
                 {...props}
                 actions={
-                    props.screen === 'offices' && !readOnly ? (
-                        <NewOfficeButton />
-                    ) : props.screen === 'users-roles' && !readOnly ? (
-                        <>
-                            <button
-                                type="button"
-                                className={ghostButton}
-                                onClick={() => {
-                                    setRoleView(
-                                        String(
-                                            props.admin.usersRoles.roles[0]
-                                                ?.id ?? '',
-                                        ),
-                                    );
-                                    setRolesOpen(true);
-                                }}
-                            >
-                                <ShieldCheck className="size-4" /> Roles y
-                                permisos
-                            </button>
-                            <button
-                                type="button"
-                                className={ghostButton}
-                                onClick={() => setManageUser('')}
-                            >
-                                <UserCog className="size-4" /> Gestionar usuario
-                            </button>
-                            <button
-                                type="button"
-                                className={button}
-                                onClick={() => setRoleOpen(true)}
-                            >
-                                <Plus className="size-4" /> Crear rol
-                            </button>
-                        </>
+                    props.screen === 'offices' &&
+                    !readOnly &&
+                    props.canCreateOffice !== false ? (
+                        <NewOfficeButton quota={props.officeQuota} />
+                    ) : props.screen === 'users-roles' &&
+                      !readOnly &&
+                      props.invite ? (
+                        <button
+                            type="button"
+                            className={button}
+                            onClick={() =>
+                                userLimitReached
+                                    ? setUserLimitOpen(true)
+                                    : setInviteOpen(true)
+                            }
+                        >
+                            <Plus className="size-4" /> Nuevo colaborador
+                        </button>
+                    ) : props.screen === 'company-assignments' && !readOnly ? (
+                        <button
+                            type="button"
+                            className={button}
+                            onClick={() => setAssignOpen(true)}
+                        >
+                            <Plus className="size-4" /> Asignar responsable
+                        </button>
+                    ) : props.screen === 'roles' && !readOnly ? (
+                        <button
+                            type="button"
+                            className={button}
+                            onClick={() => setRoleOpen(true)}
+                        >
+                            <Plus className="size-4" /> Crear rol
+                        </button>
                     ) : undefined
                 }
             >
@@ -331,6 +358,9 @@ export default function WorkAdmin(props: Props) {
                         readOnly={readOnly}
                         onManage={setManageUser}
                     />
+                )}
+                {props.screen === 'roles' && (
+                    <RolesScreen admin={props.admin} />
                 )}
                 {props.screen === 'company-assignments' && (
                     <CompanyAssignmentsScreen admin={props.admin} />
@@ -351,6 +381,48 @@ export default function WorkAdmin(props: Props) {
                     <ClosingsScreen admin={props.admin} />
                 )}
             </AdminShell>
+            {props.screen === 'users-roles' && props.userQuota && (
+                <Dialog open={userLimitOpen} onOpenChange={setUserLimitOpen}>
+                    <DialogContent className="bg-white text-[#142135] sm:max-w-md">
+                        <div className="mx-auto grid size-14 place-items-center rounded-full bg-red-50 text-[#640000]">
+                            <UsersRound className="size-7" />
+                        </div>
+                        <DialogTitle className="text-center">
+                            Alcanzaste el límite de usuarios
+                        </DialogTitle>
+                        <DialogDescription className="text-center">
+                            Tu plan permite hasta {props.userQuota.limit}{' '}
+                            usuarios y ya tienes {props.userQuota.used}{' '}
+                            ocupados, contando las invitaciones pendientes. Para
+                            agregar otro puedes desactivar a alguien que ya no
+                            use el sistema, cancelar una invitación pendiente o
+                            ampliar tu plan desde la sección de suscripción.
+                        </DialogDescription>
+                        <div className="flex flex-wrap justify-center gap-2 pt-2">
+                            <Link
+                                href="/office/subscription"
+                                className={button}
+                            >
+                                Ver mi plan
+                            </Link>
+                            <button
+                                type="button"
+                                className={ghostButton}
+                                onClick={() => setUserLimitOpen(false)}
+                            >
+                                Entendido
+                            </button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
+            {props.screen === 'company-assignments' && !readOnly && (
+                <AssignmentDialog
+                    admin={props.admin}
+                    open={assignOpen}
+                    onClose={() => setAssignOpen(false)}
+                />
+            )}
             {props.screen === 'users-roles' && !readOnly && (
                 <>
                     <Dialog
@@ -372,45 +444,18 @@ export default function WorkAdmin(props: Props) {
                             )}
                         </DialogContent>
                     </Dialog>
-                    <Dialog open={rolesOpen} onOpenChange={setRolesOpen}>
-                        <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-4xl">
-                            <DialogTitle>Roles y permisos</DialogTitle>
-                            <DialogDescription>
-                                Elige un rol para ver sus permisos
-                                {props.admin.usersRoles.roles.some(
-                                    (role) => !role.is_system,
-                                )
-                                    ? ' o editar los roles personalizados.'
-                                    : '.'}
-                            </DialogDescription>
-                            <select
-                                className={input}
-                                value={roleView}
-                                onChange={(event) =>
-                                    setRoleView(event.target.value)
-                                }
-                                aria-label="Rol"
-                            >
-                                {props.admin.usersRoles.roles.map((role) => (
-                                    <option key={role.id} value={role.id}>
-                                        {role.name}
-                                        {role.status === 'inactive'
-                                            ? ' (inactivo)'
-                                            : ''}
-                                    </option>
-                                ))}
-                            </select>
-                            {props.admin.usersRoles.roles
-                                .filter((role) => String(role.id) === roleView)
-                                .map((role) => (
-                                    <RoleCard
-                                        key={role.id}
-                                        role={role}
-                                        admin={props.admin}
-                                    />
-                                ))}
-                        </DialogContent>
-                    </Dialog>
+                    {props.invite && (
+                        <InviteDialog
+                            open={inviteOpen}
+                            onClose={() => setInviteOpen(false)}
+                            scope={inviteScope}
+                            options={props.invite.options}
+                        />
+                    )}
+                </>
+            )}
+            {props.screen === 'roles' && !readOnly && (
+                <>
                     <Dialog open={roleOpen} onOpenChange={setRoleOpen}>
                         <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-3xl">
                             <DialogTitle>Crear rol</DialogTitle>
@@ -593,18 +638,54 @@ function OfficeForm({
     );
 }
 
-function NewOfficeButton() {
+function NewOfficeButton({
+    quota,
+}: {
+    quota?: { limit: number | null; used: number };
+}) {
     const [creating, setCreating] = useState(false);
+    const [limitReached, setLimitReached] = useState(false);
+    const atLimit = quota?.limit != null && quota.used >= quota.limit;
 
     return (
         <>
             <button
                 type="button"
                 className={button}
-                onClick={() => setCreating(true)}
+                onClick={() =>
+                    atLimit ? setLimitReached(true) : setCreating(true)
+                }
             >
                 <Plus className="size-4" /> Nueva oficina
             </button>
+            <Dialog open={limitReached} onOpenChange={setLimitReached}>
+                <DialogContent className="bg-white text-[#142135] sm:max-w-md">
+                    <div className="mx-auto grid size-14 place-items-center rounded-full bg-red-50 text-[#640000]">
+                        <Building2 className="size-7" />
+                    </div>
+                    <DialogTitle className="text-center">
+                        Alcanzaste el límite de oficinas
+                    </DialogTitle>
+                    <DialogDescription className="text-center">
+                        Tu plan permite hasta {quota?.limit} oficinas y ya
+                        tienes {quota?.used} registradas. Para agregar otra
+                        puedes desactivar una que ya no uses o ampliar tu plan
+                        desde la sección de suscripción.
+                    </DialogDescription>
+                    <div className="flex flex-wrap justify-center gap-2 pt-2">
+                        <Link href="/office/subscription" className={button}>
+                            Ver mi plan
+                        </Link>
+                        <button
+                            type="button"
+                            className={ghostButton}
+                            onClick={() => setLimitReached(false)}
+                        >
+                            Entendido
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
             <Dialog open={creating} onOpenChange={setCreating}>
                 <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-4xl">
                     <DialogTitle>Nueva oficina</DialogTitle>
@@ -826,7 +907,7 @@ function OfficeDetailScreen({ admin }: { admin: Props['admin'] }) {
 const organizationRoles: Record<string, string> = {
     owner: 'Propietario',
     admin: 'Administrador',
-    member: 'Miembro',
+    member: 'Colaborador',
     viewer: 'Lectura',
 };
 
@@ -996,8 +1077,28 @@ function UsersRolesScreen({
                     noun="usuarios"
                 />
             </section>
-            <RoleHistory items={admin.roleHistory} />
             <RoleAssignmentHistory items={admin.usersRoles.roleAssignments} />
+        </div>
+    );
+}
+
+function RolesScreen({ admin }: { admin: Props['admin'] }) {
+    const roles = admin.usersRoles.roles;
+
+    return (
+        <div className="space-y-5">
+            <section className={`${panel} overflow-hidden`}>
+                <TableHeader
+                    title="Roles"
+                    action={`${roles.length} roles · ${roles.filter((role) => !role.is_system).length} personalizados`}
+                />
+                <div className="grid gap-4 p-5 lg:grid-cols-2">
+                    {roles.map((role) => (
+                        <RoleCard key={role.id} role={role} admin={admin} />
+                    ))}
+                </div>
+            </section>
+            <RoleHistory items={admin.roleHistory} />
         </div>
     );
 }
@@ -1242,7 +1343,7 @@ function UserMembershipForm({
                 >
                     <option value="admin">Admin oficina</option>
                     <option value="supervisor">Supervisor</option>
-                    <option value="member">Miembro</option>
+                    <option value="member">Colaborador</option>
                     <option value="viewer">Lectura</option>
                 </select>
                 <select
@@ -1625,10 +1726,9 @@ function PermissionGrid({
 function CompanyAssignmentsScreen({ admin }: { admin: Props['admin'] }) {
     return (
         <div className="space-y-5">
-            <AssignmentForm admin={admin} />
             <section className={`${panel} overflow-hidden`}>
                 <TableHeader
-                    title="Company Assignments"
+                    title="Asignaciones por empresa"
                     action="Responsables reales por empresa y rol"
                 />
                 <SimpleTable
@@ -1649,7 +1749,7 @@ function CompanyAssignmentsScreen({ admin }: { admin: Props['admin'] }) {
                                 {item.user_email}
                             </span>
                         </span>,
-                        `${label(item.assignment_role)}${item.is_primary ? ' · Principal' : ''}`,
+                        `${assignmentRoleLabels[item.assignment_role] ?? label(item.assignment_role)}${item.is_primary ? ' · Principal' : ''}`,
                         item.office_name,
                         <Badge key="status" value={item.status} />,
                         item.status === 'active' ? (
@@ -1675,102 +1775,336 @@ function CompanyAssignmentsScreen({ admin }: { admin: Props['admin'] }) {
     );
 }
 
-function AssignmentForm({ admin }: { admin: Props['admin'] }) {
+const assignmentRoleLabels: Record<string, string> = {
+    accountant_in_charge: 'Contador encargado',
+    accounting_assistant: 'Auxiliar contable',
+    supervisor: 'Supervisor',
+    tax_specialist: 'Encargado fiscal',
+    treasury: 'Tesorería',
+    accounts_receivable: 'Cuentas por cobrar',
+    accounts_payable: 'Cuentas por pagar',
+    payroll: 'Nómina',
+    auditor: 'Auditor',
+    read_only: 'Consulta (solo lectura)',
+};
+
+const sectionTitle =
+    'mb-2.5 flex items-center gap-2 text-sm font-black text-[#142135]';
+const stepBadge =
+    'grid size-5 place-items-center rounded-full bg-[#640000] text-[11px] font-black text-white';
+
+/** Form of a new responsibility: who looks after which company, in which role; only people of the company's office. */
+function AssignmentDialog({
+    admin,
+    open,
+    onClose,
+}: {
+    admin: Props['admin'];
+    open: boolean;
+    onClose: () => void;
+}) {
     const firstCompany = admin.lookups.companies[0];
     const form = useForm({
         office_id: String(
             firstCompany?.office_id ?? admin.lookups.offices[0]?.id ?? '',
         ),
         company_id: String(firstCompany?.id ?? ''),
-        user_id: String(admin.lookups.users[0]?.id ?? ''),
-        assignment_role:
-            admin.lookups.assignmentRoles[0] ?? 'accounting_assistant',
+        user_id: '',
+        assignment_role: 'accountant_in_charge',
         primary: false,
     });
+    const people = admin.lookups.users.filter(
+        (user) =>
+            user.status === 'active' &&
+            (user.offices as AnyRow[]).some(
+                (office) =>
+                    String(office.id) === form.data.office_id &&
+                    office.status === 'active',
+            ),
+    );
+    const company = admin.lookups.companies.find(
+        (item) => String(item.id) === form.data.company_id,
+    );
+    const office = admin.lookups.offices.find(
+        (item) => String(item.id) === form.data.office_id,
+    );
 
     function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        form.post('/office/company-assignments', { preserveScroll: true });
+        form.post('/office/company-assignments', {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.setData('user_id', '');
+                form.setData('primary', false);
+                onClose();
+            },
+        });
     }
 
+    const selectedUser = people.find(
+        (user) => String(user.id) === form.data.user_id,
+    );
+    const initials = (name: string) =>
+        name
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0])
+            .join('')
+            .toUpperCase();
+
     return (
-        <form onSubmit={submit} className={`${panel} p-5`}>
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-black">
-                <ShieldCheck className="size-5 text-[#640000]" /> Asignar
-                responsable
-            </h2>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                <select
-                    className={input}
-                    value={form.data.company_id}
-                    onChange={(event) => {
-                        const company = admin.lookups.companies.find(
-                            (item) => String(item.id) === event.target.value,
-                        );
-                        form.setData({
-                            ...form.data,
-                            company_id: event.target.value,
-                            office_id: String(company?.office_id ?? ''),
-                        });
-                    }}
-                >
-                    {admin.lookups.companies.map((company) => (
-                        <option key={company.id} value={company.id}>
-                            {company.name}
-                        </option>
-                    ))}
-                </select>
-                <select
-                    className={input}
-                    value={form.data.user_id}
-                    onChange={(event) =>
-                        form.setData('user_id', event.target.value)
-                    }
-                >
-                    {admin.lookups.users.map((user) => (
-                        <option key={user.id} value={user.id}>
-                            {user.name}
-                        </option>
-                    ))}
-                </select>
-                <select
-                    className={input}
-                    value={form.data.assignment_role}
-                    onChange={(event) =>
-                        form.setData('assignment_role', event.target.value)
-                    }
-                >
-                    {admin.lookups.assignmentRoles.map((role) => (
-                        <option key={role} value={role}>
-                            {label(role)}
-                        </option>
-                    ))}
-                </select>
-                <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-bold">
-                    <input
-                        type="checkbox"
-                        checked={form.data.primary}
-                        onChange={(event) =>
-                            form.setData('primary', event.target.checked)
-                        }
-                    />
-                    Principal
-                </label>
-                <button className={button} disabled={form.processing}>
-                    Asignar
-                </button>
-            </div>
-        </form>
+        <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+            <DialogContent className="max-h-[92dvh] gap-0 overflow-hidden bg-white p-0 text-[#142135] sm:max-w-2xl [&>button]:top-5 [&>button]:right-5 [&>button]:text-white [&>button]:opacity-80 [&>button]:hover:opacity-100">
+                <div className="bg-gradient-to-br from-[#640000] to-[#8a1c1c] px-6 py-5 text-white">
+                    <div className="flex items-center gap-4">
+                        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/25">
+                            <ShieldCheck className="size-6" />
+                        </span>
+                        <div>
+                            <DialogTitle className="text-xl font-black text-white">
+                                Asignar responsable
+                            </DialogTitle>
+                            <DialogDescription className="mt-0.5 text-sm text-white/75">
+                                Define quién atiende una empresa y con qué rol.
+                            </DialogDescription>
+                        </div>
+                    </div>
+                </div>
+                <form onSubmit={submit} className="flex min-h-0 flex-col">
+                    <div className="max-h-[62dvh] space-y-6 overflow-y-auto px-6 py-6">
+                        <section>
+                            <p className={sectionTitle}>
+                                <span className={stepBadge}>1</span> Empresa
+                                cliente
+                            </p>
+                            <select
+                                id="assign-company"
+                                aria-label="Empresa cliente"
+                                className={`${input} w-full font-semibold`}
+                                value={form.data.company_id}
+                                onChange={(event) => {
+                                    const next = admin.lookups.companies.find(
+                                        (item) =>
+                                            String(item.id) ===
+                                            event.target.value,
+                                    );
+                                    form.setData({
+                                        ...form.data,
+                                        company_id: event.target.value,
+                                        office_id: String(
+                                            next?.office_id ?? '',
+                                        ),
+                                        user_id: '',
+                                    });
+                                }}
+                            >
+                                {admin.lookups.companies.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                        {item.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#f6e6e4] px-3 py-1 text-xs font-bold text-[#640000]">
+                                <Building2 className="size-3.5" />
+                                {office?.name ?? 'Sin oficina'}
+                            </p>
+                            {form.errors.company_id && (
+                                <p className="mt-1 text-xs text-red-600">
+                                    {form.errors.company_id}
+                                </p>
+                            )}
+                        </section>
+
+                        <section>
+                            <p className={sectionTitle}>
+                                <span className={stepBadge}>2</span> Rol en la
+                                empresa
+                            </p>
+                            <div
+                                role="radiogroup"
+                                aria-label="Rol en la empresa"
+                                className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+                            >
+                                {admin.lookups.assignmentRoles.map((role) => (
+                                    <button
+                                        key={role}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={
+                                            form.data.assignment_role === role
+                                        }
+                                        onClick={() =>
+                                            form.setData(
+                                                'assignment_role',
+                                                role,
+                                            )
+                                        }
+                                        className={`rounded-xl border px-3 py-2.5 text-left text-sm font-bold transition ${form.data.assignment_role === role ? 'border-[#640000] bg-[#640000] text-white shadow-md' : 'border-slate-200 bg-white text-slate-700 hover:border-[#c9a36a] hover:bg-amber-50'}`}
+                                    >
+                                        {assignmentRoleLabels[role] ??
+                                            label(role)}
+                                    </button>
+                                ))}
+                            </div>
+                            {form.errors.assignment_role && (
+                                <p className="mt-1 text-xs text-red-600">
+                                    {form.errors.assignment_role}
+                                </p>
+                            )}
+                        </section>
+
+                        <section>
+                            <p className={sectionTitle}>
+                                <span className={stepBadge}>3</span> Colaborador
+                                <span className="ml-auto text-xs font-semibold text-slate-400">
+                                    {people.length} disponibles en la oficina
+                                </span>
+                            </p>
+                            <div
+                                role="radiogroup"
+                                aria-label="Colaborador"
+                                className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/60 p-1.5"
+                            >
+                                {people.map((user) => {
+                                    const chosen =
+                                        String(user.id) === form.data.user_id;
+
+                                    return (
+                                        <button
+                                            key={user.id}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={chosen}
+                                            onClick={() =>
+                                                form.setData(
+                                                    'user_id',
+                                                    String(user.id),
+                                                )
+                                            }
+                                            className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${chosen ? 'border-[#640000] bg-white shadow-sm ring-1 ring-[#640000]' : 'border-transparent bg-white hover:border-slate-200'}`}
+                                        >
+                                            <span
+                                                className={`grid size-9 shrink-0 place-items-center rounded-full text-xs font-black ${chosen ? 'bg-[#640000] text-white' : 'bg-[#f6e6e4] text-[#640000]'}`}
+                                            >
+                                                {initials(user.name)}
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-sm font-bold">
+                                                    {user.name}
+                                                </span>
+                                                <span className="block truncate text-xs text-slate-500">
+                                                    {(
+                                                        user.roles as string[]
+                                                    )[0] ?? 'Sin rol'}{' '}
+                                                    · {user.email}
+                                                </span>
+                                            </span>
+                                            {chosen && (
+                                                <BadgeCheck className="size-5 shrink-0 text-[#640000]" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                                {people.length === 0 && (
+                                    <p className="p-4 text-center text-sm text-amber-700">
+                                        La oficina de{' '}
+                                        {company?.name ?? 'esta empresa'} no
+                                        tiene colaboradores activos.
+                                    </p>
+                                )}
+                            </div>
+                            {form.errors.user_id && (
+                                <p className="mt-1 text-xs text-red-600">
+                                    {form.errors.user_id}
+                                </p>
+                            )}
+                        </section>
+
+                        <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-slate-200 p-4">
+                            <span className="min-w-0 flex-1">
+                                <b className="block text-sm">
+                                    Responsable principal
+                                </b>
+                                <span className="block text-xs text-slate-500">
+                                    Reemplaza al principal actual de este rol en
+                                    la empresa; el anterior queda en el
+                                    histórico.
+                                </span>
+                            </span>
+                            <input
+                                type="checkbox"
+                                role="switch"
+                                className="peer sr-only"
+                                checked={form.data.primary}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'primary',
+                                        event.target.checked,
+                                    )
+                                }
+                            />
+                            <span
+                                aria-hidden
+                                className={`relative h-6 w-11 shrink-0 rounded-full transition ${form.data.primary ? 'bg-[#640000]' : 'bg-slate-300'}`}
+                            >
+                                <span
+                                    className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${form.data.primary ? 'left-[22px]' : 'left-0.5'}`}
+                                />
+                            </span>
+                        </label>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+                        <p className="min-w-0 flex-1 text-xs text-slate-500">
+                            {selectedUser ? (
+                                <>
+                                    <b className="text-[#142135]">
+                                        {selectedUser.name}
+                                    </b>{' '}
+                                    será{' '}
+                                    {(
+                                        assignmentRoleLabels[
+                                            form.data.assignment_role
+                                        ] ?? ''
+                                    ).toLowerCase()}{' '}
+                                    de {company?.name}
+                                    {form.data.primary ? ' (principal)' : ''}.
+                                </>
+                            ) : (
+                                'Selecciona un colaborador para continuar.'
+                            )}
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                className={ghostButton}
+                                onClick={onClose}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                className={button}
+                                disabled={
+                                    form.processing || form.data.user_id === ''
+                                }
+                            >
+                                Asignar
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </DialogContent>
+        </Dialog>
     );
 }
-
 function TaskTemplatesScreen({ admin }: { admin: Props['admin'] }) {
     return (
         <div className="space-y-5">
             <TemplateForm admin={admin} />
             <section className={`${panel} overflow-hidden`}>
                 <TableHeader
-                    title="Task Templates"
+                    title="Plantillas de tareas"
                     action="Plantillas mensuales y recurrentes"
                 />
                 <div className="grid gap-4 p-5 lg:grid-cols-2">
@@ -2189,7 +2523,7 @@ function ReviewsScreen({ admin }: { admin: Props['admin'] }) {
     return (
         <section className={`${panel} overflow-hidden`}>
             <TableHeader
-                title="Reviews"
+                title="Revisiones"
                 action="Revisiones de períodos empresariales"
             />
             <SimpleTable
@@ -2352,7 +2686,7 @@ function ClosingsScreen({ admin }: { admin: Props['admin'] }) {
     return (
         <section className={`${panel} overflow-hidden`}>
             <TableHeader
-                title="Closings Overview"
+                title="Resumen de cierres"
                 action="Control de cierres por empresa y período"
             />
             <SimpleTable

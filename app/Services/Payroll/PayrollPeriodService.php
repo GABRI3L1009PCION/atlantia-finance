@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Payroll;
 
+use App\Events\Work\SourceChanged;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingAutomationService;
@@ -148,6 +149,7 @@ class PayrollPeriodService
                 throw ValidationException::withMessages(['status' => 'Hay novedades pendientes de revisión; apruébalas o recházalas y recalcula.']);
             }
             DB::table('payroll_periods')->where('id', $periodId)->update(['status' => 'in_review', 'submitted_at' => now(), 'submitted_by' => $actor->id, 'review_note' => null, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payroll_periods', (int) $periodId));
             $this->accounting->audit($organization, $actor, 'payroll.submitted', 'payroll_periods', $periodId, [], (int) $period->office_id);
             foreach ($this->approverIds($organization, $period, $actor->id) as $recipient) {
                 $this->notifications->notify($organization->id, $recipient, $actor->id, 'payroll.review', 'Nómina por aprobar: '.$period->name, 'Neto Q '.number_format((int) $period->net_cents / 100, 2), 'payroll_periods', $periodId);
@@ -160,6 +162,7 @@ class PayrollPeriodService
         DB::transaction(function () use ($organization, $actor, $periodId, $note): void {
             $period = $this->reviewable($organization, $actor, $periodId);
             DB::table('payroll_periods')->where('id', $periodId)->update(['status' => 'changes_requested', 'review_note' => $note, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payroll_periods', (int) $periodId));
             $this->accounting->audit($organization, $actor, 'payroll.changes_requested', 'payroll_periods', $periodId, ['note' => $note], (int) $period->office_id);
             $this->notifications->notify($organization->id, (int) ($period->submitted_by ?? $period->calculated_by), $actor->id, 'payroll.review', 'Nómina con observaciones: '.$period->name, $note, 'payroll_periods', $periodId);
         });
@@ -220,6 +223,7 @@ class PayrollPeriodService
             }
             DB::table('payroll_novelties')->where('payroll_period_id', $periodId)->where('status', 'approved')->update(['updated_at' => now()]);
             DB::table('payroll_periods')->where('id', $periodId)->update(['status' => 'approved', 'approved_by' => $actor->id, 'approved_at' => now(), 'review_note' => $note, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payroll_periods', (int) $periodId));
             $this->closePaidLoans((int) $period->company_id);
             $this->accounting->audit($organization, $actor, 'payroll.approved', 'payroll_periods', $periodId, ['net_cents' => $net, 'journal_entry_id' => $entry], (int) $period->office_id);
             $this->notifications->notify($organization->id, (int) ($period->submitted_by ?? $period->calculated_by), $actor->id, 'payroll.review', 'Nómina aprobada: '.$period->name, 'Recibos, asiento y órdenes de pago generados.', 'payroll_periods', $periodId);
@@ -235,6 +239,7 @@ class PayrollPeriodService
                 throw ValidationException::withMessages(['status' => 'Solo se cierra una nómina pagada por completo.']);
             }
             DB::table('payroll_periods')->where('id', $periodId)->update(['status' => 'closed', 'closed_at' => now(), 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payroll_periods', (int) $periodId));
             $this->accounting->audit($organization, $actor, 'payroll.closed', 'payroll_periods', $periodId, [], (int) $period->office_id);
         });
     }

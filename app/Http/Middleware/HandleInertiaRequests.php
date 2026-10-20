@@ -67,7 +67,7 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
-        foreach (['workspace_notice', 'accounting_notice', 'purchase_notice', 'vat_book_notice', 'success'] as $key) {
+        foreach (['workspace_notice', 'accounting_notice', 'purchase_notice', 'vat_book_notice', 'security_notice', 'success'] as $key) {
             $message = $request->session()->get($key);
 
             if (is_string($message) && $message !== '') {

@@ -53,11 +53,19 @@ body { font-family: "DejaVu Sans", sans-serif; font-size: 9px; color: #171b24; m
     $certifiedAt = $document->certified_at?->timezone('America/Guatemala');
 @endphp
 
+@php $simulated = $document->provider === 'mock'; @endphp
 <div class="footer">
-    FEL SIMULADO - NO VÁLIDO ANTE SAT - {{ $document->series }}-{{ $document->number }}
-    <span class="footer-right">Documento electrónico generado por Atlantia Finance</span>
+    @if ($simulated)
+        FEL SIMULADO - NO VÁLIDO ANTE SAT - {{ $document->series }}-{{ $document->number }}
+        <span class="footer-right">Documento electrónico generado por Atlantia Finance</span>
+    @else
+        Representación informativa del documento emitido en la SAT - {{ $document->series }}-{{ $document->number }}
+        <span class="footer-right">La factura válida es la emitida por la SAT</span>
+    @endif
 </div>
-<div class="test-notice">AMBIENTE DE PRUEBA - DOCUMENTO FEL SIMULADO - NO VÁLIDO ANTE SAT</div>
+@if ($simulated)
+    <div class="test-notice">AMBIENTE DE PRUEBA - DOCUMENTO FEL SIMULADO - NO VÁLIDO ANTE SAT</div>
+@endif
 
 <table class="header"><tr>
     <td class="brand">
@@ -118,8 +126,8 @@ body { font-family: "DejaVu Sans", sans-serif; font-size: 9px; color: #171b24; m
     </tr></table>
     <div class="certification">
         <strong>Número de autorización:</strong> {{ $document->authorization_number ?: 'PENDIENTE' }}<br>
-        <strong>Fecha de certificación:</strong> {{ $certifiedAt?->format('d/m/Y H:i:s') ?: 'Pendiente de certificación simulada' }}<br>
-        <strong>Certificador:</strong> SIMULADOR ATLANTIA - Ambiente de prueba
+        <strong>Fecha de certificación:</strong> {{ $certifiedAt?->format('d/m/Y H:i:s') ?: ($simulated ? 'Pendiente de certificación simulada' : 'Pendiente de emitir en la SAT') }}<br>
+        <strong>Certificador:</strong> {{ $simulated ? 'SIMULADOR ATLANTIA - Ambiente de prueba' : 'SAT - Superintendencia de Administración Tributaria' }}
     </div>
     @if ($document->cancellation_reason)
         <div class="status-cancelled">DOCUMENTO ANULADO: {{ $document->cancellation_reason }}</div>

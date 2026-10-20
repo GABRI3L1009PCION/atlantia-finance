@@ -3,7 +3,6 @@ import {
     Eye,
     LogOut,
     Pencil,
-    RefreshCcw,
     ShieldCheck,
     ShieldOff,
     UserPlus,
@@ -47,19 +46,6 @@ type UserRow = {
     two_factor: boolean;
     sessions: number;
     last_access: string | null;
-};
-
-type Invitation = {
-    public_id: string;
-    email: string;
-    name: string | null;
-    role_name: string;
-    office_name: string;
-    invited_by: string | null;
-    sent_at: string;
-    sent_count: number;
-    expires_at: string;
-    status: string;
 };
 
 type UserDetail = {
@@ -115,16 +101,6 @@ type UserDetail = {
     successors: { id: number; name: string }[];
 };
 
-const invitationStatus: Record<
-    string,
-    [string, 'amber' | 'red' | 'green' | 'slate']
-> = {
-    pending: ['Pendiente', 'amber'],
-    expired: ['Vencida', 'red'],
-    accepted: ['Aceptada', 'green'],
-    canceled: ['Cancelada', 'slate'],
-};
-
 const iconButton =
     'inline-grid size-9 place-items-center rounded-lg border border-slate-300 bg-white text-[#640000] transition hover:border-[#c9a36a] hover:bg-amber-50';
 
@@ -133,18 +109,9 @@ const userSearchText = (user: UserRow): string =>
         ' ',
     );
 
-const invitationSearchText = (invitation: Invitation): string =>
-    [
-        invitation.name,
-        invitation.email,
-        invitation.role_name,
-        invitation.office_name,
-    ].join(' ');
-
 export default function OfficeUsers({
     officeScope,
     users,
-    invitations,
     selectedUser,
     formOptions,
     permissions,
@@ -152,7 +119,6 @@ export default function OfficeUsers({
 }: {
     officeScope: OfficeScope;
     users: UserRow[];
-    invitations: Invitation[];
     selectedUser: UserDetail | null;
     formOptions: FormOptions;
     permissions: Record<string, boolean>;
@@ -178,17 +144,6 @@ export default function OfficeUsers({
     const table = useTableControls(users, {
         searchText: userSearchText,
         predicate: userPredicate,
-    });
-    const [inviteStatus, setInviteStatus] = useState('');
-    const invitePredicate = useMemo(
-        () => (invitation: Invitation) =>
-            inviteStatus === '' || invitation.status === inviteStatus,
-        [inviteStatus],
-    );
-    const inviteTable = useTableControls(invitations, {
-        searchText: invitationSearchText,
-        predicate: invitePredicate,
-        initialPageSize: 5,
     });
 
     return (
@@ -409,159 +364,6 @@ export default function OfficeUsers({
                         />
                     )}
                 </div>
-
-                <section className={`${panel} overflow-hidden`}>
-                    <div className="p-3 pb-0">
-                        <SectionHeader
-                            id="invitaciones"
-                            title={`Invitaciones (${inviteTable.count}${inviteTable.count !== inviteTable.total ? ` de ${inviteTable.total}` : ''})`}
-                        />
-                    </div>
-                    <TableToolbar
-                        search={inviteTable.search}
-                        onSearch={inviteTable.setSearch}
-                        placeholder="Buscar por nombre, correo, rol u oficina"
-                        pageSize={inviteTable.pageSize}
-                        onPageSize={inviteTable.setPageSize}
-                    >
-                        <TableFilterSelect
-                            label="Todos los estados"
-                            value={inviteStatus}
-                            onChange={setInviteStatus}
-                            options={Object.entries(invitationStatus).map(
-                                ([value, [label]]) => ({ value, label }),
-                            )}
-                        />
-                    </TableToolbar>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-xs">
-                            <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                <tr>
-                                    <th className="px-3 py-2">Invitado</th>
-                                    <th className="px-3 py-2">Rol</th>
-                                    <th className="px-3 py-2">Oficina</th>
-                                    <th className="px-3 py-2">Enviada</th>
-                                    <th className="px-3 py-2">Vence</th>
-                                    <th className="px-3 py-2">Estado</th>
-                                    <th className="px-3 py-2">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {inviteTable.pageRows.map((invitation) => {
-                                    const [label, tone] = invitationStatus[
-                                        invitation.status
-                                    ] ?? ['—', 'slate'];
-                                    const actionable =
-                                        ['pending', 'expired'].includes(
-                                            invitation.status,
-                                        ) && permissions.canInvite;
-
-                                    return (
-                                        <tr key={invitation.public_id}>
-                                            <td className="px-3 py-2">
-                                                <p className="font-bold">
-                                                    {invitation.name ??
-                                                        invitation.email}
-                                                </p>
-                                                <p className="text-[11px] text-[#526b92]">
-                                                    {invitation.email}
-                                                </p>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                {invitation.role_name}
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                {invitation.office_name}
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                {formatDate(invitation.sent_at)}{' '}
-                                                {invitation.sent_count > 1 && (
-                                                    <span className="text-[#526b92]">
-                                                        ({invitation.sent_count}{' '}
-                                                        envíos)
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                {formatDate(
-                                                    invitation.expires_at,
-                                                )}
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                <span className={badge(tone)}>
-                                                    {label}
-                                                </span>
-                                            </td>
-                                            <td className="px-3 py-2">
-                                                {actionable && (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <button
-                                                            type="button"
-                                                            className={
-                                                                iconButton
-                                                            }
-                                                            title="Reenviar invitación"
-                                                            aria-label={`Reenviar invitación a ${invitation.email}`}
-                                                            onClick={() =>
-                                                                router.post(
-                                                                    `/office/invitations/${invitation.public_id}/resend`,
-                                                                    {},
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                )
-                                                            }
-                                                        >
-                                                            <RefreshCcw className="size-4" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className={`${iconButton} text-red-700`}
-                                                            title="Cancelar invitación"
-                                                            aria-label={`Cancelar invitación de ${invitation.email}`}
-                                                            onClick={() =>
-                                                                confirm(
-                                                                    `¿Cancelar la invitación de ${invitation.email}?`,
-                                                                ) &&
-                                                                router.post(
-                                                                    `/office/invitations/${invitation.public_id}/cancel`,
-                                                                    {},
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                )
-                                                            }
-                                                        >
-                                                            <X className="size-4" />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {inviteTable.pageRows.length === 0 && (
-                                    <EmptyRow
-                                        colSpan={7}
-                                        text={
-                                            inviteTable.total === 0
-                                                ? 'No existen invitaciones en esta oficina.'
-                                                : 'No hay invitaciones que coincidan con la búsqueda o el filtro.'
-                                        }
-                                    />
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    <TablePagination
-                        page={inviteTable.page}
-                        pages={inviteTable.pages}
-                        pageSize={inviteTable.pageSize}
-                        count={inviteTable.count}
-                        onPage={inviteTable.setPage}
-                        noun="invitaciones"
-                    />
-                </section>
             </Shell>
             <InviteDialog
                 open={inviteOpen}

@@ -52,7 +52,7 @@ class FelAccountingService
                 $lines[] = ['account_id' => $vatAccount, 'debit' => '0', 'credit' => $amount($doc->tax_cents)];
             }
             $entry = $this->automation->draft($organization, $user, $doc->company_id, 'fel_document', $doc->id,
-                $doc->issued_on->toDateString(), 'FEL SIMULADO · '.$doc->series.'-'.$doc->number, $doc->public_id, $lines);
+                $doc->issued_on->toDateString(), ($doc->provider === 'mock' ? 'FEL SIMULADO · ' : 'FEL · ').$doc->series.'-'.$doc->number, $doc->public_id, $lines);
             if (! $entry) {
                 throw ValidationException::withMessages(['accounting' => 'Abre un período contable para la fecha de emisión.']);
             }

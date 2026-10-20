@@ -8,11 +8,12 @@ use App\Services\Platform\IncidentManagementService;
 use App\Services\Platform\PlatformAuditService;
 use App\Services\Platform\PlatformAuthorization;
 use App\Services\Platform\PlatformHealthService;
+use App\Services\Platform\PlatformLogReader;
 use App\Services\Platform\PlatformLuzmaAssistant;
 use App\Services\Platform\SupportTicketService;
-use App\Services\Platform\SystemLogService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -304,9 +305,9 @@ test('the audit log masks secrets and cannot be edited, and logs never show cred
     expect(fn () => DB::table('platform_audit_events')->where('id', $event->id)->update(['reason' => 'alterado']))->toThrow(QueryException::class);
     expect(fn () => DB::table('platform_audit_events')->where('id', $event->id)->delete())->toThrow(QueryException::class);
 
-    $line = SystemLogService::sanitize('Bearer abcdefghijklmnop12345 password=hunter22 sk_live_abcdef123456 tarjeta 4111111111111111');
+    $line = PlatformLogReader::sanitize('Bearer abcdefghijklmnop12345 password=hunter22 sk_live_abcdef123456 tarjeta 4111111111111111');
     expect($line)->not->toContain('abcdefghijklmnop12345')->not->toContain('hunter22')->not->toContain('abcdef123456')->not->toContain('4111111111111111')
-        ->and(SystemLogService::maskEmail('ana@cliente.test'))->toBe('an•••@cliente.test');
+        ->and(PlatformLogReader::maskEmail('ana@cliente.test'))->toBe('an•••@cliente.test');
 });
 
 test('sensitive global settings require re-authentication and templates keep their versions', function () {
@@ -318,4 +319,36 @@ test('sensitive global settings require re-authentication and templates keep the
     $this->actingAs($owner)->put('/control-center/settings/templates/trial_ending', ['subject' => 'Tu prueba termina pronto', 'body' => 'Hola {{name}}, tu prueba termina el {{date}}.'])->assertSessionHasNoErrors();
     $this->actingAs($owner)->put('/control-center/settings/templates/trial_ending', ['subject' => 'Tu prueba termina', 'body' => 'Hola {{name}}, quedan pocos días.'])->assertSessionHasNoErrors();
     expect(DB::table('notification_templates')->where('key', 'trial_ending')->orderBy('version')->pluck('status')->all())->toBe(['superseded', 'active']);
+});
+
+test('the SaaS administrator sees Luzma\'s neural network alive without ever seeing a tenant question', function () {
+    $owner = ccOwner();
+    $this->withoutVite();
+    // The suite's catch-all fake would answer first, so this test starts from a fresh HTTP fake.
+    Http::swap(new HttpFactory);
+    Http::fake([
+        '*/ai/neural/info*' => Http::response(['ready' => true, 'network' => ['layers' => [846, 32, 16, 27], 'parameters' => 28000, 'vocabulary' => 846, 'examples' => 900, 'accuracy' => 0.99, 'loss' => 0.003, 'epochs' => 30, 'trained_at' => '2026-10-18 20:00:00', 'seconds' => 5.0], 'training' => ['running' => false, 'epoch' => 0, 'epochs' => 0, 'loss' => null, 'message' => null], 'learned' => 2]),
+        '*/ai/neural/recent*' => Http::response(['items' => [['id' => 3, 'at' => '10:00:00', 'source' => 'plan', 'winner' => 'get_fiscal_status', 'confidence' => 0.97, 'known' => 4, 'hidden1' => [0.1], 'hidden2' => [0.2], 'outputs' => []]], 'last_id' => 3]),
+        '*/ai/neural/inspect' => Http::response(['winner' => 'get_receivables_summary', 'confidence' => 0.98, 'known' => ['cobrar'], 'hidden1' => [0.5], 'hidden2' => [0.4], 'outputs' => [['name' => 'get_receivables_summary', 'probability' => 0.98]], 'influence' => [['term' => 'cobrar', 'weight' => 0.6]]]),
+        '*/ai/neural/train' => Http::response(['started' => true, 'added' => 1, 'training' => ['running' => true]]),
+    ]);
+
+    $this->actingAs($owner)->get('/control-center/luzma/neural')->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('control-center/luzma-neural')->where('info.network.layers.3', 27)->where('recent.items.0.winner', 'get_fiscal_status')->where('can_manage', true));
+    $this->getJson('/control-center/luzma/neural/recent?after=0')->assertOk()->assertJsonPath('last_id', 3)->assertJsonPath('info.ready', true);
+    $this->postJson('/control-center/luzma/neural/inspect', ['text' => '¿Qué facturas por cobrar tengo?'])->assertOk()->assertJsonPath('winner', 'get_receivables_summary');
+
+    $this->post('/control-center/luzma/neural/train', ['use_feedback' => true, 'epochs' => 20])->assertSessionHasNoErrors();
+    expect(DB::table('platform_audit_events')->where('action', 'luzma.neural.trained')->exists())->toBeTrue();
+    Http::assertSent(fn ($request) => str_ends_with($request->url(), '/ai/neural/train') && $request['epochs'] === 20);
+
+    $outsider = User::factory()->create();
+    $this->actingAs($outsider)->get('/control-center/luzma/neural')->assertForbidden();
+});
+
+test('SaaS staff without a firm are sent to the Control Center instead of a plan checkout', function () {
+    $owner = ccOwner();
+
+    $this->actingAs($owner)->get('/office/executive-dashboard')->assertRedirect('/control-center');
+    $this->get('/luzma/context?module=global')->assertRedirect('/control-center');
 });

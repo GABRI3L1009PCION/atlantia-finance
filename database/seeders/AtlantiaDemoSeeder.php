@@ -18,8 +18,12 @@ use Illuminate\Support\Str;
 
 class AtlantiaDemoSeeder extends Seeder
 {
+    use RefusesProduction;
+
     public function run(): void
     {
+        $this->refuseInProduction();
+
         $this->call(PlanCatalogSeeder::class);
 
         DB::transaction(function (): void {

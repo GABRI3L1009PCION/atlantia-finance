@@ -165,7 +165,7 @@ export function LuzmaBubble({
 
     if (message.role === 'user') {
         return (
-            <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[#061633] px-3 py-2 text-[13px] text-white">
+            <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-[#640000] px-3 py-2 text-[13px] text-white">
                 {message.content}
             </div>
         );

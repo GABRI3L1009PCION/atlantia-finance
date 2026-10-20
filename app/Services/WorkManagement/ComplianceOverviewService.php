@@ -6,6 +6,7 @@ namespace App\Services\WorkManagement;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Fiscal\FiscalObligationGenerationService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +33,9 @@ class ComplianceOverviewService
         $executive = $this->dashboard->executiveSnapshot($organization, $user, $filters);
         $companies = collect($executive['companies'])->keyBy('id');
         $today = now()->startOfDay();
+        // Same as the tax panel: the obligations of every visible company are generated (idempotent) before they are counted,
+        // so the director never sees "0 obligations" while the accountant's calendar already lists them.
+        app(FiscalObligationGenerationService::class)->generate($organization, null, array_values($companies->keys()->map(fn ($id): int => (int) $id)->all()));
 
         $rows = DB::table('fiscal_obligations')
             ->leftJoin('users', 'users.id', '=', 'fiscal_obligations.assigned_to')

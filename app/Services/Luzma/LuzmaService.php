@@ -8,6 +8,7 @@ use App\Services\Integrations\IntegrationConnectionService;
 use App\Services\Luzma\Contracts\LuzmaModelProvider;
 use App\Services\WorkspaceContext;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -26,6 +27,7 @@ class LuzmaService
         private LuzmaAuditService $audit,
         private LuzmaModelProvider $provider,
         private WorkspaceContext $workspace,
+        private LuzmaSwitch $switch,
     ) {}
 
     /**
@@ -33,7 +35,7 @@ class LuzmaService
      */
     public function ask(LuzmaContext $context, string $message, ?string $conversationId = null): array
     {
-        abort_unless((bool) config('luzma.enabled'), 503, 'Luzma no está disponible temporalmente.');
+        abort_unless($this->switch->enabled(), 503, $this->switch->message());
         abort_unless(app(IntegrationConnectionService::class)->luzmaEnabled($context->organization), 403, 'La firma desactivó Luzma IA en Integraciones.');
         $this->assertQuota($context);
         $started = microtime(true);
@@ -41,7 +43,11 @@ class LuzmaService
         DB::table('luzma_messages')->insert(['organization_id' => $context->organization->id, 'luzma_conversation_id' => $conversation['id'], 'role' => 'user', 'content' => $message,
             'context_snapshot' => json_encode($context->snapshot(), JSON_THROW_ON_ERROR), 'status' => 'ok', 'created_at' => now(), 'updated_at' => now()]);
 
-        $route = $this->intents->route($context, $message);
+        // The date and the time need no model nor routing: the server knows them, in the user's timezone.
+        $clock = $this->clockAnswer($context, $message);
+        $route = $clock !== null
+            ? ['kind' => 'clock', 'tool' => null, 'arguments' => [], 'critical' => null, 'source' => 'clock']
+            : $this->intents->route($context, $message, $this->conversations->lastTool($conversation['id']));
         $result = null;
         $actions = [];
         $references = [];
@@ -61,6 +67,9 @@ class LuzmaService
                 } else {
                     $content .= ' Puedo explicarte qué falta o llevarte a la pantalla correspondiente.';
                 }
+                break;
+            case 'clock':
+                $content = (string) $clock;
                 break;
             case 'forbidden':
                 $content = 'Tu rol no tiene permiso para esa acción, así que no puedo prepararla. Pídesela a la persona responsable.';
@@ -122,10 +131,40 @@ class LuzmaService
 
             return [trim((string) preg_replace('/<think>.*?<\/think>/s', '', $answer)), 'ok'];
         } catch (LuzmaUnavailableException) {
-            return $result === null
-                ? ['Luzma no está disponible temporalmente. Puedes intentarlo de nuevo en unos minutos; el resto de Atlantia funciona con normalidad.', 'error']
-                : [$this->prompts->fallback($result), 'fallback'];
+            // Luzma is never switched off by a model failure: with data she shows the official facts, without data she
+            // stays useful in basic mode and says what she can answer right now.
+            return $result === null ? [$this->basicMode($context, $question), 'fallback'] : [$this->prompts->fallback($result), 'fallback'];
         }
+    }
+
+    /** Answers "what day is it" and "what time is it" from the server clock, in the timezone of the user's context. */
+    private function clockAnswer(LuzmaContext $context, string $question): ?string
+    {
+        $asked = Str::ascii(mb_strtolower($question));
+        $wantsDate = preg_match('/\b(que dia|que fecha|fecha de hoy|fecha actual|dia es hoy|hoy es|en que dia estamos|a cuantos estamos)\b/', $asked) === 1;
+        $wantsTime = preg_match('/\b(que hora|hora es|hora actual|la hora|hora exacta)\b/', $asked) === 1;
+        if (! $wantsDate && ! $wantsTime) {
+            return null;
+        }
+        $moment = now($context->timezone)->settings(['locale' => 'es']);
+        $date = $moment->translatedFormat('l j \d\e F \d\e Y');
+        $zone = 'zona horaria '.$context->timezone.', UTC'.$moment->format('P');
+
+        return $wantsDate
+            ? 'Hoy es '.$date.' y son las '.$moment->format('H:i').' ('.$zone.').'
+            : 'Son las '.$moment->format('H:i').' del '.$date.' ('.$zone.').';
+    }
+
+    private function basicMode(LuzmaContext $context, string $question = ''): string
+    {
+        $clock = $this->clockAnswer($context, $question);
+        $prefix = $clock === null ? '' : $clock."\n\n";
+
+        $suggestions = array_slice($this->prompts->suggestions($context), 0, 4);
+
+        return $prefix.'Estoy en modo básico: mi motor de conversación se está reiniciando, pero sigo consultando los datos oficiales de Atlantia. Pregúntame por cifras, pendientes u obligaciones y te respondo con los datos reales'
+            .($suggestions === [] ? '.' : ', por ejemplo:'."\n\n• ".implode("\n• ", $suggestions))
+            ."\n\nEn unos minutos recupero las explicaciones completas.";
     }
 
     /** Monthly question quota of the plan (ai_queries); null in the catalog means unlimited. */

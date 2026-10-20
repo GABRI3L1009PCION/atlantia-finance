@@ -1,24 +1,11 @@
 import { Loader2, RotateCcw, Send } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { luzmaRequest } from '@/components/luzma/client';
+import { useEffect, useRef } from 'react';
 import type { LuzmaMessage, LuzmaScreen } from '@/components/luzma/client';
 import { LuzmaBubble } from '@/components/luzma/luzma-parts';
-
-type ChatResponse = {
-    conversation: {
-        id: string;
-        title: string;
-        is_new: boolean;
-        context_changed: boolean;
-    };
-    message: LuzmaMessage;
-};
-
-const WORKING = [
-    'Consultando datos oficiales...',
-    'Analizando la información...',
-    'Preparando la respuesta...',
-];
+import {
+    WORKING,
+    useLuzmaConversation,
+} from '@/components/luzma/use-luzma-conversation';
 
 /**
  * Conversation with Luzma. The screen context travels with each question as a hint; the answer shows the
@@ -28,7 +15,7 @@ export function LuzmaChat({
     screen,
     suggestions,
     initialQuestion,
-    conversationId: initialConversation = null,
+    conversationId,
     initialMessages = [],
     compact = false,
 }: {
@@ -39,120 +26,18 @@ export function LuzmaChat({
     initialMessages?: LuzmaMessage[];
     compact?: boolean;
 }) {
-    const [messages, setMessages] = useState<LuzmaMessage[]>(initialMessages);
-    const [conversationId, setConversationId] = useState<string | null>(
-        initialConversation,
-    );
-    const [input, setInput] = useState('');
-    const [busy, setBusy] = useState(false);
-    const [working, setWorking] = useState(0);
-    const [notice, setNotice] = useState<string | null>(null);
-    const scope = `${screen.company ?? ''}|${screen.company_id ?? ''}`;
-    const [lastScope, setLastScope] = useState(scope);
+    const { messages, input, setInput, busy, working, notice, ask, reset } =
+        useLuzmaConversation({
+            screen,
+            initialQuestion,
+            conversationId,
+            initialMessages,
+        });
     const end = useRef<HTMLDivElement>(null);
-    const asked = useRef<string | null>(null);
-
-    // Another company means another conversation: figures of one company never carry over.
-    if (scope !== lastScope) {
-        setLastScope(scope);
-        setConversationId(null);
-        setMessages([]);
-        setNotice(
-            'Cambiaste de empresa: empecé una conversación nueva con el nuevo contexto.',
-        );
-    }
 
     useEffect(() => {
         end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, [messages, busy]);
-
-    useEffect(() => {
-        if (!busy) {
-            return;
-        }
-
-        const timer = window.setInterval(
-            () =>
-                setWorking((value) => Math.min(value + 1, WORKING.length - 1)),
-            2500,
-        );
-
-        return () => window.clearInterval(timer);
-    }, [busy]);
-
-    const ask = async (question: string) => {
-        const text = question.trim();
-
-        if (text.length < 2 || busy) {
-            return;
-        }
-
-        setInput('');
-        setNotice(null);
-        setWorking(0);
-        setBusy(true);
-        setMessages((current) => [
-            ...current,
-            {
-                id: -Date.now(),
-                role: 'user',
-                content: text,
-                status: 'ok',
-                references: [],
-                actions: [],
-                tools: [],
-                feedback: null,
-                created_at: new Date().toISOString(),
-            },
-        ]);
-
-        try {
-            const data = await luzmaRequest<ChatResponse>(
-                '/luzma/chat',
-                'POST',
-                {
-                    message: text,
-                    conversation_id: conversationId,
-                    ...screen,
-                },
-            );
-
-            if (data.conversation.context_changed) {
-                setNotice(
-                    'El contexto cambió: seguimos en una conversación nueva.',
-                );
-            }
-
-            setConversationId(data.conversation.id);
-            setMessages((current) => [...current, data.message]);
-        } catch (error) {
-            setMessages((current) => [
-                ...current,
-                {
-                    id: 0,
-                    role: 'assistant',
-                    content: (error as Error).message,
-                    status: 'error',
-                    references: [],
-                    actions: [],
-                    tools: [],
-                    feedback: null,
-                    created_at: new Date().toISOString(),
-                },
-            ]);
-        } finally {
-            setBusy(false);
-        }
-    };
-
-    useEffect(() => {
-        if (initialQuestion && asked.current !== initialQuestion) {
-            asked.current = initialQuestion;
-            void ask(initialQuestion);
-        }
-        // Only a new question from outside triggers a send.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialQuestion]);
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -214,11 +99,7 @@ export function LuzmaChat({
                     <button
                         type="button"
                         title="Nueva conversación"
-                        onClick={() => {
-                            setMessages([]);
-                            setConversationId(null);
-                            setNotice(null);
-                        }}
+                        onClick={reset}
                         className="grid size-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:text-[#640000]"
                     >
                         <RotateCcw className="size-4" />

@@ -84,7 +84,7 @@ class JobMonitoringService
         foreach (DB::table('failed_jobs')->orderByDesc('id')->limit(500)->get() as $job) {
             $payload = (array) json_decode((string) $job->payload, true);
             $class = (string) ($payload['displayName'] ?? 'Job');
-            $cause = SystemLogService::sanitize((string) (strtok((string) $job->exception, "\n") ?: 'Error'));
+            $cause = PlatformLogReader::sanitize((string) (strtok((string) $job->exception, "\n") ?: 'Error'));
             $normalized = (string) preg_replace(['/\d+/', '/[0-9a-f]{8}-[0-9a-f-]{27,}/i'], ['#', 'uuid'], $cause);
             $signature = sha1($class.'|'.$normalized);
             $tenant = $payload['atlantia']['organization_id'] ?? null;
@@ -134,6 +134,8 @@ class JobMonitoringService
      */
     public function scheduler(): array
     {
+        // Scheduled tasks are declared in routes/console.php, which a web request does not load on its own.
+        Artisan::all();
         $rows = [];
         foreach (app(Schedule::class)->events() as $event) {
             $name = app(PlatformMonitoringRecorder::class)->taskName($event);

@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\WorkManagement\WorkNotificationService;
+use App\Services\WorkspaceContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -42,6 +43,10 @@ class FiscalObligationGenerationService
                 ->get(['companies.id', 'companies.office_id', 'offices.fiscal_internal_lead_days', 'offices.fiscal_review_lead_days'])->keyBy('id');
             $roles = DB::table('company_assignments')->whereIn('company_id', $companyIds)->where('status', 'active')->whereNull('deleted_at')
                 ->whereIn('assignment_role', ['tax_specialist', 'accountant_in_charge'])->orderByDesc('is_primary')->get(['company_id', 'user_id', 'assignment_role']);
+            $members = DB::table('organization_user')->where('organization_user.organization_id', $organization->id)->where('status', 'active')->get(['user_id', 'role']);
+            $owner = $members->firstWhere('role', 'owner')?->user_id;
+            // A practice of one or two people has no tax specialist: unassigned clients are prepared by the owner.
+            $soleMember = $members->count() === 1 || app(WorkspaceContext::class)->limit($organization, 'users') <= 2 ? $owner ?? $members->first()?->user_id : null;
             $created = 0;
             $updated = 0;
             $newFor = [];
@@ -52,8 +57,10 @@ class FiscalObligationGenerationService
                     continue;
                 }
                 $due = Carbon::parse($row['due_on']);
-                $assignee = $roles->where('company_id', $row['company_id'])->firstWhere('assignment_role', 'tax_specialist')?->user_id;
-                $reviewer = $roles->where('company_id', $row['company_id'])->firstWhere('assignment_role', 'accountant_in_charge')?->user_id;
+                $accountant = $roles->where('company_id', $row['company_id'])->firstWhere('assignment_role', 'accountant_in_charge')?->user_id;
+                // Offices without a tax specialist (small plans) prepare with the accountant in charge and are reviewed by the owner.
+                $assignee = $roles->where('company_id', $row['company_id'])->firstWhere('assignment_role', 'tax_specialist')->user_id ?? $accountant ?? $soleMember;
+                $reviewer = $accountant !== null && $accountant !== $assignee ? $accountant : ($owner !== $assignee ? $owner : null);
                 $monthEnd = Carbon::create($row['year'], $row['month'], 1)->endOfMonth()->toDateString();
                 $values = [
                     'office_id' => (int) $company->office_id,

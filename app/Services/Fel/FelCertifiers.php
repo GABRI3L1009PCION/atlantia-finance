@@ -16,11 +16,15 @@ class FelCertifiers
 {
     public const NONE = 'none';
 
+    /** The firm issues in the SAT portal (the SAT's free certifier) and registers the result here: no credentials are stored. */
+    public const SAT_MANUAL = 'sat_manual';
+
     /**
      * @var array<string, array{label: string, fields: list<array{key: string, label: string, secret?: bool, placeholder?: string}>}>
      */
     public const CERTIFIERS = [
-        self::NONE => ['label' => 'Selecciona un certificador', 'fields' => []],
+        self::NONE => ['label' => 'Selecciona cómo se emite', 'fields' => []],
+        self::SAT_MANUAL => ['label' => 'SAT: emisión en el portal (sin certificador)', 'fields' => []],
         'infile' => ['label' => 'Infile', 'fields' => [
             ['key' => 'user', 'label' => 'Usuario (alias) del certificador'],
             ['key' => 'api_key', 'label' => 'Llave de certificación', 'secret' => true],

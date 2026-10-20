@@ -54,6 +54,19 @@ type Payment = {
     reference: string;
     voided_at: string | null;
     void_reason: string | null;
+    withheld_cents?: number;
+    withholdings?: {
+        kind: 'isr' | 'iva';
+        rate_bp: number;
+        amount_cents: number;
+        certificate_number: string | null;
+    }[];
+};
+type WithholdingInput = {
+    kind: 'isr' | 'iva';
+    base: string;
+    rate: string;
+    certificate_number: string;
 };
 type CreditNoteRow = {
     id: number;
@@ -106,6 +119,7 @@ export default function Purchase({
     isOwner,
     today,
     notice,
+    suggestedRates,
 }: {
     company: Company;
     document: PurchaseDocument;
@@ -121,6 +135,7 @@ export default function Purchase({
     isOwner: boolean;
     today: string;
     notice?: string;
+    suggestedRates?: { isr: number; iva: number };
 }) {
     const balance =
         document.status === 'void'
@@ -157,7 +172,36 @@ export default function Purchase({
         amount: '',
         paid_on: today,
         reference: '',
+        withholdings: [] as WithholdingInput[],
     });
+    const withheldCents = payment.data.withholdings.reduce(
+        (sum, item) =>
+            sum +
+            Math.round(
+                (Number(item.base || 0) * 100 * Number(item.rate || 0)) / 100,
+            ),
+        0,
+    );
+    const addWithholding = (kind: 'isr' | 'iva') =>
+        payment.setData('withholdings', [
+            ...payment.data.withholdings.filter((item) => item.kind !== kind),
+            {
+                kind,
+                base: payment.data.amount,
+                rate: String((suggestedRates?.[kind] ?? 0) / 100),
+                certificate_number: '',
+            },
+        ]);
+    const updateWithholding = (
+        kind: 'isr' | 'iva',
+        patch: Partial<WithholdingInput>,
+    ) =>
+        payment.setData(
+            'withholdings',
+            payment.data.withholdings.map((item) =>
+                item.kind === kind ? { ...item, ...patch } : item,
+            ),
+        );
     const attachment = useForm<{ file: File | null }>({ file: null });
     const statusLabel =
         document.status === 'draft'
@@ -485,6 +529,7 @@ export default function Purchase({
                                                     payment.reset(
                                                         'amount',
                                                         'reference',
+                                                        'withholdings',
                                                     ),
                                             },
                                         );
@@ -536,6 +581,128 @@ export default function Purchase({
                                             placeholder="Transferencia o cheque"
                                         />
                                     </label>
+                                    <div className="space-y-3 rounded-xl border border-dashed border-slate-300 bg-white p-4 sm:col-span-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <strong className="text-sm">
+                                                Retenciones sobre este pago
+                                            </strong>
+                                            <span className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={secondary}
+                                                    onClick={() =>
+                                                        addWithholding('isr')
+                                                    }
+                                                >
+                                                    + ISR retenido
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={secondary}
+                                                    onClick={() =>
+                                                        addWithholding('iva')
+                                                    }
+                                                >
+                                                    + IVA retenido
+                                                </button>
+                                            </span>
+                                        </div>
+                                        {payment.data.withholdings.map(
+                                            (item) => (
+                                                <div
+                                                    key={item.kind}
+                                                    className="grid gap-2 sm:grid-cols-5"
+                                                >
+                                                    <strong className="self-end pb-2 text-sm">
+                                                        {item.kind === 'isr'
+                                                            ? 'ISR'
+                                                            : 'IVA'}
+                                                    </strong>
+                                                    <label className="text-xs">
+                                                        Base (Q)
+                                                        <input
+                                                            inputMode="decimal"
+                                                            className={field}
+                                                            value={item.base}
+                                                            onChange={(event) =>
+                                                                updateWithholding(
+                                                                    item.kind,
+                                                                    {
+                                                                        base: event
+                                                                            .target
+                                                                            .value,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    </label>
+                                                    <label className="text-xs">
+                                                        Tasa (%)
+                                                        <input
+                                                            inputMode="decimal"
+                                                            className={field}
+                                                            value={item.rate}
+                                                            onChange={(event) =>
+                                                                updateWithholding(
+                                                                    item.kind,
+                                                                    {
+                                                                        rate: event
+                                                                            .target
+                                                                            .value,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    </label>
+                                                    <label className="text-xs sm:col-span-2">
+                                                        Constancia de retención
+                                                        <input
+                                                            className={field}
+                                                            value={
+                                                                item.certificate_number
+                                                            }
+                                                            onChange={(event) =>
+                                                                updateWithholding(
+                                                                    item.kind,
+                                                                    {
+                                                                        certificate_number:
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                    },
+                                                                )
+                                                            }
+                                                        />
+                                                    </label>
+                                                </div>
+                                            ),
+                                        )}
+                                        {payment.data.withholdings.length >
+                                            0 && (
+                                            <p className="text-sm text-slate-700">
+                                                Se retienen{' '}
+                                                <strong>
+                                                    {money(withheldCents)}
+                                                </strong>
+                                                ; al proveedor se le paga{' '}
+                                                <strong>
+                                                    {money(
+                                                        Math.max(
+                                                            0,
+                                                            Math.round(
+                                                                Number(
+                                                                    payment.data
+                                                                        .amount ||
+                                                                        0,
+                                                                ) * 100,
+                                                            ) - withheldCents,
+                                                        ),
+                                                    )}
+                                                </strong>
+                                                .
+                                            </p>
+                                        )}
+                                    </div>
                                     <div className="sm:col-span-3">
                                         <Errors errors={payment.errors} />
                                         <button
@@ -561,6 +728,24 @@ export default function Purchase({
                                         <p className="text-sm text-slate-500">
                                             {row.paid_on} · {row.reference}
                                         </p>
+                                        {(row.withholdings?.length ?? 0) >
+                                            0 && (
+                                            <p className="text-xs text-slate-600">
+                                                Retenciones:{' '}
+                                                {row.withholdings
+                                                    ?.map(
+                                                        (item) =>
+                                                            `${item.kind === 'isr' ? 'ISR' : 'IVA'} ${money(item.amount_cents)}`,
+                                                    )
+                                                    .join(' · ')}{' '}
+                                                · pagado al proveedor{' '}
+                                                {money(
+                                                    row.amount_cents -
+                                                        (row.withheld_cents ??
+                                                            0),
+                                                )}
+                                            </p>
+                                        )}
                                         {row.voided_at && (
                                             <p className="text-xs text-red-600">
                                                 Anulado: {row.void_reason}

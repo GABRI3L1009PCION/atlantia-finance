@@ -98,7 +98,7 @@ class FiscalObligationReadinessService
         });
 
         $checks[] = $this->safe('observations', 'Observaciones de la obligación', function () use ($obligation): array {
-            $open = DB::table('review_observations')->where('related_type', 'fiscal_obligations')->where('related_id', $obligation->id)->whereIn('status', ReviewObservationService::CORRECTABLE)->count();
+            $open = DB::table('review_observations')->where(fn ($query) => $query->where(fn ($own) => $own->where('related_type', 'fiscal_obligations')->where('related_id', $obligation->id))->orWhere(fn ($own) => $own->where('origin_type', 'fiscal_obligations')->where('origin_id', $obligation->id)))->whereIn('status', ReviewObservationService::CORRECTABLE)->count();
 
             return $open === 0 ? ['PASSED', 'Sin observaciones pendientes.', null] : ['BLOCKED', $open.' observación(es) sin corregir.', '/tax/observations'];
         });

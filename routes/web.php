@@ -4,6 +4,8 @@ use App\Http\Controllers\AccountantController;
 use App\Http\Controllers\AccountingController;
 use App\Http\Controllers\AccountingDocumentController;
 use App\Http\Controllers\AccountingReportController;
+use App\Http\Controllers\AccountingStructureController;
+use App\Http\Controllers\AccountReconciliationController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\AtlantiaAiConnectionController;
 use App\Http\Controllers\AuditorController;
@@ -13,16 +15,23 @@ use App\Http\Controllers\Billing\BillingDetailsController;
 use App\Http\Controllers\Billing\CheckoutController;
 use App\Http\Controllers\Billing\CreateCheckoutController;
 use App\Http\Controllers\CalendarFeedController;
+use App\Http\Controllers\CheckController;
+use App\Http\Controllers\ClientAccessAdminController;
 use App\Http\Controllers\ClientPortalController;
 use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\CompanyDashboardController;
 use App\Http\Controllers\ControlCenter as CC;
 use App\Http\Controllers\CrmController;
+use App\Http\Controllers\EssentialController;
 use App\Http\Controllers\FelDocumentController;
 use App\Http\Controllers\FelSettingsController;
+use App\Http\Controllers\FinancialStatementController;
 use App\Http\Controllers\FirmProfileController;
 use App\Http\Controllers\FiscalSettingsController;
+use App\Http\Controllers\FixedAssetController;
+use App\Http\Controllers\ForcedPasswordController;
 use App\Http\Controllers\IntegrationsController;
+use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\LuzmaController;
 use App\Http\Controllers\NormativeLibraryController;
@@ -33,16 +42,20 @@ use App\Http\Controllers\OperationalRecordController;
 use App\Http\Controllers\OperationalRecordFileController;
 use App\Http\Controllers\OperationsController;
 use App\Http\Controllers\OrganizationSwitchController;
+use App\Http\Controllers\PasswordHelpController;
 use App\Http\Controllers\PayablesController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\ProfitabilityController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReceivablesController;
+use App\Http\Controllers\RegionalController;
 use App\Http\Controllers\RevenueController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\TaxController;
+use App\Http\Controllers\TaxReportController;
 use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\TreasuryController;
 use App\Http\Controllers\VatBookController;
@@ -57,6 +70,11 @@ Route::get('/', WelcomeController::class)->name('home');
 
 Route::post('webhooks/recurrente', RecurrenteWebhookController::class)->middleware('tenancy.system')->name('webhooks.recurrente');
 Route::get('calendar/{token}.ics', [CalendarFeedController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware(['throttle:60,1', 'tenancy.system'])->name('calendar.feed');
+Route::post('forgot-password', [PasswordHelpController::class, 'store'])->middleware(['guest', 'throttle:5,1', 'tenancy.system'])->name('password.email');
+Route::middleware('auth')->group(function () {
+    Route::get('password/change', [ForcedPasswordController::class, 'show'])->name('password.force');
+    Route::put('password/change', [ForcedPasswordController::class, 'update'])->middleware('throttle:10,1')->name('password.force.update');
+});
 Route::get('invitations/{invitation}', [InvitationController::class, 'show'])->middleware(['signed', 'throttle:20,1', 'tenancy.system'])->name('invitations.show');
 Route::post('invitations/{invitation}', [InvitationController::class, 'accept'])->middleware(['signed', 'throttle:10,1', 'tenancy.system'])->name('invitations.accept');
 
@@ -84,6 +102,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('{document}/email', 'email')->middleware('throttle:5,1')->name('email');
             Route::post('{document}/cancel', 'cancel')->middleware('throttle:10,1')->name('cancel');
             Route::post('{document}/accounting', 'accounting')->middleware('throttle:10,1')->name('accounting');
+            Route::post('{document}/sat/register', 'satRegister')->middleware('throttle:20,1')->name('sat.register');
+            Route::post('{document}/sat/return', 'satReturn')->middleware('throttle:20,1')->name('sat.return');
+            Route::post('{document}/sat/assign', 'satAssign')->middleware('throttle:20,1')->name('sat.assign');
         });
         Route::get('companies/{company}/sales', [SalesController::class, 'index'])->name('sales');
         Route::get('companies/{company}/customers', [SalesController::class, 'customers'])->name('salesCustomers');
@@ -121,6 +142,56 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/fiscal-settings/tax-rules/{rule}/cancel', [FiscalSettingsController::class, 'cancelTaxVersion'])->whereNumber('rule')->middleware('throttle:20,1')->name('fiscalTaxVersionCancel');
         Route::post('companies/{company}/banks/accounts', [BankController::class, 'storeAccount'])->middleware('throttle:20,1')->name('bankAccountStore');
         Route::post('companies/{company}/banks/transactions', [BankController::class, 'storeTransaction'])->middleware('throttle:30,1')->name('bankTransactionStore');
+
+        Route::get('companies/{company}/fixed-assets', [FixedAssetController::class, 'index'])->name('fixedAssets');
+        Route::post('companies/{company}/fixed-assets', [FixedAssetController::class, 'store'])->middleware('throttle:30,1')->name('fixedAssetStore');
+        Route::post('companies/{company}/fixed-assets/depreciation', [FixedAssetController::class, 'depreciate'])->middleware('throttle:10,1')->name('fixedAssetDepreciate');
+        Route::post('companies/{company}/fixed-assets/{asset}/dispose', [FixedAssetController::class, 'dispose'])->whereNumber('asset')->middleware('throttle:20,1')->name('fixedAssetDispose');
+        Route::get('companies/{company}/fixed-assets/{asset}/schedule', [FixedAssetController::class, 'schedule'])->whereNumber('asset')->name('fixedAssetSchedule');
+
+        Route::get('companies/{company}/policies', [AccountingStructureController::class, 'policies'])->name('policies');
+        Route::patch('companies/{company}/policies', [AccountingStructureController::class, 'updatePolicy'])->middleware('throttle:20,1')->name('policyUpdate');
+        Route::get('companies/{company}/cost-centers', [AccountingStructureController::class, 'costCenters'])->name('costCenters');
+        Route::get('companies/{company}/cost-centers/export', [AccountingStructureController::class, 'exportCostCenters'])->middleware('throttle:10,1')->name('costCentersExport');
+        Route::post('companies/{company}/cost-centers', [AccountingStructureController::class, 'storeCostCenter'])->middleware('throttle:30,1')->name('costCenterStore');
+        Route::patch('companies/{company}/cost-centers/{center}', [AccountingStructureController::class, 'updateCostCenter'])->whereNumber('center')->middleware('throttle:30,1')->name('costCenterUpdate');
+
+        Route::get('companies/{company}/reconciliations', [AccountReconciliationController::class, 'index'])->name('reconciliations');
+        Route::post('companies/{company}/reconciliations', [AccountReconciliationController::class, 'store'])->middleware('throttle:30,1')->name('reconciliationStore');
+        Route::post('companies/{company}/reconciliations/{reconciliation}/items', [AccountReconciliationController::class, 'addItem'])->whereNumber('reconciliation')->middleware('throttle:60,1')->name('reconciliationItemStore');
+        Route::delete('companies/{company}/reconciliations/{reconciliation}/items/{item}', [AccountReconciliationController::class, 'removeItem'])->whereNumber(['reconciliation', 'item'])->middleware('throttle:60,1')->name('reconciliationItemDelete');
+        Route::post('companies/{company}/reconciliations/{reconciliation}/refresh', [AccountReconciliationController::class, 'refresh'])->whereNumber('reconciliation')->middleware('throttle:30,1')->name('reconciliationRefresh');
+        Route::post('companies/{company}/reconciliations/{reconciliation}/reconcile', [AccountReconciliationController::class, 'reconcile'])->whereNumber('reconciliation')->middleware('throttle:30,1')->name('reconciliationReconcile');
+        Route::post('companies/{company}/reconciliations/{reconciliation}/review', [AccountReconciliationController::class, 'review'])->whereNumber('reconciliation')->middleware('throttle:30,1')->name('reconciliationReview');
+
+        Route::get('companies/{company}/financial-statements', [FinancialStatementController::class, 'index'])->name('financialStatements');
+        Route::get('companies/{company}/financial-statements/export', [FinancialStatementController::class, 'export'])->middleware('throttle:10,1')->name('financialStatementsExport');
+        Route::post('companies/{company}/financial-statements/notes/seed', [FinancialStatementController::class, 'seedNotes'])->middleware('throttle:10,1')->name('statementNotesSeed');
+        Route::post('companies/{company}/financial-statements/notes', [FinancialStatementController::class, 'saveNote'])->middleware('throttle:30,1')->name('statementNoteSave');
+        Route::post('companies/{company}/financial-statements/notes/{number}/publish', [FinancialStatementController::class, 'publishNote'])->whereNumber('number')->middleware('throttle:20,1')->name('statementNotePublish');
+
+        Route::get('companies/{company}/tax-reports', [TaxReportController::class, 'index'])->name('taxReports');
+        Route::get('companies/{company}/tax-reports/withholdings/export', [TaxReportController::class, 'exportWithholdings'])->middleware('throttle:10,1')->name('withholdingsExport');
+        Route::patch('companies/{company}/tax-reports/accounts/{account}/nature', [TaxReportController::class, 'setNature'])->whereNumber('account')->middleware('throttle:60,1')->name('taxNatureUpdate');
+        Route::post('companies/{company}/tax-reports/adjustments', [TaxReportController::class, 'addAdjustment'])->middleware('throttle:30,1')->name('taxAdjustmentStore');
+        Route::delete('companies/{company}/tax-reports/adjustments/{adjustment}', [TaxReportController::class, 'removeAdjustment'])->whereNumber('adjustment')->middleware('throttle:30,1')->name('taxAdjustmentDelete');
+
+        Route::get('companies/{company}/checks', [CheckController::class, 'index'])->name('checks');
+        Route::post('companies/{company}/checks/checkbooks', [CheckController::class, 'storeCheckbook'])->middleware('throttle:20,1')->name('checkbookStore');
+        Route::post('companies/{company}/checks', [CheckController::class, 'issue'])->middleware('throttle:30,1')->name('checkIssue');
+        Route::post('companies/{company}/checks/{check}/clear', [CheckController::class, 'clear'])->whereNumber('check')->middleware('throttle:30,1')->name('checkClear');
+        Route::post('companies/{company}/checks/{check}/void', [CheckController::class, 'void'])->whereNumber('check')->middleware('throttle:20,1')->name('checkVoid');
+
+        Route::get('companies/{company}/inventory', [InventoryController::class, 'index'])->name('inventory');
+        Route::post('companies/{company}/inventory/items', [InventoryController::class, 'storeItem'])->middleware('throttle:30,1')->name('inventoryItemStore');
+        Route::post('companies/{company}/inventory/movements', [InventoryController::class, 'storeMovement'])->middleware('throttle:60,1')->name('inventoryMovementStore');
+        Route::post('companies/{company}/inventory/costs', [InventoryController::class, 'postCosts'])->middleware('throttle:10,1')->name('inventoryPostCosts');
+        Route::get('companies/{company}/inventory/items/{item}/kardex', [InventoryController::class, 'kardex'])->whereNumber('item')->name('inventoryKardex');
+
+        Route::get('companies/{company}/regional', [RegionalController::class, 'show'])->name('regional');
+        Route::put('companies/{company}/regional', [RegionalController::class, 'update'])->middleware('throttle:20,1')->name('regionalUpdate');
+        Route::post('companies/{company}/regional/template', [RegionalController::class, 'installTemplate'])->middleware('throttle:10,1')->name('regionalTemplate');
+        Route::post('companies/{company}/regional/taxes', [RegionalController::class, 'syncTaxes'])->middleware('throttle:10,1')->name('regionalTaxes');
         Route::post('companies/{company}/purchases/suppliers', [PurchaseController::class, 'supplier'])->middleware('throttle:30,1')->name('purchaseSupplier');
         Route::patch('companies/{company}/purchases/suppliers/{supplier}', [PurchaseController::class, 'supplierUpdate'])->middleware('throttle:30,1')->name('purchaseSupplierUpdate');
         Route::patch('companies/{company}/accounting-mapping', [PurchaseController::class, 'mapping'])->middleware('throttle:20,1')->name('accountingMapping');
@@ -140,6 +211,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/accounts/template', [AccountingController::class, 'accountTemplate'])->middleware('throttle:10,1')->name('accountTemplate');
         Route::patch('companies/{company}/accounts/{account}', [AccountingController::class, 'updateAccount'])->middleware('throttle:30,1')->name('updateAccount');
         Route::post('companies/{company}/periods', [AccountingController::class, 'period'])->name('period');
+        Route::get('companies/{company}/periods/{period}/checks', [AccountingController::class, 'periodChecks'])->whereNumber('period')->name('periodChecks');
         Route::post('companies/{company}/periods/{period}/close', [AccountingController::class, 'close'])->name('close');
         Route::post('companies/{company}/periods/{period}/reopen/request', [AccountingController::class, 'requestReopen'])->middleware('throttle:10,1')->name('periods.reopen.request');
         Route::post('companies/{company}/period-reopenings/{reopeningRequest}/approve', [AccountingController::class, 'approveReopen'])->middleware('throttle:10,1')->name('periods.reopen.approve');
@@ -238,7 +310,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('integrations', 'integrations')->name('integrations');
             Route::post('integrations/{integration}/{action}', 'integrationAction')->whereIn('action', ['secret', 'enable', 'disable'])->middleware('throttle:10,1')->name('integrations.action');
             Route::get('luzma/{section?}', 'luzma')->whereIn('section', ['usage', 'tools'])->name('luzma');
+            Route::post('luzma/switch', 'luzmaSwitch')->middleware('throttle:10,1')->name('luzma.switch');
             Route::post('luzma/tools/{tool}', 'toolStatus')->name('luzma.tools.status');
+            Route::get('luzma/neural', 'neural')->name('luzma.neural');
+            Route::post('luzma/neural/inspect', 'neuralInspect')->middleware('throttle:60,1')->name('luzma.neural.inspect');
+            Route::get('luzma/neural/recent', 'neuralRecent')->middleware('throttle:120,1')->name('luzma.neural.recent');
+            Route::post('luzma/neural/train', 'neuralTrain')->middleware('throttle:5,1')->name('luzma.neural.train');
         });
 
         Route::controller(CC\SecurityController::class)->group(function () {
@@ -281,6 +358,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/executive-dashboard/export/{report}', [WorkManagementController::class, 'exportExecutive'])->middleware('throttle:10,1')->name('office.executive.export');
         Route::get('office/search', [WorkManagementController::class, 'search'])->middleware('throttle:60,1')->name('office.search');
         Route::post('work/notifications/read-all', [WorkManagementController::class, 'readAllNotifications'])->middleware('throttle:30,1')->name('work.notifications.readAll');
+        Route::post('work/notifications/{notification}/{action}', [WorkManagementController::class, 'archiveNotification'])->whereNumber('notification')->whereIn('action', ['archive', 'restore'])->middleware('throttle:60,1')->name('work.notifications.archive');
         Route::post('work/notifications/{notification}/read', [WorkManagementController::class, 'readNotification'])->whereNumber('notification')->middleware('throttle:60,1')->name('work.notifications.read');
         Route::get('office/dashboard', [OfficeAdminController::class, 'dashboard'])->name('office.dashboard');
         Route::get('support', [SupportTicketController::class, 'index'])->name('support.index');
@@ -306,6 +384,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::prefix('office')->name('office.admin.')->controller(OfficeAdminController::class)->group(function () {
             Route::get('users', 'users')->name('users');
             Route::get('companies', 'companies')->name('companies');
+            Route::get('invitations', 'invitations')->name('invitations');
+            Route::get('setup', 'setup')->name('setup');
             Route::get('team', 'team')->name('team');
             Route::get('team-workload', 'teamWorkload')->name('teamWorkload');
             Route::get('assignments', 'assignments')->name('assignments');
@@ -328,6 +408,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('tasks/{task}/assign', 'assignTask')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.assign');
             Route::patch('offices/{office}/policies', 'updatePolicies')->whereNumber('office')->middleware('throttle:20,1')->name('offices.policies');
             Route::patch('offices/{office}/security', 'updateSecurity')->whereNumber('office')->middleware('throttle:10,1')->name('offices.security');
+        });
+        Route::prefix('essential')->name('essential.')->controller(EssentialController::class)->group(function () {
+            Route::get('dashboard', 'dashboard')->name('dashboard');
+            Route::get('tasks', 'tasks')->name('tasks');
+            Route::get('tasks/{task}', 'task')->whereNumber('task')->name('task');
+            Route::post('tasks/{task}/links', 'taskLink')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.link');
+            Route::delete('tasks/{task}/links/{dependency}', 'taskUnlink')->whereNumber(['task', 'dependency'])->middleware('throttle:30,1')->name('tasks.unlink');
+            Route::post('tasks/{task}/{action}', 'taskAction')->whereNumber('task')->whereIn('action', ['start', 'note', 'submit', 'finish', 'review', 'approve', 'changes', 'complete', 'block', 'unblock', 'resume', 'cancel', 'wait_client', 'wait_external', 'receive'])->middleware('throttle:60,1')->name('tasks.action');
+            Route::get('obligations', 'obligations')->name('obligations');
+            Route::post('obligations/refresh', 'refreshObligations')->middleware('throttle:10,1')->name('obligations.refresh');
+            Route::get('obligations/{obligation}', 'obligation')->whereNumber('obligation')->name('obligation');
+            Route::post('obligations/{obligation}/checks/{key}', 'obligationCheck')->whereNumber('obligation')->where('key', '[a-z_]+')->middleware('throttle:60,1')->name('obligation.check');
+            Route::post('obligations/{obligation}/observations/{observation}/corrected', 'obligationObservationCorrected')->whereNumber(['obligation', 'observation'])->middleware('throttle:30,1')->name('obligation.observation');
+            Route::delete('obligations/{obligation}/checks/{key}', 'obligationCheckReopen')->whereNumber('obligation')->where('key', '[a-z_]+')->middleware('throttle:60,1')->name('obligation.check.reopen');
+            Route::post('obligations/{obligation}/{action}', 'obligationAction')->whereNumber('obligation')->whereIn('action', ['start', 'submit', 'finalize', 'approve', 'changes', 'recalculate', 'complete'])->middleware('throttle:30,1')->name('obligations.action');
+            Route::get('invoicing', 'invoicing')->name('invoicing');
+            Route::get('audit', 'audit')->name('audit');
+            Route::get('audit/export', 'exportAudit')->middleware('throttle:10,1')->name('audit.export');
+            Route::get('backups', 'backups')->name('backups');
         });
         Route::prefix('supervisor')->name('supervisor.')->controller(SupervisorController::class)->group(function () {
             Route::get('dashboard', 'dashboard')->name('dashboard');
@@ -395,6 +494,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('reports', 'reports')->name('reports');
             Route::get('reports/{report}', 'export')->middleware('throttle:10,1')->name('reports.export');
             Route::get('modules/{module}', 'module')->name('module');
+            Route::post('tasks/{task}/links', 'taskLink')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.link');
+            Route::delete('tasks/{task}/links/{dependency}', 'taskUnlink')->whereNumber(['task', 'dependency'])->middleware('throttle:30,1')->name('tasks.unlink');
             Route::post('tasks/{task}/{action}', 'taskAction')->whereNumber('task')->whereIn('action', ['start', 'submit'])->middleware('throttle:60,1')->name('tasks.action');
             Route::patch('observations/{observation}', 'observationAction')->whereNumber('observation')->middleware('throttle:60,1')->name('observations.update');
             Route::post('companies/{company}/periods/{period}/submit', 'submit')->whereNumber('company')->whereNumber('period')->middleware('throttle:10,1')->name('submit');
@@ -420,6 +521,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('incidents', 'incidents')->name('incidents');
             Route::patch('incidents/{incident}', 'updateIncident')->whereNumber('incident')->middleware('throttle:60,1')->name('incidents.update');
             Route::get('tasks', 'tasks')->name('tasks');
+            Route::post('tasks/{task}/links', 'taskLink')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.link');
+            Route::delete('tasks/{task}/links/{dependency}', 'taskUnlink')->whereNumber(['task', 'dependency'])->middleware('throttle:30,1')->name('tasks.unlink');
             Route::post('tasks/{task}/{action}', 'taskAction')->whereNumber('task')->whereIn('action', ['start', 'submit'])->middleware('throttle:60,1')->name('tasks.action');
             Route::get('calendar', 'calendar')->name('calendar');
             Route::get('activity', 'activity')->name('activity');
@@ -463,6 +566,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('incidents', 'incidents')->name('incidents');
             Route::patch('incidents/{incident}', 'updateIncident')->whereNumber('incident')->middleware('throttle:60,1')->name('incidents.update');
             Route::get('tasks', 'tasks')->name('tasks');
+            Route::post('tasks/{task}/links', 'taskLink')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.link');
+            Route::delete('tasks/{task}/links/{dependency}', 'taskUnlink')->whereNumber(['task', 'dependency'])->middleware('throttle:30,1')->name('tasks.unlink');
             Route::post('tasks/{task}/{action}', 'taskAction')->whereNumber('task')->whereIn('action', ['start', 'submit'])->middleware('throttle:60,1')->name('tasks.action');
             Route::get('calendar', 'calendar')->name('calendar');
             Route::get('activity', 'activity')->name('activity');
@@ -524,6 +629,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('incidents', 'incidents')->name('incidents');
             Route::patch('incidents/{incident}', 'updateIncident')->whereNumber('incident')->middleware('throttle:60,1')->name('incidents.update');
             Route::get('tasks', 'tasks')->name('tasks');
+            Route::post('tasks/{task}/links', 'taskLink')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.link');
+            Route::delete('tasks/{task}/links/{dependency}', 'taskUnlink')->whereNumber(['task', 'dependency'])->middleware('throttle:30,1')->name('tasks.unlink');
             Route::post('tasks/{task}/{action}', 'taskAction')->whereNumber('task')->whereIn('action', ['start', 'submit'])->middleware('throttle:60,1')->name('tasks.action');
             Route::get('calendar', 'calendar')->name('calendar');
             Route::get('activity', 'activity')->name('activity');
@@ -534,6 +641,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/', 'dashboard')->name('dashboard');
             Route::post('company/switch', 'switchCompany')->middleware('throttle:30,1')->name('company.switch');
             Route::get('company', 'company')->name('company');
+            Route::get('finances', 'finances')->name('finances');
+            Route::get('account', 'account')->name('account');
+            Route::post('account/payments', 'reportPayment')->middleware('throttle:10,1')->name('account.payments');
+            Route::get('payroll', 'payroll')->name('payroll');
             Route::post('company/change-requests', 'changeRequest')->middleware('throttle:10,1')->name('company.change');
             Route::get('pending', 'pending')->name('pending');
             Route::get('calendar', 'calendar')->name('calendar');
@@ -635,7 +746,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('findings/{finding}/respond', 'respond')->whereNumber('finding')->middleware('throttle:30,1')->name('respond');
             Route::post('findings/{finding}/management', 'management')->whereNumber('finding')->middleware('throttle:30,1')->name('management');
         });
-        Route::prefix('payroll')->name('payroll.')->controller(PayrollController::class)->group(function () {
+        Route::prefix('payroll')->name('payroll.')->middleware('plan.feature:payroll')->controller(PayrollController::class)->group(function () {
             Route::get('dashboard', 'dashboard')->name('dashboard');
             Route::get('companies', 'companies')->name('companies');
             Route::get('companies/{company}', 'company')->whereNumber('company')->name('company');
@@ -667,6 +778,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('incidents', 'incidents')->name('incidents');
             Route::patch('incidents/{incident}', 'updateIncident')->whereNumber('incident')->middleware('throttle:60,1')->name('incidents.update');
             Route::get('tasks', 'tasks')->name('tasks');
+            Route::post('tasks/{task}/links', 'taskLink')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.link');
+            Route::delete('tasks/{task}/links/{dependency}', 'taskUnlink')->whereNumber(['task', 'dependency'])->middleware('throttle:30,1')->name('tasks.unlink');
             Route::post('tasks/{task}/{action}', 'taskAction')->whereNumber('task')->whereIn('action', ['start', 'submit'])->middleware('throttle:60,1')->name('tasks.action');
             Route::get('calendar', 'calendar')->name('calendar');
             Route::get('activity', 'activity')->name('activity');
@@ -705,6 +818,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('incidents', 'incidents')->name('incidents');
             Route::patch('incidents/{incident}', 'updateIncident')->whereNumber('incident')->middleware('throttle:60,1')->name('incidents.update');
             Route::get('tasks', 'tasks')->name('tasks');
+            Route::post('tasks/{task}/links', 'taskLink')->whereNumber('task')->middleware('throttle:30,1')->name('tasks.link');
+            Route::delete('tasks/{task}/links/{dependency}', 'taskUnlink')->whereNumber(['task', 'dependency'])->middleware('throttle:30,1')->name('tasks.unlink');
             Route::post('tasks/{task}/{action}', 'taskAction')->whereNumber('task')->whereIn('action', ['start', 'submit'])->middleware('throttle:60,1')->name('tasks.action');
             Route::get('calendar', 'calendar')->name('calendar');
             Route::get('activity', 'activity')->name('activity');
@@ -754,6 +869,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/offices/{office}', [WorkManagementController::class, 'officeDetail'])->name('office.offices.show');
         Route::patch('office/offices/{office}', [WorkManagementController::class, 'updateOffice'])->middleware('throttle:20,1')->name('office.offices.update');
         Route::get('office/users-roles', [WorkManagementController::class, 'usersRoles'])->name('office.usersRoles');
+        Route::get('office/roles', [WorkManagementController::class, 'rolesPermissions'])->name('office.roles.index');
         Route::get('office/subscription', [SubscriptionController::class, 'show'])->name('office.subscription');
         Route::get('office/firm-profile', [FirmProfileController::class, 'show'])->name('office.firmProfile');
         Route::patch('office/firm-profile', [FirmProfileController::class, 'update'])->middleware('throttle:20,1')->name('office.firmProfile.update');
@@ -761,10 +877,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('office/firm-profile/logo', [FirmProfileController::class, 'deleteLogo'])->middleware('throttle:10,1')->name('office.firmProfile.logo.delete');
         Route::get('office/firm-profile/logo', [FirmProfileController::class, 'logo'])->middleware('throttle:60,1')->name('office.firmProfile.logo');
         Route::get('office/reports', [WorkManagementController::class, 'reports'])->name('office.reports');
+        Route::get('office/profitability', [ProfitabilityController::class, 'index'])->name('office.profitability');
+        Route::patch('office/profitability/budget', [ProfitabilityController::class, 'budget'])->middleware('throttle:60,1')->name('office.profitability.budget');
+        Route::patch('office/profitability/cost', [ProfitabilityController::class, 'cost'])->middleware('throttle:30,1')->name('office.profitability.cost');
+        Route::get('work/time', [ProfitabilityController::class, 'time'])->name('work.time');
+        Route::post('work/time', [ProfitabilityController::class, 'storeTime'])->middleware('throttle:60,1')->name('work.time.store');
+        Route::delete('work/time/{entry}', [ProfitabilityController::class, 'destroyTime'])->whereNumber('entry')->middleware('throttle:60,1')->name('work.time.destroy');
         Route::get('office/revenue', [RevenueController::class, 'index'])->name('office.revenue');
         Route::post('office/revenue/generate', [RevenueController::class, 'generate'])->middleware('throttle:20,1')->name('office.revenue.generate');
         Route::post('office/revenue/invoices', [RevenueController::class, 'store'])->middleware('throttle:30,1')->name('office.revenue.invoices.store');
         Route::patch('office/revenue/invoices/{invoice}/paid', [RevenueController::class, 'paid'])->whereNumber('invoice')->middleware('throttle:60,1')->name('office.revenue.invoices.paid');
+        Route::post('office/revenue/notices/{notice}/{action}', [RevenueController::class, 'reviewNotice'])->whereNumber('notice')->whereIn('action', ['confirm', 'reject'])->middleware('throttle:60,1')->name('office.revenue.notices.review');
         Route::get('office/projections', [WorkManagementController::class, 'projections'])->name('office.projections');
         Route::get('office/growth', [WorkManagementController::class, 'growth'])->name('office.growth');
         Route::get('office/crm', [CrmController::class, 'index'])->name('office.crm');
@@ -777,12 +900,27 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('office/training/courses/{course}/enroll', [TrainingController::class, 'enroll'])->whereNumber('course')->middleware('throttle:30,1')->name('office.training.enroll');
         Route::patch('office/training/enrollments/{enrollment}', [TrainingController::class, 'progress'])->whereNumber('enrollment')->middleware('throttle:60,1')->name('office.training.progress');
         Route::post('office/training/certifications', [TrainingController::class, 'storeCertification'])->middleware('throttle:30,1')->name('office.training.certifications.store');
+        Route::get('office/training/certifications/{certification}/file', [TrainingController::class, 'certificationFile'])->whereNumber('certification')->middleware('throttle:30,1')->name('office.training.certifications.file');
+        Route::get('office/training/certifications/{certification}/certificate', [TrainingController::class, 'certificate'])->whereNumber('certification')->name('office.training.certifications.certificate');
         Route::post('office/training/needs', [TrainingController::class, 'storeNeed'])->middleware('throttle:30,1')->name('office.training.needs.store');
         Route::patch('office/training/needs/{need}', [TrainingController::class, 'updateNeed'])->whereNumber('need')->middleware('throttle:60,1')->name('office.training.needs.update');
         Route::patch('office/users/{user}/membership', [WorkManagementController::class, 'updateUserMembership'])->middleware('throttle:30,1')->name('office.users.membership');
         Route::post('office/roles', [WorkManagementController::class, 'storeRole'])->middleware('throttle:20,1')->name('office.roles.store');
         Route::patch('office/roles/{role}', [WorkManagementController::class, 'updateRole'])->middleware('throttle:20,1')->name('office.roles.update');
         Route::patch('office/roles/{role}/status', [WorkManagementController::class, 'updateRoleStatus'])->middleware('throttle:20,1')->name('office.roles.status');
+        Route::get('office/password-requests', [PasswordHelpController::class, 'index'])->name('office.passwordRequests.index');
+        Route::post('office/password-requests/{passwordRequest}/approve', [PasswordHelpController::class, 'approve'])->whereNumber('passwordRequest')->middleware('throttle:20,1')->name('office.passwordRequests.approve');
+        Route::post('office/password-requests/{passwordRequest}/reject', [PasswordHelpController::class, 'reject'])->whereNumber('passwordRequest')->middleware('throttle:20,1')->name('office.passwordRequests.reject');
+        Route::get('office/client-access', [ClientAccessAdminController::class, 'index'])->name('office.clientAccess.index');
+        Route::post('office/client-access', [ClientAccessAdminController::class, 'store'])->middleware('throttle:20,1')->name('office.clientAccess.store');
+        Route::post('office/client-access/{access}/password', [ClientAccessAdminController::class, 'resetPassword'])->whereNumber('access')->middleware('throttle:10,1')->name('office.clientAccess.password');
+        Route::post('office/client-access/invitations', [ClientAccessAdminController::class, 'invite'])->middleware('throttle:20,1')->name('office.clientAccess.invite');
+        Route::post('office/client-access/invitations/{invitation}/resend', [ClientAccessAdminController::class, 'resend'])->middleware('throttle:10,1')->name('office.clientAccess.resend');
+        Route::delete('office/client-access/invitations/{invitation}', [ClientAccessAdminController::class, 'cancel'])->middleware('throttle:20,1')->name('office.clientAccess.cancel');
+        Route::patch('office/client-access/{access}/role', [ClientAccessAdminController::class, 'role'])->whereNumber('access')->middleware('throttle:30,1')->name('office.clientAccess.role');
+        Route::post('office/client-access/{access}/{status}', [ClientAccessAdminController::class, 'status'])->whereNumber('access')->whereIn('status', ['revoke', 'restore'])->middleware('throttle:30,1')->name('office.clientAccess.status');
+        Route::get('office/client-access/{access}/activity', [ClientAccessAdminController::class, 'activity'])->whereNumber('access')->middleware('throttle:60,1')->name('office.clientAccess.activity');
+        Route::patch('office/client-access/offices/{office}/policy', [ClientAccessAdminController::class, 'policy'])->whereNumber('office')->middleware('throttle:20,1')->name('office.clientAccess.policy');
         Route::get('office/company-assignments', [WorkManagementController::class, 'companyAssignments'])->name('office.companyAssignments.index');
         Route::delete('office/company-assignments/{assignment}', [WorkManagementController::class, 'unassignCompany'])->middleware('throttle:30,1')->name('office.companyAssignments.destroy');
         Route::get('work/tasks/{task}', [WorkManagementController::class, 'taskDetail'])->name('work.tasks.show');
@@ -809,5 +947,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('workspace/invitations', [InvitationController::class, 'store'])->middleware(['subscription.active', 'throttle:5,1'])->name('workspace.invite');
     Route::delete('workspace/invitations/{invitation}', [InvitationController::class, 'destroy'])->middleware('subscription.active')->name('workspace.revoke');
 });
+
+// Unknown addresses go through the web stack too, so a signed-in user is sent back to their panel instead of an error page.
+Route::fallback(fn () => abort(404));
 
 require __DIR__.'/settings.php';

@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\ControlCenter;
 
+use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Luzma\LuzmaToolRegistry;
 use App\Services\Platform\EntitlementResolverService;
+use App\Services\Platform\GlobalConfigurationService;
 use App\Services\Platform\IntegrationManagementService;
 use App\Services\Platform\JobMonitoringService;
+use App\Services\Platform\LuzmaNeuralService;
 use App\Services\Platform\LuzmaPlatformService;
 use App\Services\Platform\PlatformAuditService;
 use App\Services\Platform\PlatformHealthService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -104,6 +108,19 @@ class OperationsController extends ControlCenterController
         ]);
     }
 
+    /** The only way to turn Luzma off (or back on) for every firm: the SaaS administrator's switch. */
+    public function luzmaSwitch(Request $request, LuzmaSwitch $switch): RedirectResponse
+    {
+        $user = $this->staff($request, 'saas.luzma.manage');
+        $data = $request->validate(['enabled' => 'required|boolean', 'reason' => 'required|string|min:5|max:500', 'message' => 'nullable|string|max:255']);
+        if (isset($data['message']) && trim((string) $data['message']) !== '') {
+            app(GlobalConfigurationService::class)->set($user, 'luzma.disabled_message', (string) $data['message']);
+        }
+        $switch->set($user, (bool) $data['enabled'], (string) $data['reason']);
+
+        return back()->with('workspace_notice', $data['enabled'] ? 'Luzma quedó encendida para todas las firmas.' : 'Luzma quedó apagada para todas las firmas.');
+    }
+
     public function toolStatus(Request $request, string $tool, LuzmaPlatformService $luzma, LuzmaToolRegistry $registry): RedirectResponse
     {
         $user = $this->staff($request, 'saas.luzma.manage');
@@ -111,5 +128,38 @@ class OperationsController extends ControlCenterController
         $luzma->setToolStatus($user, $registry, $tool, (string) $data['status'], (string) $data['reason']);
 
         return back()->with('workspace_notice', 'Estado de la herramienta actualizado para todas las organizaciones.');
+    }
+
+    /** The neural network of Luzma, drawn and alive: layers, activations of the real questions and retraining. */
+    public function neural(Request $request, LuzmaNeuralService $neural): Response
+    {
+        $user = $this->staff($request, 'saas.luzma.view');
+
+        return $this->render($request, 'luzma-neural', ['info' => $neural->info(), 'recent' => $neural->recent(0), 'can_manage' => $this->authorization->can($user, 'saas.luzma.manage')]);
+    }
+
+    public function neuralInspect(Request $request, LuzmaNeuralService $neural): JsonResponse
+    {
+        $this->staff($request, 'saas.luzma.view');
+        $data = $request->validate(['text' => 'required|string|min:2|max:300']);
+        $result = $neural->inspect($data['text']);
+
+        return $result === null ? response()->json(['message' => 'La red neuronal no responde.'], 503) : response()->json($result);
+    }
+
+    public function neuralRecent(Request $request, LuzmaNeuralService $neural): JsonResponse
+    {
+        $this->staff($request, 'saas.luzma.view');
+
+        return response()->json([...$neural->recent((int) $request->query('after', 0)), 'info' => $neural->info()]);
+    }
+
+    public function neuralTrain(Request $request, LuzmaNeuralService $neural): RedirectResponse
+    {
+        $user = $this->staff($request, 'saas.luzma.manage');
+        $data = $request->validate(['use_feedback' => 'required|boolean', 'epochs' => 'required|integer|between:5,80']);
+        $result = $neural->train($user, (bool) $data['use_feedback'], (int) $data['epochs']);
+
+        return back()->with('workspace_notice', ($result['started'] ?? false) ? 'La red empezó a reentrenarse; verás el avance en vivo.' : 'No se pudo iniciar el entrenamiento (ya hay uno en curso o el servicio no responde).');
     }
 }

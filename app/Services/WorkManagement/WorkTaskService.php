@@ -4,6 +4,17 @@ declare(strict_types=1);
 
 namespace App\Services\WorkManagement;
 
+use App\Events\Work\ReviewApproved;
+use App\Events\Work\ReviewChangesRequested;
+use App\Events\Work\ReviewRequested;
+use App\Events\Work\ReviewStarted;
+use App\Events\Work\TaskBlocked;
+use App\Events\Work\TaskCompleted;
+use App\Events\Work\TaskCreated;
+use App\Events\Work\TaskResumed;
+use App\Events\Work\TaskStarted;
+use App\Events\Work\TaskUnblocked;
+use App\Events\Work\TaskWaiting;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
@@ -24,22 +35,44 @@ class WorkTaskService
         'completed',
         'cancelled',
         'blocked',
+        'waiting_client',
+        'waiting_external',
+        'not_applicable',
     ];
 
     private const TRANSITIONS = [
-        'pending' => ['in_progress', 'cancelled', 'blocked'],
-        'in_progress' => ['ready_for_review', 'blocked', 'cancelled'],
-        'changes_requested' => ['in_progress', 'blocked', 'cancelled'],
+        'pending' => ['in_progress', 'cancelled', 'blocked', 'not_applicable'],
+        'in_progress' => ['ready_for_review', 'blocked', 'cancelled', 'waiting_client', 'waiting_external', 'not_applicable'],
+        'waiting_client' => ['in_progress', 'blocked', 'cancelled'],
+        'waiting_external' => ['in_progress', 'blocked', 'cancelled'],
+        'changes_requested' => ['in_progress', 'blocked', 'cancelled', 'waiting_client', 'waiting_external'],
         'ready_for_review' => ['in_review', 'changes_requested', 'cancelled'],
         'in_review' => ['approved', 'changes_requested', 'blocked', 'cancelled'],
         'approved' => ['completed'],
         'blocked' => ['in_progress', 'cancelled'],
     ];
 
+    /** Permission required to move a task into each status. */
+    public const TRANSITION_PERMISSIONS = [
+        'in_progress' => 'tasks.start',
+        'ready_for_review' => 'tasks.submit',
+        'in_review' => 'tasks.review',
+        'changes_requested' => 'tasks.request_changes',
+        'approved' => 'tasks.approve',
+        'completed' => 'tasks.complete',
+        'cancelled' => 'tasks.cancel',
+    ];
+
     public function __construct(
         private AccountingService $accounting,
         private WorkNotificationService $notifications,
     ) {}
+
+    /** @return list<string> */
+    public static function allowedTransitions(string $status): array
+    {
+        return self::TRANSITIONS[$status] ?? [];
+    }
 
     /** @param array<string, mixed> $data */
     public function create(Organization $organization, User $actor, array $data): int
@@ -104,6 +137,8 @@ class WorkTaskService
                 $this->notifications->notify($organization->id, $reviewerId, $actor->id, 'task.reviewer_assigned', 'Eres revisor de: '.$data['title'], null, 'work_tasks', $id);
             }
 
+            event(new TaskCreated($organization->id, $actor->id, $id, $data['source_type'] ?? null, isset($data['source_id']) ? (int) $data['source_id'] : null, ['assigned_to' => $data['assigned_to'] ?? null]));
+
             return $id;
         });
     }
@@ -123,20 +158,37 @@ class WorkTaskService
 
             $timestamps = match ($targetStatus) {
                 'in_progress' => ['started_at' => $task->started_at ?? now()],
-                'ready_for_review' => ['submitted_at' => now()],
-                'in_review', 'approved', 'changes_requested' => ['reviewed_at' => now()],
+                'ready_for_review' => ['submitted_at' => now(), 'ready_at' => now()],
+                'in_review' => ['reviewed_at' => now(), 'review_started_at' => now()],
+                'approved' => ['reviewed_at' => now(), 'approved_at' => now()],
+                'changes_requested' => ['reviewed_at' => now()],
                 'completed' => ['completed_at' => now()],
+                'waiting_client', 'waiting_external' => ['waiting_since' => now(), 'waiting_reason' => $comment],
+                'blocked' => ['blocked_reason' => $comment],
                 default => [],
             };
+            // Leaving a wait or a block: the time spent waiting is kept apart from the time spent working.
+            if (in_array($task->status, ['waiting_client', 'waiting_external'], true) && ! in_array($targetStatus, ['waiting_client', 'waiting_external'], true)) {
+                $timestamps['waiting_seconds'] = (int) $task->waiting_seconds + ($task->waiting_since === null ? 0 : max(0, (int) now()->diffInSeconds($task->waiting_since, true)));
+                $timestamps['waiting_since'] = null;
+                $timestamps['waiting_reason'] = null;
+            }
+            if ($task->status === 'blocked' && $targetStatus !== 'blocked') {
+                $timestamps['blocked_reason'] = null;
+            }
 
             DB::table('work_tasks')->where('id', $task->id)->update([
                 'status' => $targetStatus,
                 ...$timestamps,
                 'updated_at' => now(),
             ]);
-
             if ($comment !== null && trim($comment) !== '') {
-                $this->comment($organization, $actor, $taskId, $comment, $targetStatus === 'changes_requested' ? 'observation' : 'comment');
+                $this->comment($organization, $actor, $taskId, $comment, match ($targetStatus) {
+                    'changes_requested' => 'observation',
+                    'blocked' => 'blocker',
+                    'waiting_client', 'waiting_external' => 'wait',
+                    default => 'comment',
+                });
             }
 
             $this->accounting->audit($organization, $actor, 'task.'.$targetStatus, 'work_tasks', $taskId, [
@@ -145,6 +197,75 @@ class WorkTaskService
             ]);
 
             $this->notifyTransition($organization->id, $actor, $task, $targetStatus, $comment);
+            $this->announce($organization, $actor, $task, $targetStatus);
+        });
+    }
+
+    /**
+     * The module that owns the work (payroll, treasury, collections...) decided the new state: the task reflects it. The change
+     * is audited as a synchronization, never as something a person did on the task.
+     */
+    public function mirror(Organization $organization, stdClass $task, string $status, string $reason): void
+    {
+        DB::transaction(function () use ($organization, $task, $status, $reason): void {
+            $locked = $this->task($organization->id, (int) $task->id, true);
+            if ($locked->status === $status || in_array($locked->status, ['completed', 'cancelled', 'not_applicable'], true)) {
+                return;
+            }
+            $values = match ($status) {
+                'in_progress' => ['started_at' => $locked->started_at ?? now()],
+                'ready_for_review' => ['submitted_at' => now(), 'ready_at' => now()],
+                'approved' => ['approved_at' => now(), 'reviewed_at' => now()],
+                'changes_requested' => ['reviewed_at' => now()],
+                'completed' => ['completed_at' => now(), 'started_at' => $locked->started_at ?? now()],
+                default => [],
+            };
+            DB::table('work_tasks')->where('id', $locked->id)->update(['status' => $status, ...$values, 'updated_at' => now()]);
+            DB::table('audit_logs')->insert(['organization_id' => $organization->id, 'office_id' => $locked->office_id, 'user_id' => null, 'action' => 'task.synced', 'auditable_type' => 'work_tasks', 'auditable_id' => $locked->id,
+                'new_values' => json_encode(['from' => $locked->status, 'to' => $status, 'reason' => $reason], JSON_THROW_ON_ERROR), 'occurred_at' => now(), 'created_at' => now()]);
+            $this->announce($organization, null, $locked, $status);
+        });
+    }
+
+    /** The workflow event that matches the new state, for the listeners that keep panels, reminders and Luzma aligned. */
+    public function announce(Organization $organization, ?User $actor, stdClass $task, string $to): void
+    {
+        $event = match (true) {
+            $to === 'in_progress' && in_array($task->status, ['waiting_client', 'waiting_external'], true) => TaskResumed::class,
+            $to === 'in_progress' && $task->status === 'blocked' => TaskUnblocked::class,
+            $to === 'in_progress' => TaskStarted::class,
+            $to === 'ready_for_review' => ReviewRequested::class,
+            $to === 'in_review' => ReviewStarted::class,
+            $to === 'changes_requested' => ReviewChangesRequested::class,
+            $to === 'approved' => ReviewApproved::class,
+            $to === 'completed' => TaskCompleted::class,
+            $to === 'blocked' => TaskBlocked::class,
+            in_array($to, ['waiting_client', 'waiting_external'], true) => TaskWaiting::class,
+            default => null,
+        };
+        if ($event !== null) {
+            event(new $event($organization->id, $actor?->id, (int) $task->id, $task->source_type, $task->source_id === null ? null : (int) $task->source_id, ['from' => $task->status, 'to' => $to]));
+        }
+    }
+
+    /**
+     * The person who runs the practice finishes their own task without sending it to review: there is nobody above them.
+     * The history records that it closed without a second pair of eyes.
+     */
+    public function finishOwn(Organization $organization, User $actor, int $taskId, ?string $comment = null): void
+    {
+        DB::transaction(function () use ($organization, $actor, $taskId, $comment): void {
+            $task = $this->task($organization->id, $taskId, true);
+            if ((int) $task->assigned_to !== $actor->id || ! in_array($task->status, ['in_progress', 'changes_requested'], true)) {
+                throw ValidationException::withMessages(['status' => 'Solo puedes completar una tarea tuya que esté en proceso.']);
+            }
+
+            DB::table('work_tasks')->where('id', $task->id)->update(['status' => 'completed', 'completed_at' => now(), 'updated_at' => now()]);
+            if ($comment !== null && trim($comment) !== '') {
+                $this->comment($organization, $actor, $taskId, $comment);
+            }
+            $this->accounting->audit($organization, $actor, 'task.completed', 'work_tasks', $taskId, ['from' => $task->status, 'to' => 'completed', 'without_review' => true], (int) $task->office_id);
+            $this->announce($organization, $actor, $task, 'completed');
         });
     }
 
@@ -248,7 +369,7 @@ class WorkTaskService
         return $id;
     }
 
-    private function task(int $organizationId, int $taskId, bool $lock = false): stdClass
+    public function task(int $organizationId, int $taskId, bool $lock = false): stdClass
     {
         $query = DB::table('work_tasks')->where('work_tasks.organization_id', $organizationId)->where('id', $taskId)->whereNull('deleted_at');
         if ($lock) {

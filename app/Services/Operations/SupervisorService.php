@@ -548,8 +548,7 @@ class SupervisorService
             ->map(fn (object $row): array => ['type' => (string) $row->document_type, 'label' => $labels[$row->document_type] ?? (string) $row->document_type, 'certified' => (int) $row->certified, 'pending' => (int) $row->pending, 'failed' => (int) $row->failed, 'cancelled' => (int) $row->cancelled])->values()->all();
 
         return [
-            'simulated' => DB::table('fel_documents')->whereIn('company_id', $ids)->where(fn ($query) => $query->where('provider', 'mock')->orWhere('environment', '!=', 'production'))->exists()
-                || ! DB::table('fel_documents')->whereIn('company_id', $ids)->exists(),
+            'simulated' => DB::table('fel_documents')->whereIn('company_id', $ids)->where(fn ($query) => $query->where('provider', 'mock'))->exists(),
             'summary' => array_values($summary),
             'rows' => array_values(DB::table('fel_documents')->join('companies', 'companies.id', '=', 'fel_documents.company_id')->whereIn('fel_documents.company_id', $ids)->orderByDesc('fel_documents.issued_on')->limit(150)
                 ->get(['fel_documents.id', 'fel_documents.document_type', 'fel_documents.series', 'fel_documents.number', 'fel_documents.issued_on', 'fel_documents.status', 'fel_documents.environment', 'fel_documents.provider', 'companies.name as company_name', 'companies.public_id'])

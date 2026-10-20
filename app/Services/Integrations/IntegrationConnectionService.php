@@ -7,6 +7,7 @@ namespace App\Services\Integrations;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkManagement\WorkDashboardService;
 use Illuminate\Contracts\Mail\Mailer;
@@ -307,7 +308,7 @@ class IntegrationConnectionService
     /** Luzma runs when the platform has it on and the office has not switched it off. */
     public function luzmaEnabled(Organization|int $organization): bool
     {
-        return (bool) config('luzma.enabled') && (($this->config($organization, 'luzma') ?? [])['enabled'] ?? true) !== false;
+        return app(LuzmaSwitch::class)->enabled() && (($this->config($organization, 'luzma') ?? [])['enabled'] ?? true) !== false;
     }
 
     /** @param array<string, mixed> $config */
@@ -411,7 +412,7 @@ class IntegrationConnectionService
             str_contains($url, 'logic.azure.com') || str_contains($url, 'powerplatform.com') => ['type' => 'message', 'attachments' => [['contentType' => 'application/vnd.microsoft.card.adaptive', 'content' => ['$schema' => 'http://adaptivecards.io/schemas/adaptive-card.json', 'type' => 'AdaptiveCard', 'version' => '1.4', 'body' => [['type' => 'TextBlock', 'text' => $title, 'weight' => 'Bolder', 'wrap' => true], ['type' => 'TextBlock', 'text' => $text, 'wrap' => true]]]]]],
             default => ['@type' => 'MessageCard', '@context' => 'http://schema.org/extensions', 'summary' => $title, 'title' => $title, 'text' => $text],
         };
-        $response = Http::timeout(8)->post($url, $payload);
+        $response = Http::timeout(8)->withoutRedirecting()->post($url, $payload);
 
         if ($response->failed()) {
             throw new \RuntimeException(self::PROVIDERS[$provider]['label'].' respondió '.$response->status().'.');

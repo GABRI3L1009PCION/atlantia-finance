@@ -4,7 +4,12 @@ import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { DirectorOverview } from '@/components/director-overview';
 import type { DirectorFirm } from '@/components/director-overview';
-import { LuzmaInsightsCard } from '@/components/luzma/luzma-insights-card';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { EXECUTIVE_HOME } from '@/lib/executive-workspace';
 
 type Tone = 'green' | 'amber' | 'red' | 'blue' | 'slate';
@@ -220,6 +225,135 @@ function SectionHeader({
     );
 }
 
+type RingSegment = { value: number; color: string };
+
+function RingChart({
+    segments,
+    center,
+    caption,
+    size = 120,
+    stroke = 14,
+}: {
+    segments: RingSegment[];
+    center: ReactNode;
+    caption?: string;
+    size?: number;
+    stroke?: number;
+}) {
+    const radius = (size - stroke) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const total = segments.reduce((sum, segment) => sum + segment.value, 0);
+    let offset = 0;
+
+    return (
+        <div
+            className="relative shrink-0"
+            style={{ width: size, height: size }}
+        >
+            <svg
+                width={size}
+                height={size}
+                viewBox={`0 0 ${size} ${size}`}
+                className="-rotate-90"
+            >
+                <circle
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="#eef1f3"
+                    strokeWidth={stroke}
+                />
+                {total > 0 &&
+                    segments.map((segment, index) => {
+                        const length = (segment.value / total) * circumference;
+                        const circle = (
+                            <circle
+                                key={index}
+                                cx={size / 2}
+                                cy={size / 2}
+                                r={radius}
+                                fill="none"
+                                stroke={segment.color}
+                                strokeWidth={stroke}
+                                strokeDasharray={`${length} ${circumference - length}`}
+                                strokeDashoffset={-offset}
+                            />
+                        );
+                        offset += length;
+
+                        return circle;
+                    })}
+            </svg>
+            <div className="absolute inset-0 grid place-items-center text-center">
+                <div className="leading-tight">
+                    <div className="text-xl font-black text-[#061633]">
+                        {center}
+                    </div>
+                    {caption && (
+                        <div className="text-[10px] text-slate-500">
+                            {caption}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function TableDialog({
+    title,
+    children,
+}: {
+    title: string;
+    children: ReactNode;
+}) {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className={chip}
+            >
+                Ver tabla
+            </button>
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-5xl">
+                    <DialogHeader>
+                        <DialogTitle>{title}</DialogTitle>
+                    </DialogHeader>
+                    {children}
+                </DialogContent>
+            </Dialog>
+        </>
+    );
+}
+
+function Legend({
+    items,
+}: {
+    items: { label: string; value: number; color: string }[];
+}) {
+    return (
+        <ul className="space-y-1.5 text-xs">
+            {items.map((item) => (
+                <li key={item.label} className="flex items-center gap-2">
+                    <span
+                        className="size-2.5 rounded-full"
+                        style={{ background: item.color }}
+                    />
+                    <span className="text-[#395277]">{item.label}</span>
+                    <span className="ml-auto pl-4 font-black">
+                        {item.value}
+                    </span>
+                </li>
+            ))}
+        </ul>
+    );
+}
+
 function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
     return (
         <tr>
@@ -278,6 +412,47 @@ export function ExecutiveDashboard({
             }),
         [dashboard.companies, complianceFilter],
     );
+    const complianceSegments = [
+        {
+            label: 'Cerradas',
+            color: '#12a594',
+            test: (status: string) => ['approved', 'closed'].includes(status),
+        },
+        {
+            label: 'En revisión',
+            color: '#3b82f6',
+            test: (status: string) =>
+                ['ready_for_review', 'in_review', 'ready_to_close'].includes(
+                    status,
+                ),
+        },
+        {
+            label: 'En proceso',
+            color: '#f59e0b',
+            test: (status: string) => status === 'in_progress',
+        },
+        {
+            label: 'Con cambios o bloqueadas',
+            color: '#dc2626',
+            test: (status: string) =>
+                ['changes_requested', 'blocked'].includes(status),
+        },
+        {
+            label: 'Sin iniciar',
+            color: '#cbd5e1',
+            test: (status: string) =>
+                !statusLabels[status] || status === 'not_started',
+        },
+    ].map((segment) => ({
+        label: segment.label,
+        color: segment.color,
+        value: dashboard.companies.filter((company) =>
+            segment.test(company.status),
+        ).length,
+    }));
+    const overdueCompanies = dashboard.companies.filter(
+        (company) => company.is_overdue,
+    ).length;
     const updateFilters = (next: { office_id?: string; period?: string }) => {
         const params: Record<string, string> = {};
         const officeId = next.office_id ?? selectedOffice;
@@ -297,6 +472,161 @@ export function ExecutiveDashboard({
         });
     };
 
+    const receivablesTable = (
+        <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+                <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
+                    <tr>
+                        {[
+                            'Empresa',
+                            'Cartera',
+                            'Vencido',
+                            '+90 días',
+                            'Promesas incumplidas',
+                            'Incidencias',
+                            'CxC vs Mayor',
+                            'Estado',
+                        ].map((header) => (
+                            <th
+                                key={header}
+                                className="px-2 py-2 font-semibold"
+                            >
+                                {header}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {(dashboard.receivables ?? []).map((row) => (
+                        <tr key={row.id}>
+                            <td className="px-2 py-2 font-bold">{row.name}</td>
+                            <td className="px-2 py-2">
+                                {row.total_cents === null
+                                    ? 'No disponible'
+                                    : `Q ${number(row.total_cents / 100)}`}
+                            </td>
+                            <td className="px-2 py-2 text-red-700">
+                                {row.overdue_cents === null
+                                    ? 'No disponible'
+                                    : `Q ${number(row.overdue_cents / 100)}`}
+                            </td>
+                            <td className="px-2 py-2">
+                                {row.critical_documents}
+                            </td>
+                            <td className="px-2 py-2">{row.broken_promises}</td>
+                            <td className="px-2 py-2">{row.incidents}</td>
+                            <td className="px-2 py-2">
+                                <span
+                                    className={badge(
+                                        row.ledger_status === 'matched'
+                                            ? 'green'
+                                            : row.ledger_status === 'difference'
+                                              ? 'red'
+                                              : 'slate',
+                                    )}
+                                >
+                                    {row.ledger_label}
+                                </span>
+                            </td>
+                            <td className="px-2 py-2">
+                                <span
+                                    className={badge(
+                                        [
+                                            'reconciliation_difference',
+                                            'attention_required',
+                                        ].includes(row.status)
+                                            ? 'red'
+                                            : 'amber',
+                                    )}
+                                >
+                                    {row.status_label}
+                                </span>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+    const payablesTable = (
+        <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+                <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
+                    <tr>
+                        {[
+                            'Empresa',
+                            'Por pagar',
+                            'Vencido',
+                            '+30 días',
+                            'Propuestas por aprobar',
+                            'Incidencias',
+                            'CxP vs Mayor',
+                            'Estado',
+                        ].map((header) => (
+                            <th
+                                key={header}
+                                className="px-2 py-2 font-semibold"
+                            >
+                                {header}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {(dashboard.payables ?? []).map((row) => (
+                        <tr key={row.id}>
+                            <td className="px-2 py-2 font-bold">{row.name}</td>
+                            <td className="px-2 py-2">
+                                {row.total_cents === null
+                                    ? 'No disponible'
+                                    : `Q ${number(row.total_cents / 100)}`}
+                            </td>
+                            <td className="px-2 py-2 text-red-700">
+                                {row.overdue_cents === null
+                                    ? 'No disponible'
+                                    : `Q ${number(row.overdue_cents / 100)}`}
+                            </td>
+                            <td className="px-2 py-2">
+                                {row.critical_documents}
+                            </td>
+                            <td className="px-2 py-2">
+                                {row.proposals_waiting_approval}
+                            </td>
+                            <td className="px-2 py-2">{row.incidents}</td>
+                            <td className="px-2 py-2">
+                                <span
+                                    className={badge(
+                                        row.ledger_status === 'matched'
+                                            ? 'green'
+                                            : row.ledger_status === 'difference'
+                                              ? 'red'
+                                              : 'slate',
+                                    )}
+                                >
+                                    {row.ledger_label}
+                                </span>
+                            </td>
+                            <td className="px-2 py-2">
+                                <span
+                                    className={badge(
+                                        [
+                                            'reconciliation_difference',
+                                            'attention_required',
+                                        ].includes(row.status)
+                                            ? 'red'
+                                            : 'amber',
+                                    )}
+                                >
+                                    {row.status_label}
+                                </span>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+
     return (
         <>
             <Head title="Panel Ejecutivo" />
@@ -307,6 +637,16 @@ export function ExecutiveDashboard({
                         firm={dashboard.firm ?? emptyFirm}
                         scopeLabel={scopeLabel}
                         periodName={periodName}
+                        receivablesTable={
+                            (dashboard.receivables ?? []).length > 0
+                                ? receivablesTable
+                                : null
+                        }
+                        payablesTable={
+                            (dashboard.payables ?? []).length > 0
+                                ? payablesTable
+                                : null
+                        }
                         filters={
                             <div className="flex flex-wrap items-center gap-2 xl:hidden">
                                 <label
@@ -370,612 +710,675 @@ export function ExecutiveDashboard({
                         }
                     />
 
-                    <LuzmaInsightsCard question="¿Qué oficinas requieren atención?" />
-
-                    {(dashboard.receivables ?? []).length > 0 && (
+                    <div className="grid items-stretch gap-3 xl:grid-cols-3">
                         <section
-                            id="cartera"
+                            id="cumplimiento"
                             className={`${panel} min-w-0 scroll-mt-24 p-3`}
                         >
                             <SectionHeader
-                                title="Cartera por empresa (cuentas por cobrar)"
+                                title="Cumplimiento por empresa"
                                 action={
-                                    <span className={chip}>
-                                        Cada empresa por separado
-                                    </span>
-                                }
-                            />
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-xs">
-                                    <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                        <tr>
-                                            {[
-                                                'Empresa',
-                                                'Cartera',
-                                                'Vencido',
-                                                '+90 días',
-                                                'Promesas incumplidas',
-                                                'Incidencias',
-                                                'CxC vs Mayor',
-                                                'Estado',
-                                            ].map((header) => (
-                                                <th
-                                                    key={header}
-                                                    className="px-2 py-2 font-semibold"
-                                                >
-                                                    {header}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {(dashboard.receivables ?? []).map(
-                                            (row) => (
-                                                <tr key={row.id}>
-                                                    <td className="px-2 py-2 font-bold">
-                                                        {row.name}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {row.total_cents ===
-                                                        null
-                                                            ? 'No disponible'
-                                                            : `Q ${number(row.total_cents / 100)}`}
-                                                    </td>
-                                                    <td className="px-2 py-2 text-red-700">
-                                                        {row.overdue_cents ===
-                                                        null
-                                                            ? 'No disponible'
-                                                            : `Q ${number(row.overdue_cents / 100)}`}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {row.critical_documents}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {row.broken_promises}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {row.incidents}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        <span
-                                                            className={badge(
-                                                                row.ledger_status ===
-                                                                    'matched'
-                                                                    ? 'green'
-                                                                    : row.ledger_status ===
-                                                                        'difference'
-                                                                      ? 'red'
-                                                                      : 'slate',
-                                                            )}
-                                                        >
-                                                            {row.ledger_label}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        <span
-                                                            className={badge(
-                                                                [
-                                                                    'reconciliation_difference',
-                                                                    'attention_required',
-                                                                ].includes(
-                                                                    row.status,
-                                                                )
-                                                                    ? 'red'
-                                                                    : 'amber',
-                                                            )}
-                                                        >
-                                                            {row.status_label}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ),
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </section>
-                    )}
-
-                    {(dashboard.payables ?? []).length > 0 && (
-                        <section
-                            id="obligaciones"
-                            className={`${panel} min-w-0 scroll-mt-24 p-3`}
-                        >
-                            <SectionHeader
-                                title="Obligaciones con proveedores (cuentas por pagar)"
-                                action={
-                                    <span className={chip}>
-                                        Cada empresa por separado
-                                    </span>
-                                }
-                            />
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-xs">
-                                    <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                        <tr>
-                                            {[
-                                                'Empresa',
-                                                'Por pagar',
-                                                'Vencido',
-                                                '+30 días',
-                                                'Propuestas por aprobar',
-                                                'Incidencias',
-                                                'CxP vs Mayor',
-                                                'Estado',
-                                            ].map((header) => (
-                                                <th
-                                                    key={header}
-                                                    className="px-2 py-2 font-semibold"
-                                                >
-                                                    {header}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {(dashboard.payables ?? []).map(
-                                            (row) => (
-                                                <tr key={row.id}>
-                                                    <td className="px-2 py-2 font-bold">
-                                                        {row.name}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {row.total_cents ===
-                                                        null
-                                                            ? 'No disponible'
-                                                            : `Q ${number(row.total_cents / 100)}`}
-                                                    </td>
-                                                    <td className="px-2 py-2 text-red-700">
-                                                        {row.overdue_cents ===
-                                                        null
-                                                            ? 'No disponible'
-                                                            : `Q ${number(row.overdue_cents / 100)}`}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {row.critical_documents}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {
-                                                            row.proposals_waiting_approval
-                                                        }
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        {row.incidents}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        <span
-                                                            className={badge(
-                                                                row.ledger_status ===
-                                                                    'matched'
-                                                                    ? 'green'
-                                                                    : row.ledger_status ===
-                                                                        'difference'
-                                                                      ? 'red'
-                                                                      : 'slate',
-                                                            )}
-                                                        >
-                                                            {row.ledger_label}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        <span
-                                                            className={badge(
-                                                                [
-                                                                    'reconciliation_difference',
-                                                                    'attention_required',
-                                                                ].includes(
-                                                                    row.status,
-                                                                )
-                                                                    ? 'red'
-                                                                    : 'amber',
-                                                            )}
-                                                        >
-                                                            {row.status_label}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ),
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </section>
-                    )}
-
-                    <section
-                        id="cumplimiento"
-                        className={`${panel} min-w-0 scroll-mt-24 p-3`}
-                    >
-                        <SectionHeader
-                            title="Cumplimiento por empresa"
-                            action={
-                                <div className="flex flex-wrap gap-1.5">
-                                    {complianceFilters.map((filter) => (
-                                        <button
-                                            key={filter.key}
-                                            type="button"
-                                            onClick={() =>
-                                                setComplianceFilter(filter.key)
-                                            }
-                                            className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${complianceFilter === filter.key ? 'bg-[#640000] text-white ring-[#640000]' : 'bg-white text-[#395277] ring-slate-200'}`}
-                                        >
-                                            {filter.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            }
-                        />
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-xs">
-                                <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                    <tr>
-                                        <th className="px-2 py-2">Empresa</th>
-                                        <th className="px-2 py-2">Oficina</th>
-                                        <th className="px-2 py-2">
-                                            Contador encargado
-                                        </th>
-                                        <th className="px-2 py-2">Estado</th>
-                                        <th className="w-40 px-2 py-2">
-                                            Avance
-                                        </th>
-                                        <th className="px-2 py-2 text-right">
-                                            Pendientes
-                                        </th>
-                                        <th className="px-2 py-2 text-right">
-                                            Vencidas
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {companies.map((company) => (
-                                        <tr
-                                            key={company.id}
-                                            className={
-                                                company.is_overdue
-                                                    ? 'bg-red-50/40'
-                                                    : ''
-                                            }
-                                        >
-                                            <td className="px-2 py-2.5">
-                                                <Link
-                                                    href={
-                                                        company.href ??
-                                                        '/accounting'
+                                    <TableDialog title="Cumplimiento por empresa">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {complianceFilters.map((filter) => (
+                                                <button
+                                                    key={filter.key}
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setComplianceFilter(
+                                                            filter.key,
+                                                        )
                                                     }
-                                                    className="font-bold text-[#061633] hover:text-[#640000]"
+                                                    className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${complianceFilter === filter.key ? 'bg-[#640000] text-white ring-[#640000]' : 'bg-white text-[#395277] ring-slate-200'}`}
                                                 >
-                                                    {company.name}
-                                                </Link>
-                                                <p className="text-[11px] text-[#526b92]">
-                                                    NIT {company.tax_id} ·{' '}
-                                                    {company.period_name ??
-                                                        'Sin período'}
-                                                </p>
-                                            </td>
-                                            <td className="px-2 py-2.5 text-[#395277]">
-                                                {company.office_name}
-                                            </td>
-                                            <td className="px-2 py-2.5 text-[#395277]">
-                                                {company.accountant ?? (
-                                                    <span className="font-bold text-amber-700">
-                                                        Sin asignar
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-2 py-2.5">
-                                                <span
-                                                    className={badge(
-                                                        statusTone(
-                                                            company.status,
+                                                    {filter.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-xs">
+                                                <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
+                                                    <tr>
+                                                        <th className="px-2 py-2">
+                                                            Empresa
+                                                        </th>
+                                                        <th className="px-2 py-2">
+                                                            Oficina
+                                                        </th>
+                                                        <th className="px-2 py-2">
+                                                            Contador encargado
+                                                        </th>
+                                                        <th className="px-2 py-2">
+                                                            Estado
+                                                        </th>
+                                                        <th className="w-40 px-2 py-2">
+                                                            Avance
+                                                        </th>
+                                                        <th className="px-2 py-2 text-right">
+                                                            Pendientes
+                                                        </th>
+                                                        <th className="px-2 py-2 text-right">
+                                                            Vencidas
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {companies.map(
+                                                        (company) => (
+                                                            <tr
+                                                                key={company.id}
+                                                                className={
+                                                                    company.is_overdue
+                                                                        ? 'bg-red-50/40'
+                                                                        : ''
+                                                                }
+                                                            >
+                                                                <td className="px-2 py-2.5">
+                                                                    <Link
+                                                                        href={
+                                                                            company.href ??
+                                                                            '/accounting'
+                                                                        }
+                                                                        className="font-bold text-[#061633] hover:text-[#640000]"
+                                                                    >
+                                                                        {
+                                                                            company.name
+                                                                        }
+                                                                    </Link>
+                                                                    <p className="text-[11px] text-[#526b92]">
+                                                                        NIT{' '}
+                                                                        {
+                                                                            company.tax_id
+                                                                        }{' '}
+                                                                        ·{' '}
+                                                                        {company.period_name ??
+                                                                            'Sin período'}
+                                                                    </p>
+                                                                </td>
+                                                                <td className="px-2 py-2.5 text-[#395277]">
+                                                                    {
+                                                                        company.office_name
+                                                                    }
+                                                                </td>
+                                                                <td className="px-2 py-2.5 text-[#395277]">
+                                                                    {company.accountant ?? (
+                                                                        <span className="font-bold text-amber-700">
+                                                                            Sin
+                                                                            asignar
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-2 py-2.5">
+                                                                    <span
+                                                                        className={badge(
+                                                                            statusTone(
+                                                                                company.status,
+                                                                            ),
+                                                                        )}
+                                                                    >
+                                                                        {statusLabels[
+                                                                            company
+                                                                                .status
+                                                                        ] ??
+                                                                            company.status}
+                                                                    </span>
+                                                                    {company.is_overdue && (
+                                                                        <span
+                                                                            className={`ml-1 ${badge('red')}`}
+                                                                        >
+                                                                            Atrasada
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-2 py-2.5">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <ProgressBar
+                                                                            value={
+                                                                                company.progress
+                                                                            }
+                                                                            tone={
+                                                                                company.progress >=
+                                                                                100
+                                                                                    ? 'bg-emerald-500'
+                                                                                    : 'bg-blue-500'
+                                                                            }
+                                                                        />
+                                                                        <span className="w-9 text-right font-black">
+                                                                            {
+                                                                                company.progress
+                                                                            }
+                                                                            %
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-2 py-2.5 text-right font-black">
+                                                                    {
+                                                                        company.pending_tasks
+                                                                    }
+                                                                </td>
+                                                                <td
+                                                                    className={`px-2 py-2.5 text-right font-black ${(company.overdue_tasks ?? 0) > 0 ? 'text-red-700' : ''}`}
+                                                                >
+                                                                    {company.overdue_tasks ??
+                                                                        0}
+                                                                </td>
+                                                            </tr>
                                                         ),
                                                     )}
-                                                >
-                                                    {statusLabels[
-                                                        company.status
-                                                    ] ?? company.status}
-                                                </span>
-                                                {company.is_overdue && (
-                                                    <span
-                                                        className={`ml-1 ${badge('red')}`}
-                                                    >
-                                                        Atrasada
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-2 py-2.5">
-                                                <div className="flex items-center gap-2">
-                                                    <ProgressBar
-                                                        value={company.progress}
-                                                        tone={
-                                                            company.progress >=
-                                                            100
-                                                                ? 'bg-emerald-500'
-                                                                : 'bg-blue-500'
-                                                        }
-                                                    />
-                                                    <span className="w-9 text-right font-black">
-                                                        {company.progress}%
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-2 py-2.5 text-right font-black">
-                                                {company.pending_tasks}
-                                            </td>
-                                            <td
-                                                className={`px-2 py-2.5 text-right font-black ${(company.overdue_tasks ?? 0) > 0 ? 'text-red-700' : ''}`}
-                                            >
-                                                {company.overdue_tasks ?? 0}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {companies.length === 0 && (
-                                        <EmptyRow
-                                            colSpan={7}
-                                            text="No hay empresas en este filtro."
-                                        />
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    <section
-                        id="equipo"
-                        className="grid scroll-mt-24 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(200px,.3fr)]"
-                    >
-                        <div className={`${panel} min-w-0 p-3`}>
-                            <SectionHeader
-                                title="Carga del equipo"
-                                action={
-                                    <Link
-                                        href="/office/users-roles"
-                                        className={chip}
-                                    >
-                                        Ver equipo
-                                    </Link>
+                                                    {companies.length === 0 && (
+                                                        <EmptyRow
+                                                            colSpan={7}
+                                                            text="No hay empresas en este filtro."
+                                                        />
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </TableDialog>
                                 }
                             />
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-xs">
-                                    <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                        <tr>
-                                            <th className="px-2 py-2">
-                                                Colaborador
-                                            </th>
-                                            <th className="px-2 py-2">Rol</th>
-                                            <th className="px-2 py-2 text-right">
-                                                Empresas
-                                            </th>
-                                            <th className="px-2 py-2 text-right">
-                                                Abiertas
-                                            </th>
-                                            <th className="px-2 py-2 text-right">
-                                                Vencidas
-                                            </th>
-                                            <th className="px-2 py-2">
-                                                Utilización
-                                            </th>
-                                            <th className="px-2 py-2">
-                                                Estado
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {dashboard.workload.map(
-                                            (row, index) => {
-                                                const utilization =
-                                                    row.utilization_percentage ??
-                                                    0;
-                                                const open =
-                                                    (row.tasks.pending ?? 0) +
-                                                    (row.tasks.in_progress ??
-                                                        0) +
-                                                    (row.tasks
-                                                        .ready_for_review ??
-                                                        0) +
-                                                    (row.tasks.in_review ?? 0) +
-                                                    (row.tasks
-                                                        .changes_requested ??
-                                                        0) +
-                                                    (row.tasks.blocked ?? 0);
-                                                const initials = row.name
-                                                    .split(' ')
-                                                    .map((part) => part[0])
-                                                    .slice(0, 2)
-                                                    .join('')
-                                                    .toUpperCase();
-                                                const status =
-                                                    row.status ?? 'Normal';
+                            <div className="flex flex-wrap items-center justify-center gap-6 py-2">
+                                <RingChart
+                                    size={130}
+                                    stroke={16}
+                                    segments={complianceSegments}
+                                    center={dashboard.companies.length}
+                                    caption="empresas"
+                                />
+                                <div className="min-w-[220px]">
+                                    <Legend items={complianceSegments} />
+                                    <p
+                                        className={`mt-3 text-xs font-bold ${overdueCompanies > 0 ? 'text-red-700' : 'text-emerald-700'}`}
+                                    >
+                                        {overdueCompanies > 0
+                                            ? `${overdueCompanies} con tareas atrasadas`
+                                            : 'Ninguna empresa atrasada'}
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
 
-                                                return (
-                                                    <tr key={row.user_id}>
-                                                        <td className="px-2 py-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span
-                                                                    className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-black ${['bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700', 'bg-red-100 text-red-700', 'bg-amber-100 text-amber-700', 'bg-sky-100 text-sky-700'][index % 5]}`}
-                                                                >
-                                                                    {initials}
-                                                                </span>
-                                                                <span className="leading-tight font-bold">
-                                                                    {row.name}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-2 py-2 text-[#395277]">
+                        <section
+                            id="equipo"
+                            className="grid min-w-0 scroll-mt-24"
+                        >
+                            <div className={`${panel} min-w-0 p-3`}>
+                                <SectionHeader
+                                    title="Carga del equipo"
+                                    action={
+                                        <div className="flex gap-1.5">
+                                            <TableDialog title="Carga del equipo">
+                                                <div className="overflow-x-auto">
+                                                    <table className="min-w-full text-xs">
+                                                        <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
+                                                            <tr>
+                                                                <th className="px-2 py-2">
+                                                                    Colaborador
+                                                                </th>
+                                                                <th className="px-2 py-2">
+                                                                    Rol
+                                                                </th>
+                                                                <th className="px-2 py-2 text-right">
+                                                                    Empresas
+                                                                </th>
+                                                                <th className="px-2 py-2 text-right">
+                                                                    Abiertas
+                                                                </th>
+                                                                <th className="px-2 py-2 text-right">
+                                                                    Vencidas
+                                                                </th>
+                                                                <th className="px-2 py-2">
+                                                                    Utilización
+                                                                </th>
+                                                                <th className="px-2 py-2">
+                                                                    Estado
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {dashboard.workload.map(
+                                                                (
+                                                                    row,
+                                                                    index,
+                                                                ) => {
+                                                                    const utilization =
+                                                                        row.utilization_percentage ??
+                                                                        0;
+                                                                    const open =
+                                                                        (row
+                                                                            .tasks
+                                                                            .pending ??
+                                                                            0) +
+                                                                        (row
+                                                                            .tasks
+                                                                            .in_progress ??
+                                                                            0) +
+                                                                        (row
+                                                                            .tasks
+                                                                            .ready_for_review ??
+                                                                            0) +
+                                                                        (row
+                                                                            .tasks
+                                                                            .in_review ??
+                                                                            0) +
+                                                                        (row
+                                                                            .tasks
+                                                                            .changes_requested ??
+                                                                            0) +
+                                                                        (row
+                                                                            .tasks
+                                                                            .blocked ??
+                                                                            0);
+                                                                    const initials =
+                                                                        row.name
+                                                                            .split(
+                                                                                ' ',
+                                                                            )
+                                                                            .map(
+                                                                                (
+                                                                                    part,
+                                                                                ) =>
+                                                                                    part[0],
+                                                                            )
+                                                                            .slice(
+                                                                                0,
+                                                                                2,
+                                                                            )
+                                                                            .join(
+                                                                                '',
+                                                                            )
+                                                                            .toUpperCase();
+                                                                    const status =
+                                                                        row.status ??
+                                                                        'Normal';
+
+                                                                    return (
+                                                                        <tr
+                                                                            key={
+                                                                                row.user_id
+                                                                            }
+                                                                        >
+                                                                            <td className="px-2 py-2">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span
+                                                                                        className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-black ${['bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700', 'bg-red-100 text-red-700', 'bg-amber-100 text-amber-700', 'bg-sky-100 text-sky-700'][index % 5]}`}
+                                                                                    >
+                                                                                        {
+                                                                                            initials
+                                                                                        }
+                                                                                    </span>
+                                                                                    <span className="leading-tight font-bold">
+                                                                                        {
+                                                                                            row.name
+                                                                                        }
+                                                                                    </span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-2 py-2 text-[#395277]">
+                                                                                {row.role_label ??
+                                                                                    row.organization_role}
+                                                                            </td>
+                                                                            <td className="px-2 py-2 text-right font-black">
+                                                                                {
+                                                                                    row.assigned_companies
+                                                                                }
+                                                                            </td>
+                                                                            <td className="px-2 py-2 text-right font-black">
+                                                                                {
+                                                                                    open
+                                                                                }
+                                                                            </td>
+                                                                            <td
+                                                                                className={`px-2 py-2 text-right font-black ${(row.tasks.overdue ?? 0) > 0 ? 'text-red-700' : ''}`}
+                                                                            >
+                                                                                {row
+                                                                                    .tasks
+                                                                                    .overdue ??
+                                                                                    0}
+                                                                            </td>
+                                                                            <td className="px-2 py-2">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="w-9 font-black">
+                                                                                        {
+                                                                                            utilization
+                                                                                        }
+
+                                                                                        %
+                                                                                    </span>
+                                                                                    <div className="w-20">
+                                                                                        <ProgressBar
+                                                                                            value={
+                                                                                                utilization
+                                                                                            }
+                                                                                            tone={
+                                                                                                utilization >=
+                                                                                                85
+                                                                                                    ? 'bg-red-500'
+                                                                                                    : utilization >=
+                                                                                                        65
+                                                                                                      ? 'bg-blue-500'
+                                                                                                      : 'bg-emerald-500'
+                                                                                            }
+                                                                                        />
+                                                                                    </div>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-2 py-2">
+                                                                                <span
+                                                                                    className={badge(
+                                                                                        status ===
+                                                                                            'Alta'
+                                                                                            ? 'red'
+                                                                                            : status ===
+                                                                                                'Media'
+                                                                                              ? 'amber'
+                                                                                              : 'green',
+                                                                                    )}
+                                                                                >
+                                                                                    {
+                                                                                        status
+                                                                                    }
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                },
+                                                            )}
+                                                            {dashboard.workload
+                                                                .length ===
+                                                                0 && (
+                                                                <EmptyRow
+                                                                    colSpan={7}
+                                                                    text="Sin colaboradores activos en este alcance."
+                                                                />
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </TableDialog>
+                                            <Link
+                                                href="/office/users-roles"
+                                                className={chip}
+                                            >
+                                                Ver equipo
+                                            </Link>
+                                        </div>
+                                    }
+                                />
+                                {dashboard.workload.length === 0 ? (
+                                    <p className="py-6 text-center text-sm text-slate-500">
+                                        Sin colaboradores activos en este
+                                        alcance.
+                                    </p>
+                                ) : (
+                                    <div className="grid max-h-80 gap-2 overflow-y-auto">
+                                        {dashboard.workload.map((row) => {
+                                            const utilization =
+                                                row.utilization_percentage ?? 0;
+                                            const color =
+                                                utilization >= 85
+                                                    ? '#dc2626'
+                                                    : utilization >= 65
+                                                      ? '#3b82f6'
+                                                      : '#12a594';
+
+                                            return (
+                                                <div
+                                                    key={row.user_id}
+                                                    className="flex items-center gap-3 rounded-xl border border-[#ebe5e1] p-3"
+                                                >
+                                                    <RingChart
+                                                        size={84}
+                                                        stroke={10}
+                                                        segments={[
+                                                            {
+                                                                value: Math.min(
+                                                                    utilization,
+                                                                    100,
+                                                                ),
+                                                                color,
+                                                            },
+                                                            {
+                                                                value:
+                                                                    100 -
+                                                                    Math.min(
+                                                                        utilization,
+                                                                        100,
+                                                                    ),
+                                                                color: '#eef1f3',
+                                                            },
+                                                        ]}
+                                                        center={`${utilization}%`}
+                                                    />
+                                                    <div className="min-w-0 text-xs">
+                                                        <p className="truncate text-sm font-black">
+                                                            {row.name}
+                                                        </p>
+                                                        <p className="truncate text-[#526b92]">
                                                             {row.role_label ??
                                                                 row.organization_role}
-                                                        </td>
-                                                        <td className="px-2 py-2 text-right font-black">
+                                                        </p>
+                                                        <p className="mt-1 text-[#395277]">
                                                             {
                                                                 row.assigned_companies
-                                                            }
-                                                        </td>
-                                                        <td className="px-2 py-2 text-right font-black">
-                                                            {open}
-                                                        </td>
-                                                        <td
-                                                            className={`px-2 py-2 text-right font-black ${(row.tasks.overdue ?? 0) > 0 ? 'text-red-700' : ''}`}
-                                                        >
-                                                            {row.tasks
-                                                                .overdue ?? 0}
-                                                        </td>
-                                                        <td className="px-2 py-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-9 font-black">
-                                                                    {
-                                                                        utilization
-                                                                    }
-                                                                    %
-                                                                </span>
-                                                                <div className="w-20">
-                                                                    <ProgressBar
-                                                                        value={
-                                                                            utilization
-                                                                        }
-                                                                        tone={
-                                                                            utilization >=
-                                                                            85
-                                                                                ? 'bg-red-500'
-                                                                                : utilization >=
-                                                                                    65
-                                                                                  ? 'bg-blue-500'
-                                                                                  : 'bg-emerald-500'
-                                                                        }
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-2 py-2">
+                                                            }{' '}
+                                                            empresas ·{' '}
                                                             <span
-                                                                className={badge(
-                                                                    status ===
-                                                                        'Alta'
-                                                                        ? 'red'
-                                                                        : status ===
-                                                                            'Media'
-                                                                          ? 'amber'
-                                                                          : 'green',
-                                                                )}
+                                                                className={
+                                                                    (row.tasks
+                                                                        .overdue ??
+                                                                        0) > 0
+                                                                        ? 'font-bold text-red-700'
+                                                                        : ''
+                                                                }
                                                             >
-                                                                {status}
+                                                                {row.tasks
+                                                                    .overdue ??
+                                                                    0}{' '}
+                                                                vencidas
                                                             </span>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            },
-                                        )}
-                                        {dashboard.workload.length === 0 && (
-                                            <EmptyRow
-                                                colSpan={7}
-                                                text="Sin colaboradores activos en este alcance."
-                                            />
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section
-                        id="productividad"
-                        className={`${panel} min-w-0 scroll-mt-24 p-3`}
-                    >
-                        <SectionHeader
-                            title="Productividad del período"
-                            action={
-                                <span className={chip}>
-                                    {periodName ?? 'Mes en curso'}
-                                </span>
-                            }
-                        />
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-xs">
-                                <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                    <tr>
-                                        <th className="px-2 py-2">
-                                            Colaborador
-                                        </th>
-                                        <th className="px-2 py-2 text-right">
-                                            Terminadas
-                                        </th>
-                                        <th className="px-2 py-2">
-                                            Puntualidad
-                                        </th>
-                                        <th className="px-2 py-2 text-right">
-                                            Observaciones
-                                        </th>
-                                        <th className="px-2 py-2 text-right">
-                                            Abiertas
-                                        </th>
-                                        <th className="px-2 py-2 text-right">
-                                            Ciclo promedio
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {productivity.map((row) => (
-                                        <tr key={row.user_id}>
-                                            <td className="px-2 py-2 font-bold">
-                                                {row.name}
-                                            </td>
-                                            <td className="px-2 py-2 text-right font-black">
-                                                {row.completed}
-                                            </td>
-                                            <td className="px-2 py-2">
-                                                {row.completed === 0 ? (
-                                                    <span className="text-[#526b92]">
-                                                        Sin tareas terminadas
-                                                    </span>
-                                                ) : (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="w-9 font-black">
-                                                            {row.on_time_rate}%
-                                                        </span>
-                                                        <div className="w-20">
-                                                            <ProgressBar
-                                                                value={
-                                                                    row.on_time_rate
-                                                                }
-                                                                tone={
-                                                                    row.on_time_rate >=
-                                                                    85
-                                                                        ? 'bg-emerald-500'
-                                                                        : row.on_time_rate >=
-                                                                            60
-                                                                          ? 'bg-amber-500'
-                                                                          : 'bg-red-500'
-                                                                }
-                                                            />
-                                                        </div>
+                                                        </p>
                                                     </div>
-                                                )}
-                                            </td>
-                                            <td
-                                                className={`px-2 py-2 text-right font-black ${row.observations > 0 ? 'text-amber-700' : ''}`}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
+                        <section
+                            id="productividad"
+                            className={`${panel} min-w-0 scroll-mt-24 p-3`}
+                        >
+                            <SectionHeader
+                                title="Productividad del período"
+                                action={
+                                    <div className="flex gap-1.5">
+                                        <span className={chip}>
+                                            {periodName ?? 'Mes en curso'}
+                                        </span>
+                                        <TableDialog title="Productividad del período">
+                                            <div className="overflow-x-auto">
+                                                <table className="min-w-full text-xs">
+                                                    <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
+                                                        <tr>
+                                                            <th className="px-2 py-2">
+                                                                Colaborador
+                                                            </th>
+                                                            <th className="px-2 py-2 text-right">
+                                                                Terminadas
+                                                            </th>
+                                                            <th className="px-2 py-2">
+                                                                Puntualidad
+                                                            </th>
+                                                            <th className="px-2 py-2 text-right">
+                                                                Observaciones
+                                                            </th>
+                                                            <th className="px-2 py-2 text-right">
+                                                                Abiertas
+                                                            </th>
+                                                            <th className="px-2 py-2 text-right">
+                                                                Ciclo promedio
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {productivity.map(
+                                                            (row) => (
+                                                                <tr
+                                                                    key={
+                                                                        row.user_id
+                                                                    }
+                                                                >
+                                                                    <td className="px-2 py-2 font-bold">
+                                                                        {
+                                                                            row.name
+                                                                        }
+                                                                    </td>
+                                                                    <td className="px-2 py-2 text-right font-black">
+                                                                        {
+                                                                            row.completed
+                                                                        }
+                                                                    </td>
+                                                                    <td className="px-2 py-2">
+                                                                        {row.completed ===
+                                                                        0 ? (
+                                                                            <span className="text-[#526b92]">
+                                                                                Sin
+                                                                                tareas
+                                                                                terminadas
+                                                                            </span>
+                                                                        ) : (
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="w-9 font-black">
+                                                                                    {
+                                                                                        row.on_time_rate
+                                                                                    }
+
+                                                                                    %
+                                                                                </span>
+                                                                                <div className="w-20">
+                                                                                    <ProgressBar
+                                                                                        value={
+                                                                                            row.on_time_rate
+                                                                                        }
+                                                                                        tone={
+                                                                                            row.on_time_rate >=
+                                                                                            85
+                                                                                                ? 'bg-emerald-500'
+                                                                                                : row.on_time_rate >=
+                                                                                                    60
+                                                                                                  ? 'bg-amber-500'
+                                                                                                  : 'bg-red-500'
+                                                                                        }
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                    <td
+                                                                        className={`px-2 py-2 text-right font-black ${row.observations > 0 ? 'text-amber-700' : ''}`}
+                                                                    >
+                                                                        {
+                                                                            row.observations
+                                                                        }
+                                                                    </td>
+                                                                    <td className="px-2 py-2 text-right font-black">
+                                                                        {
+                                                                            row.open
+                                                                        }
+                                                                    </td>
+                                                                    <td className="px-2 py-2 text-right text-[#395277]">
+                                                                        {row.average_cycle_hours ===
+                                                                        null
+                                                                            ? 'N/D'
+                                                                            : `${row.average_cycle_hours} h`}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        )}
+                                                        {productivity.length ===
+                                                            0 && (
+                                                            <EmptyRow
+                                                                colSpan={6}
+                                                                text="Aún no hay tareas asignadas en este alcance."
+                                                            />
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </TableDialog>
+                                    </div>
+                                }
+                            />
+                            {productivity.length === 0 ? (
+                                <p className="py-6 text-center text-sm text-slate-500">
+                                    Aún no hay tareas asignadas en este alcance.
+                                </p>
+                            ) : (
+                                <div className="grid max-h-80 gap-2 overflow-y-auto">
+                                    {productivity.map((row) => {
+                                        const rate =
+                                            row.completed === 0
+                                                ? 0
+                                                : row.on_time_rate;
+                                        const color =
+                                            rate >= 85
+                                                ? '#12a594'
+                                                : rate >= 60
+                                                  ? '#f59e0b'
+                                                  : '#dc2626';
+
+                                        return (
+                                            <div
+                                                key={row.user_id}
+                                                className="flex items-center gap-3 rounded-xl border border-[#ebe5e1] p-3"
                                             >
-                                                {row.observations}
-                                            </td>
-                                            <td className="px-2 py-2 text-right font-black">
-                                                {row.open}
-                                            </td>
-                                            <td className="px-2 py-2 text-right text-[#395277]">
-                                                {row.average_cycle_hours ===
-                                                null
-                                                    ? 'N/D'
-                                                    : `${row.average_cycle_hours} h`}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {productivity.length === 0 && (
-                                        <EmptyRow
-                                            colSpan={6}
-                                            text="Aún no hay tareas asignadas en este alcance."
-                                        />
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
+                                                <RingChart
+                                                    size={96}
+                                                    stroke={11}
+                                                    segments={[
+                                                        { value: rate, color },
+                                                        {
+                                                            value: 100 - rate,
+                                                            color: '#eef1f3',
+                                                        },
+                                                    ]}
+                                                    center={
+                                                        row.completed === 0
+                                                            ? 'N/D'
+                                                            : `${rate}%`
+                                                    }
+                                                    caption="puntualidad"
+                                                />
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-black">
+                                                        {row.name}
+                                                    </p>
+                                                    <p className="text-xs text-[#395277]">
+                                                        {row.completed}{' '}
+                                                        terminadas · {row.open}{' '}
+                                                        abiertas
+                                                    </p>
+                                                    <p
+                                                        className={`text-xs ${row.observations > 0 ? 'font-bold text-amber-700' : 'text-[#526b92]'}`}
+                                                    >
+                                                        {row.observations}{' '}
+                                                        observaciones ·{' '}
+                                                        {row.average_cycle_hours ===
+                                                        null
+                                                            ? 'ciclo N/D'
+                                                            : `ciclo ${row.average_cycle_hours} h`}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </section>
+                    </div>
 
                     <section
                         id="reportes"

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\ClientPortal;
 
+use App\Events\Work\DocumentAccepted;
+use App\Events\Work\DocumentSubmitted;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
@@ -100,6 +102,7 @@ class ClientRequestService
             DB::table('client_requests')->where('id', $requestId)->update(['status' => 'submitted', 'response' => trim($response) === '' ? $request->response : $response, 'responded_by' => $client->id, 'responded_at' => now(), 'updated_at' => now()]);
             $this->notifications->notify($organization->id, (int) $request->requested_by, $client->id, 'client_portal', 'Cliente respondió '.$request->code.': '.$request->title, $files === [] ? 'Respuesta escrita' : count($files).' archivo(s) entregado(s)', 'client_requests', $requestId);
             $this->accounting->audit($organization, $client, 'client.document_request.responded', 'client_requests', $requestId, ['files' => count($files), 'company_id' => (int) $request->company_id]);
+            event(new DocumentSubmitted($organization->id, $client->id, null, 'client_requests', $requestId, ['files' => count($files)]));
         });
     }
 
@@ -132,6 +135,9 @@ class ClientRequestService
                     ['accept' => 'Solicitud completada: ', 'more_information' => 'Se requiere más información: ', 'cancel' => 'Solicitud cancelada: '][$action].$request->title, $note, 'client_requests', $requestId, $this->viewPermission((string) $request->type));
             }
             $this->accounting->audit($organization, $actor, 'client_portal.request.'.$action, 'client_requests', $requestId, ['note' => $note]);
+            if ($action === 'accept') {
+                event(new DocumentAccepted($organization->id, $actor->id, null, 'client_requests', $requestId));
+            }
         });
     }
 

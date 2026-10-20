@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Payables;
 
+use App\Events\Work\SourceChanged;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
@@ -78,6 +79,7 @@ class PaymentProposalService
             // Balances may have changed since the proposal was prepared.
             $this->validateItems((int) $proposal->company_id, $this->itemsOf($proposalId), $proposalId);
             DB::table('payment_proposals')->where('id', $proposalId)->update(['status' => 'pending_approval', 'review_note' => null, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payment_proposals', (int) $proposalId));
             $this->accounting->audit($organization, $actor, 'payment_proposal.submitted', 'payment_proposals', $proposalId, [], (int) $proposal->office_id);
             foreach ($this->approverIds($organization, (int) $proposal->company_id, $actor->id) as $recipient) {
                 $this->notifications->notify($organization->id, $recipient, $actor->id, 'payment_proposal', 'Propuesta de pago por aprobar', $proposal->reference.' · Q '.number_format((int) $proposal->total_cents / 100, 2), 'payment_proposals', $proposalId);
@@ -91,6 +93,7 @@ class PaymentProposalService
             $proposal = $this->reviewable($organization, $actor, $proposalId);
             $this->validateItems((int) $proposal->company_id, $this->itemsOf($proposalId), $proposalId);
             DB::table('payment_proposals')->where('id', $proposalId)->update(['status' => 'approved', 'approved_by' => $actor->id, 'approved_at' => now(), 'review_note' => $note, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payment_proposals', (int) $proposalId));
             $this->accounting->audit($organization, $actor, 'payment_proposal.approved', 'payment_proposals', $proposalId, ['note' => $note], (int) $proposal->office_id);
             $this->notifications->notify($organization->id, (int) $proposal->prepared_by, $actor->id, 'payment_proposal', 'Propuesta de pago aprobada', $proposal->reference, 'payment_proposals', $proposalId);
         });
@@ -101,6 +104,7 @@ class PaymentProposalService
         DB::transaction(function () use ($organization, $actor, $proposalId, $note): void {
             $proposal = $this->reviewable($organization, $actor, $proposalId);
             DB::table('payment_proposals')->where('id', $proposalId)->update(['status' => 'rejected', 'review_note' => $note, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payment_proposals', (int) $proposalId));
             $this->accounting->audit($organization, $actor, 'payment_proposal.rejected', 'payment_proposals', $proposalId, ['note' => $note], (int) $proposal->office_id);
             $this->notifications->notify($organization->id, (int) $proposal->prepared_by, $actor->id, 'payment_proposal', 'Propuesta de pago rechazada', $proposal->reference.': '.$note, 'payment_proposals', $proposalId);
         });
@@ -114,6 +118,7 @@ class PaymentProposalService
                 throw ValidationException::withMessages(['status' => 'Una propuesta enviada a Tesorería se cancela desde sus pagos.']);
             }
             DB::table('payment_proposals')->where('id', $proposalId)->update(['status' => 'cancelled', 'review_note' => $reason, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payment_proposals', (int) $proposalId));
             $this->accounting->audit($organization, $actor, 'payment_proposal.cancelled', 'payment_proposals', $proposalId, ['reason' => $reason], (int) $proposal->office_id);
         });
     }
@@ -149,6 +154,7 @@ class PaymentProposalService
                 $created++;
             }
             DB::table('payment_proposals')->where('id', $proposalId)->update(['status' => 'sent_to_treasury', 'sent_at' => now(), 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payment_proposals', (int) $proposalId));
             $this->accounting->audit($organization, $actor, 'payment_proposal.sent_to_treasury', 'payment_proposals', $proposalId, ['payments' => $created], (int) $proposal->office_id);
             $treasury = DB::table('company_assignments')->where('company_id', $proposal->company_id)->where('assignment_role', 'treasury')->where('status', 'active')->whereNull('deleted_at')->pluck('user_id');
             foreach ($treasury as $recipient) {
@@ -181,6 +187,7 @@ class PaymentProposalService
         };
         if ($status !== $proposal->status) {
             DB::table('payment_proposals')->where('id', $proposalId)->update(['status' => $status, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'payment_proposals', (int) $proposalId));
             $label = self::STATUS_LABELS[$status];
             $this->notifications->notify((int) $proposal->organization_id, (int) $proposal->prepared_by, null, 'payment_proposal', 'Propuesta '.$proposal->reference.': '.mb_strtolower($label),
                 $executed.' de '.$statuses->count().' pago(s) ejecutados por Tesorería.', 'payment_proposals', $proposalId);

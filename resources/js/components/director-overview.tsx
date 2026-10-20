@@ -4,11 +4,21 @@ import {
     Building2,
     CalendarDays,
     CheckCircle2,
+    ChevronDown,
     ClipboardX,
+    LayoutList,
     Users,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { Children, isValidElement, useState } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import type { ExecutiveDashboardData } from '@/components/executive-dashboard';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 type Company = ExecutiveDashboardData['companies'][number];
 
@@ -134,21 +144,6 @@ function Bar({ value, tone }: { value: number; tone?: 'ok' | 'warn' | 'bad' }) {
                     background: color,
                 }}
             />
-        </div>
-    );
-}
-
-function CardTitle({
-    children,
-    aside,
-}: {
-    children: ReactNode;
-    aside?: ReactNode;
-}) {
-    return (
-        <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-base font-black text-[#061633]">{children}</h2>
-            {aside}
         </div>
     );
 }
@@ -453,12 +448,16 @@ export function DirectorOverview({
     scopeLabel,
     periodName,
     filters,
+    receivablesTable,
+    payablesTable,
 }: {
     dashboard: ExecutiveDashboardData;
     firm: DirectorFirm;
     scopeLabel: string;
     periodName?: string;
     filters: ReactNode;
+    receivablesTable?: ReactNode;
+    payablesTable?: ReactNode;
 }) {
     const user = usePage().props.auth.user as { name: string };
     const firstName = user.name.split(' ')[0];
@@ -536,7 +535,454 @@ export function DirectorOverview({
                         </p>
                     </div>
                 </div>
-                {filters}
+                <div className="flex flex-wrap items-center gap-2">
+                    {filters}
+                    <DetailMenu>
+                        <DetailModal
+                            title="Cumplimiento mensual de la firma"
+                            summary={`${firm.trend[firm.trend.length - 1]?.value ?? 0}% este mes · empresas con período cerrado`}
+                            tone={
+                                (firm.trend[firm.trend.length - 1]?.value ??
+                                    0) >= 80
+                                    ? 'ok'
+                                    : 'warn'
+                            }
+                        >
+                            <TrendChart points={firm.trend} />
+                            <p className="mt-1 text-xs text-slate-500">
+                                Empresas con un período cerrado cada mes.
+                            </p>
+                        </DetailModal>
+
+                        <DetailModal
+                            title="Estado de empresas cliente"
+                            summary={`${total} empresas · ${counts.ok} al día · ${counts.late + counts.blocked} con atraso`}
+                            tone={
+                                counts.late + counts.blocked > 0 ? 'warn' : 'ok'
+                            }
+                        >
+                            <div className="flex items-center gap-4">
+                                <Donut counts={counts} total={total} />
+                                <ul className="min-w-0 flex-1 space-y-1.5 text-sm">
+                                    {STATUS_GROUPS.map((group) => (
+                                        <li
+                                            key={group.key}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <span
+                                                className="size-2.5 shrink-0 rounded-full"
+                                                style={{
+                                                    background: group.color,
+                                                }}
+                                            />
+                                            <span className="flex-1 truncate text-slate-700">
+                                                {group.label}
+                                            </span>
+                                            <span className="font-black">
+                                                {counts[group.key]}
+                                            </span>
+                                            <span className="w-12 text-right text-xs text-slate-400">
+                                                ({pct(counts[group.key], total)}
+                                                %)
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </DetailModal>
+
+                        <DetailModal
+                            title="Crecimiento de la firma"
+                            summary={`${growthPct >= 0 ? '+' : ''}${growthPct}% · +${Math.max(0, firm.new_companies)} clientes nuevos`}
+                            tone="ok"
+                        >
+                            <GrowthChart points={firm.growth} />
+                            <div className="mt-2 grid grid-cols-3 divide-x divide-slate-100 text-center">
+                                <div>
+                                    <p className="text-lg font-black text-emerald-600">
+                                        {growthPct >= 0 ? '+' : ''}
+                                        {growthPct}%
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                        Crecimiento
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-lg font-black text-[#8a0b0b]">
+                                        +{Math.max(0, firm.new_companies)}
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                        Nuevos clientes
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-lg font-black text-slate-700">
+                                        {total}
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                        Activos hoy
+                                    </p>
+                                </div>
+                            </div>
+                        </DetailModal>
+                        <DetailModal
+                            title="Cumplimiento por oficina"
+                            summary={`${offices.length} oficina(s) · ${offices.filter((office) => office.overdue > 0).length} con tareas atrasadas`}
+                            tone={
+                                offices.some((office) => office.overdue > 0)
+                                    ? 'warn'
+                                    : 'ok'
+                            }
+                            action={
+                                <Link
+                                    href="/office/offices"
+                                    className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
+                                >
+                                    Ver todas las oficinas
+                                </Link>
+                            }
+                        >
+                            <div className="space-y-3">
+                                {offices.map((office) => (
+                                    <div
+                                        key={office.id}
+                                        className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+                                    >
+                                        <p className="truncate text-sm font-bold">
+                                            {office.name}
+                                        </p>
+                                        <span className="text-xs text-slate-500">
+                                            {office.companies} empresas
+                                        </span>
+                                        <div className="col-span-2 flex items-center gap-3">
+                                            <Bar
+                                                value={office.progress}
+                                                tone={
+                                                    office.progress >= 80
+                                                        ? 'ok'
+                                                        : office.progress >= 50
+                                                          ? 'warn'
+                                                          : 'bad'
+                                                }
+                                            />
+                                            <span className="w-10 text-right text-sm font-black">
+                                                {office.progress}%
+                                            </span>
+                                            <span
+                                                className={`w-28 truncate text-right text-xs font-bold ${office.overdue > 0 ? 'text-orange-600' : 'text-emerald-700'}`}
+                                            >
+                                                {office.overdue > 0
+                                                    ? `${office.overdue} atrasadas`
+                                                    : 'Operativa'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {offices.length === 0 && (
+                                    <p className="text-sm text-slate-500">
+                                        No hay oficinas activas.
+                                    </p>
+                                )}
+                            </div>
+                        </DetailModal>
+
+                        <DetailModal
+                            title="Carga de trabajo del equipo"
+                            summary={
+                                overloaded > 0
+                                    ? `${team.length} persona(s) · ${overloaded} con sobrecarga`
+                                    : `${team.length} persona(s) · carga balanceada`
+                            }
+                            tone={overloaded > 0 ? 'bad' : 'ok'}
+                            action={
+                                <Link
+                                    href="/office/users-roles"
+                                    className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
+                                >
+                                    Ver equipo completo
+                                </Link>
+                            }
+                        >
+                            <div className="space-y-3">
+                                {team.slice(0, 8).map((person) => {
+                                    const load =
+                                        person.utilization_percentage ?? 0;
+
+                                    return (
+                                        <div
+                                            key={person.user_id}
+                                            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+                                        >
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-bold">
+                                                    {person.name}
+                                                </p>
+                                                <p className="truncate text-xs text-slate-500">
+                                                    {person.role_label ??
+                                                        person.organization_role}
+                                                </p>
+                                            </div>
+                                            <span
+                                                className={`text-xs font-bold ${load >= 90 ? 'text-red-600' : load >= 75 ? 'text-amber-600' : 'text-emerald-700'}`}
+                                            >
+                                                {load >= 90
+                                                    ? 'Sobrecarga'
+                                                    : load >= 75
+                                                      ? 'Alta'
+                                                      : 'Normal'}
+                                            </span>
+                                            <div className="col-span-2 flex items-center gap-3">
+                                                <Bar
+                                                    value={load}
+                                                    tone={loadTone(load)}
+                                                />
+                                                <span className="w-10 text-right text-sm font-black">
+                                                    {load}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {team.length === 0 && (
+                                    <p className="text-sm text-slate-500">
+                                        Sin datos de carga todavía.
+                                    </p>
+                                )}
+                            </div>
+                        </DetailModal>
+
+                        <DetailModal
+                            title="Empresas que requieren atención"
+                            summary={
+                                atRisk.length === 0
+                                    ? 'Ninguna empresa en riesgo'
+                                    : `${atRisk.length} empresa(s) en riesgo`
+                            }
+                            tone={atRisk.length > 0 ? 'bad' : 'ok'}
+                            action={
+                                <a
+                                    href="#cumplimiento"
+                                    className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
+                                >
+                                    Ver detalle
+                                </a>
+                            }
+                        >
+                            <div className="space-y-2.5">
+                                {atRisk.slice(0, 10).map((company) => (
+                                    <div
+                                        key={company.id}
+                                        className="flex items-start gap-3 rounded-xl border border-slate-100 p-3"
+                                    >
+                                        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-red-50 text-red-600">
+                                            <AlertTriangle className="size-5" />
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-black">
+                                                {company.name}
+                                            </p>
+                                            <p className="text-xs font-bold text-red-600">
+                                                {company.status === 'blocked'
+                                                    ? 'Cierre bloqueado'
+                                                    : `${company.overdue_tasks ?? 0} tareas vencidas`}
+                                            </p>
+                                            <p className="truncate text-xs text-slate-500">
+                                                {company.office_name} ·{' '}
+                                                {company.accountant ??
+                                                    'Sin contador'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {atRisk.length === 0 && (
+                                    <p className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+                                        <CheckCircle2 className="size-5" />{' '}
+                                        Ninguna empresa en riesgo.
+                                    </p>
+                                )}
+                            </div>
+                        </DetailModal>
+
+                        <DetailModal
+                            title="Proyección de capacidad"
+                            summary={
+                                capacity.limit
+                                    ? `${capacity.active} de ${capacity.limit} empresas`
+                                    : `${capacity.active} empresas · sin límite`
+                            }
+                            tone="ok"
+                        >
+                            <div className="flex items-center gap-5">
+                                <div className="text-center">
+                                    <Gauge value={capacityUse} />
+                                    <p className="-mt-1 text-xs text-slate-500">
+                                        Utilización del plan
+                                    </p>
+                                </div>
+                                <dl className="flex-1 space-y-2 text-sm">
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-slate-500">
+                                            Capacidad del plan
+                                        </dt>
+                                        <dd className="font-black">
+                                            {capacity.limit
+                                                ? `${capacity.limit} empresas`
+                                                : 'Sin límite'}
+                                        </dd>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-slate-500">
+                                            Empresas activas
+                                        </dt>
+                                        <dd className="font-black">
+                                            {capacity.active} empresas
+                                        </dd>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-slate-500">
+                                            Disponible
+                                        </dt>
+                                        <dd className="font-black text-emerald-600">
+                                            {capacity.available === null
+                                                ? 'Ilimitada'
+                                                : `${capacity.available} empresas`}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </div>
+                            <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+                                {capacity.limit
+                                    ? `Tu plan permite ${capacity.available} empresas más antes de alcanzar su límite.`
+                                    : 'Tu plan no limita el número de empresas.'}
+                            </p>
+                        </DetailModal>
+
+                        <DetailModal
+                            title="Resumen operativo del mes"
+                            summary={`${counts.ok} al día · ${counts.review} en revisión · ${counts.late + counts.blocked} con atraso`}
+                            tone={
+                                counts.late + counts.blocked > 0 ? 'warn' : 'ok'
+                            }
+                            action={
+                                <Link
+                                    href="/work/closings"
+                                    className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
+                                >
+                                    Ver cierres
+                                </Link>
+                            }
+                        >
+                            <div className="space-y-3">
+                                {[
+                                    ['Empresas al día', counts.ok, 'ok'],
+                                    ['En revisión', counts.review, 'warn'],
+                                    ['Con equipo completo', fullTeam, 'ok'],
+                                    [
+                                        'Con tareas vencidas',
+                                        counts.late + counts.blocked,
+                                        'bad',
+                                    ],
+                                ].map(([label, count, tone]) => (
+                                    <div
+                                        key={String(label)}
+                                        className="flex items-center gap-3"
+                                    >
+                                        <span className="w-40 shrink-0 text-sm text-slate-700">
+                                            {label}
+                                        </span>
+                                        <Bar
+                                            value={pct(Number(count), total)}
+                                            tone={tone as 'ok' | 'warn' | 'bad'}
+                                        />
+                                        <span className="w-24 text-right text-xs text-slate-500">
+                                            {count}/{total} ·{' '}
+                                            <b className="text-[#061633]">
+                                                {pct(Number(count), total)}%
+                                            </b>
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </DetailModal>
+
+                        <DetailModal
+                            title="Próximos vencimientos"
+                            summary={
+                                upcoming.length === 0
+                                    ? 'No hay vencimientos próximos'
+                                    : `${upcoming.length} próximo(s) · ${upcoming.filter((task) => task.is_overdue).length} vencido(s)`
+                            }
+                            tone={
+                                upcoming.some((task) => task.is_overdue)
+                                    ? 'bad'
+                                    : 'ok'
+                            }
+                            action={
+                                <a
+                                    href="#cumplimiento"
+                                    className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
+                                >
+                                    Ver todos
+                                </a>
+                            }
+                        >
+                            <div className="space-y-2.5">
+                                {upcoming.map((task) => (
+                                    <div
+                                        key={task.id}
+                                        className="flex items-center gap-3 rounded-xl border border-slate-100 p-3"
+                                    >
+                                        <span
+                                            className={`grid size-9 shrink-0 place-items-center rounded-full ${task.is_overdue ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}
+                                        >
+                                            <CalendarDays className="size-5" />
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-black">
+                                                {task.title}
+                                            </p>
+                                            <p className="truncate text-xs text-slate-500">
+                                                {task.company_name ?? 'Firma'}
+                                            </p>
+                                        </div>
+                                        <span
+                                            className={`text-xs font-bold ${task.is_overdue ? 'text-red-600' : 'text-slate-500'}`}
+                                        >
+                                            {task.remaining_label ?? ''}
+                                        </span>
+                                    </div>
+                                ))}
+                                {upcoming.length === 0 && (
+                                    <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                                        No hay vencimientos próximos.
+                                    </p>
+                                )}
+                            </div>
+                        </DetailModal>
+
+                        {receivablesTable && (
+                            <DetailModal
+                                wide
+                                title="Cartera por empresa (cuentas por cobrar)"
+                                summary="Cada empresa por separado"
+                                tone="ok"
+                            >
+                                {receivablesTable}
+                            </DetailModal>
+                        )}
+
+                        {payablesTable && (
+                            <DetailModal
+                                wide
+                                title="Obligaciones con proveedores (cuentas por pagar)"
+                                summary="Cada empresa por separado"
+                                tone="ok"
+                            >
+                                {payablesTable}
+                            </DetailModal>
+                        )}
+                    </DetailMenu>
+                </div>
             </header>
 
             <section
@@ -615,384 +1061,109 @@ export function DirectorOverview({
                     tone={overloaded > 0 ? 'bad' : 'good'}
                 />
             </section>
+        </div>
+    );
+}
 
-            <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr_1fr]">
-                <div className={`${card} p-5`}>
-                    <CardTitle>Cumplimiento mensual de la firma</CardTitle>
-                    <TrendChart points={firm.trend} />
-                    <p className="mt-1 text-xs text-slate-500">
-                        Empresas con un período cerrado cada mes.
-                    </p>
-                </div>
-                <div className={`${card} p-5`}>
-                    <CardTitle>Estado de empresas cliente</CardTitle>
-                    <div className="flex items-center gap-4">
-                        <Donut counts={counts} total={total} />
-                        <ul className="min-w-0 flex-1 space-y-1.5 text-sm">
-                            {STATUS_GROUPS.map((group) => (
-                                <li
-                                    key={group.key}
-                                    className="flex items-center gap-2"
-                                >
-                                    <span
-                                        className="size-2.5 shrink-0 rounded-full"
-                                        style={{ background: group.color }}
-                                    />
-                                    <span className="flex-1 truncate text-slate-700">
-                                        {group.label}
-                                    </span>
-                                    <span className="font-black">
-                                        {counts[group.key]}
-                                    </span>
-                                    <span className="w-12 text-right text-xs text-slate-400">
-                                        ({pct(counts[group.key], total)}%)
-                                    </span>
+type DetailProps = {
+    title: string;
+    summary: string;
+    tone: 'ok' | 'warn' | 'bad';
+    wide?: boolean;
+    action?: ReactNode;
+    children: ReactNode;
+};
+
+/** One entry of the detail menu; the menu reads its props and shows the content in a dialog. */
+function DetailModal(props: DetailProps): ReactNode {
+    return props.children;
+}
+
+/**
+ * A single compact button in the header that lists the dashboard details; each opens in a dialog, so the page keeps only
+ * the key indicators.
+ */
+function DetailMenu({ children }: { children: ReactNode }) {
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [active, setActive] = useState<number | null>(null);
+    const items = Children.toArray(children).filter(
+        (child): child is ReactElement<DetailProps> => isValidElement(child),
+    );
+    const dots = {
+        ok: 'bg-emerald-500',
+        warn: 'bg-amber-500',
+        bad: 'bg-red-500',
+    };
+    const current = active === null ? null : items[active];
+
+    return (
+        <>
+            <div className="relative">
+                <button
+                    type="button"
+                    onClick={() => setMenuOpen((value) => !value)}
+                    aria-expanded={menuOpen}
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#8a0b0b] px-5 text-sm font-bold text-white shadow-md hover:brightness-110"
+                >
+                    <LayoutList className="size-4" /> Ver detalle{' '}
+                    <ChevronDown className="size-4" />
+                </button>
+                {menuOpen && (
+                    <>
+                        <button
+                            type="button"
+                            aria-label="Cerrar menú"
+                            className="fixed inset-0 z-10 cursor-default"
+                            onClick={() => setMenuOpen(false)}
+                        />
+                        <ul className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                            {items.map((item, index) => (
+                                <li key={item.props.title}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            setActive(index);
+                                        }}
+                                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold hover:bg-amber-50"
+                                    >
+                                        <span
+                                            className={`size-2 shrink-0 rounded-full ${dots[item.props.tone]}`}
+                                            aria-hidden
+                                        />
+                                        {item.props.title}
+                                    </button>
                                 </li>
                             ))}
                         </ul>
-                    </div>
-                </div>
-                <div className={`${card} p-5`}>
-                    <CardTitle>Crecimiento de la firma</CardTitle>
-                    <GrowthChart points={firm.growth} />
-                    <div className="mt-2 grid grid-cols-3 divide-x divide-slate-100 text-center">
-                        <div>
-                            <p className="text-lg font-black text-emerald-600">
-                                {growthPct >= 0 ? '+' : ''}
-                                {growthPct}%
-                            </p>
-                            <p className="text-xs text-slate-500">
-                                Crecimiento
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-lg font-black text-[#8a0b0b]">
-                                +{Math.max(0, firm.new_companies)}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                                Nuevos clientes
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-lg font-black text-slate-700">
-                                {total}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                                Activos hoy
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section
-                id="cumplimiento-oficinas"
-                className="grid gap-4 xl:grid-cols-3"
+                    </>
+                )}
+            </div>
+            <Dialog
+                open={current !== null}
+                onOpenChange={(open) => !open && setActive(null)}
             >
-                <div className={`${card} p-5`}>
-                    <CardTitle
-                        aside={
-                            <Link
-                                href="/office/offices"
-                                className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
-                            >
-                                Ver todas las oficinas
-                            </Link>
-                        }
-                    >
-                        Cumplimiento por oficina
-                    </CardTitle>
-                    <div className="space-y-3">
-                        {offices.map((office) => (
-                            <div
-                                key={office.id}
-                                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
-                            >
-                                <p className="truncate text-sm font-bold">
-                                    {office.name}
-                                </p>
-                                <span className="text-xs text-slate-500">
-                                    {office.companies} empresas
-                                </span>
-                                <div className="col-span-2 flex items-center gap-3">
-                                    <Bar
-                                        value={office.progress}
-                                        tone={
-                                            office.progress >= 80
-                                                ? 'ok'
-                                                : office.progress >= 50
-                                                  ? 'warn'
-                                                  : 'bad'
-                                        }
-                                    />
-                                    <span className="w-10 text-right text-sm font-black">
-                                        {office.progress}%
-                                    </span>
-                                    <span
-                                        className={`w-28 truncate text-right text-xs font-bold ${office.overdue > 0 ? 'text-orange-600' : 'text-emerald-700'}`}
-                                    >
-                                        {office.overdue > 0
-                                            ? `${office.overdue} atrasadas`
-                                            : 'Operativa'}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                        {offices.length === 0 && (
-                            <p className="text-sm text-slate-500">
-                                No hay oficinas activas.
-                            </p>
-                        )}
+                <DialogContent
+                    className={
+                        current?.props.wide ? 'sm:max-w-5xl' : 'sm:max-w-xl'
+                    }
+                >
+                    <DialogHeader>
+                        <DialogTitle>{current?.props.title}</DialogTitle>
+                        <DialogDescription>
+                            {current?.props.summary}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[60vh] overflow-y-auto pr-1">
+                        {current?.props.children}
                     </div>
-                </div>
-
-                <div id="equipo-resumen" className={`${card} p-5`}>
-                    <CardTitle
-                        aside={
-                            <Link
-                                href="/office/users-roles"
-                                className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
-                            >
-                                Ver equipo completo
-                            </Link>
-                        }
-                    >
-                        Carga de trabajo del equipo
-                    </CardTitle>
-                    <div className="space-y-3">
-                        {team.slice(0, 5).map((person) => {
-                            const load = person.utilization_percentage ?? 0;
-
-                            return (
-                                <div
-                                    key={person.user_id}
-                                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
-                                >
-                                    <div className="min-w-0">
-                                        <p className="truncate text-sm font-bold">
-                                            {person.name}
-                                        </p>
-                                        <p className="truncate text-xs text-slate-500">
-                                            {person.role_label ??
-                                                person.organization_role}
-                                        </p>
-                                    </div>
-                                    <span
-                                        className={`text-xs font-bold ${load >= 90 ? 'text-red-600' : load >= 75 ? 'text-amber-600' : 'text-emerald-700'}`}
-                                    >
-                                        {load >= 90
-                                            ? 'Sobrecarga'
-                                            : load >= 75
-                                              ? 'Alta'
-                                              : 'Normal'}
-                                    </span>
-                                    <div className="col-span-2 flex items-center gap-3">
-                                        <Bar
-                                            value={load}
-                                            tone={loadTone(load)}
-                                        />
-                                        <span className="w-10 text-right text-sm font-black">
-                                            {load}%
-                                        </span>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        {team.length === 0 && (
-                            <p className="text-sm text-slate-500">
-                                Sin datos de carga todavía.
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                <div className={`${card} p-5`}>
-                    <CardTitle
-                        aside={
-                            <a
-                                href="#cumplimiento"
-                                className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
-                            >
-                                Ver detalle
-                            </a>
-                        }
-                    >
-                        Empresas que requieren atención
-                    </CardTitle>
-                    <div className="space-y-2.5">
-                        {atRisk.slice(0, 4).map((company) => (
-                            <div
-                                key={company.id}
-                                className="flex items-start gap-3 rounded-xl border border-slate-100 p-3"
-                            >
-                                <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-red-50 text-red-600">
-                                    <AlertTriangle className="size-5" />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-black">
-                                        {company.name}
-                                    </p>
-                                    <p className="text-xs font-bold text-red-600">
-                                        {company.status === 'blocked'
-                                            ? 'Cierre bloqueado'
-                                            : `${company.overdue_tasks ?? 0} tareas vencidas`}
-                                    </p>
-                                    <p className="truncate text-xs text-slate-500">
-                                        {company.office_name} ·{' '}
-                                        {company.accountant ?? 'Sin contador'}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-                        {atRisk.length === 0 && (
-                            <p className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-                                <CheckCircle2 className="size-5" /> Ninguna
-                                empresa en riesgo.
-                            </p>
-                        )}
-                    </div>
-                </div>
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
-                <div className={`${card} p-5`}>
-                    <CardTitle>Proyección de capacidad</CardTitle>
-                    <div className="flex items-center gap-5">
-                        <div className="text-center">
-                            <Gauge value={capacityUse} />
-                            <p className="-mt-1 text-xs text-slate-500">
-                                Utilización del plan
-                            </p>
+                    {current?.props.action && (
+                        <div className="flex justify-end">
+                            {current.props.action}
                         </div>
-                        <dl className="flex-1 space-y-2 text-sm">
-                            <div className="flex justify-between gap-3">
-                                <dt className="text-slate-500">
-                                    Capacidad del plan
-                                </dt>
-                                <dd className="font-black">
-                                    {capacity.limit
-                                        ? `${capacity.limit} empresas`
-                                        : 'Sin límite'}
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                                <dt className="text-slate-500">
-                                    Empresas activas
-                                </dt>
-                                <dd className="font-black">
-                                    {capacity.active} empresas
-                                </dd>
-                            </div>
-                            <div className="flex justify-between gap-3">
-                                <dt className="text-slate-500">Disponible</dt>
-                                <dd className="font-black text-emerald-600">
-                                    {capacity.available === null
-                                        ? 'Ilimitada'
-                                        : `${capacity.available} empresas`}
-                                </dd>
-                            </div>
-                        </dl>
-                    </div>
-                    <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-                        {capacity.limit
-                            ? `Tu plan permite ${capacity.available} empresas más antes de alcanzar su límite.`
-                            : 'Tu plan no limita el número de empresas.'}
-                    </p>
-                </div>
-
-                <div className={`${card} p-5`}>
-                    <CardTitle
-                        aside={
-                            <Link
-                                href="/work/closings"
-                                className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
-                            >
-                                Ver cierres
-                            </Link>
-                        }
-                    >
-                        Resumen operativo del mes
-                    </CardTitle>
-                    <div className="space-y-3">
-                        {[
-                            ['Empresas al día', counts.ok, 'ok'],
-                            ['En revisión', counts.review, 'warn'],
-                            ['Con equipo completo', fullTeam, 'ok'],
-                            [
-                                'Con tareas vencidas',
-                                counts.late + counts.blocked,
-                                'bad',
-                            ],
-                        ].map(([label, count, tone]) => (
-                            <div
-                                key={String(label)}
-                                className="flex items-center gap-3"
-                            >
-                                <span className="w-40 shrink-0 text-sm text-slate-700">
-                                    {label}
-                                </span>
-                                <Bar
-                                    value={pct(Number(count), total)}
-                                    tone={tone as 'ok' | 'warn' | 'bad'}
-                                />
-                                <span className="w-24 text-right text-xs text-slate-500">
-                                    {count}/{total} ·{' '}
-                                    <b className="text-[#061633]">
-                                        {pct(Number(count), total)}%
-                                    </b>
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className={`${card} p-5`}>
-                    <CardTitle
-                        aside={
-                            <a
-                                href="#cumplimiento"
-                                className="rounded-lg border border-[#ebe3df] px-3 py-1 text-xs font-bold text-[#8a0b0b]"
-                            >
-                                Ver todos
-                            </a>
-                        }
-                    >
-                        Próximos vencimientos
-                    </CardTitle>
-                    <div className="space-y-2.5">
-                        {upcoming.map((task) => (
-                            <div
-                                key={task.id}
-                                className="flex items-center gap-3 rounded-xl border border-slate-100 p-3"
-                            >
-                                <span
-                                    className={`grid size-9 shrink-0 place-items-center rounded-full ${task.is_overdue ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}
-                                >
-                                    <CalendarDays className="size-5" />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-black">
-                                        {task.title}
-                                    </p>
-                                    <p className="truncate text-xs text-slate-500">
-                                        {task.company_name ?? 'Firma'}
-                                    </p>
-                                </div>
-                                <span
-                                    className={`text-xs font-bold ${task.is_overdue ? 'text-red-600' : 'text-slate-500'}`}
-                                >
-                                    {task.remaining_label ?? ''}
-                                </span>
-                            </div>
-                        ))}
-                        {upcoming.length === 0 && (
-                            <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                                No hay vencimientos próximos.
-                            </p>
-                        )}
-                    </div>
-                </div>
-            </section>
-        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

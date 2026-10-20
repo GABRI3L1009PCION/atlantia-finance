@@ -15,10 +15,10 @@ class WorkloadService
      */
     public function forOrganization(int $organizationId, ?int $officeId = null): array
     {
-        $users = DB::table('organization_user')
+        $users = TeamScope::withoutClients(DB::table('organization_user')
             ->join('users', 'users.id', '=', 'organization_user.user_id')
             ->where('organization_user.organization_id', $organizationId)
-            ->where('organization_user.status', 'active')
+            ->where('organization_user.status', 'active'), $organizationId)
             ->when($officeId, function ($query) use ($officeId): void {
                 $query->join('office_user', 'office_user.user_id', '=', 'organization_user.user_id')
                     ->where('office_user.office_id', $officeId)

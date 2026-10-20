@@ -15,6 +15,7 @@ use App\Services\Luzma\LuzmaPromptService;
 use App\Services\Luzma\LuzmaReminderConditionService;
 use App\Services\Luzma\LuzmaReminderService;
 use App\Services\Luzma\LuzmaService;
+use App\Services\Luzma\LuzmaSwitch;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -61,7 +62,7 @@ class LuzmaController extends Controller
             'conditions' => LuzmaReminderConditionService::CONDITIONS,
             'companies' => DB::table('companies')->whereIn('id', $context->companyIds === [] ? [-1] : $context->companyIds)->orderBy('name')->get(['public_id', 'name'])
                 ->map(fn ($row): array => ['id' => (string) $row->public_id, 'name' => (string) $row->name])->all(),
-            'health' => $context->can('luzma.admin.view') ? [...$provider->health(), 'enabled' => (bool) config('luzma.enabled'), 'features' => config('luzma.features'),
+            'health' => $context->can('luzma.admin.view') ? [...$provider->health(), 'enabled' => app(LuzmaSwitch::class)->enabled(), 'features' => config('luzma.features'),
                 'queries_this_month' => DB::table('luzma_messages')->where('luzma_messages.organization_id', $context->organization->id)->where('role', 'user')->where('created_at', '>=', now()->startOfMonth())->count(),
                 'fallbacks_this_month' => DB::table('luzma_messages')->where('luzma_messages.organization_id', $context->organization->id)->where('role', 'assistant')->whereIn('status', ['fallback', 'error'])->where('created_at', '>=', now()->startOfMonth())->count(),
                 'avg_latency_ms' => (int) DB::table('luzma_messages')->where('luzma_messages.organization_id', $context->organization->id)->where('role', 'assistant')->where('created_at', '>=', now()->subDays(7))->avg('latency_ms'),
@@ -188,7 +189,7 @@ class LuzmaController extends Controller
         $context = $this->context($request);
         abort_unless($context->can('luzma.admin.view'), 403);
 
-        return response()->json([...$provider->health(), 'enabled' => (bool) config('luzma.enabled')]);
+        return response()->json([...$provider->health(), 'enabled' => app(LuzmaSwitch::class)->enabled()]);
     }
 
     /** @param array<string, mixed> $input */

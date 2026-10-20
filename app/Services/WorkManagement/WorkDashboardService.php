@@ -549,7 +549,7 @@ class WorkDashboardService
         return [
             'active_offices' => $canViewAll ? count($officeIds) : count($officeIds),
             'active_companies' => $periodStats['total'],
-            'active_users' => DB::table('organization_user')->where('organization_user.organization_id', $organizationId)->where('status', 'active')->count(),
+            'active_users' => TeamScope::withoutClients(DB::table('organization_user')->where('organization_user.organization_id', $organizationId)->where('organization_user.status', 'active'), $organizationId)->count(),
             'periods_in_progress' => $periodStats['in_progress'],
             'ready_for_review' => $periodStats['ready_for_review'],
             'completed_closings' => $periodStats['closed'],
@@ -656,7 +656,7 @@ class WorkDashboardService
         return [
             'active_offices' => $canViewAll ? DB::table('offices')->where('organization_id', $organizationId)->where('status', 'active')->whereNull('deleted_at')->count() : count($officeIds),
             'active_companies' => (clone $companies)->count(),
-            'active_users' => DB::table('organization_user')->where('organization_id', $organizationId)->where('status', 'active')->count(),
+            'active_users' => TeamScope::withoutClients(DB::table('organization_user')->where('organization_user.organization_id', $organizationId)->where('organization_user.status', 'active'), $organizationId)->count(),
             'periods_in_progress' => (clone $periods)->whereNull('accounting_periods.closed_at')->count(),
             'ready_for_review' => (clone $tasks)->whereIn('status', ['ready_for_review', 'in_review'])->count(),
             'completed_closings' => (clone $periods)->whereNotNull('closed_at')->where('closed_at', '>=', now()->startOfMonth())->count(),
@@ -1075,10 +1075,10 @@ class WorkDashboardService
     /** @return array<int, array<string, mixed>> */
     private function team(int $organizationId): array
     {
-        $members = DB::table('organization_user')
+        $members = TeamScope::withoutClients(DB::table('organization_user')
             ->join('users', 'users.id', '=', 'organization_user.user_id')
             ->where('organization_user.organization_id', $organizationId)
-            ->where('organization_user.status', 'active')
+            ->where('organization_user.status', 'active'), $organizationId)
             ->select('users.id', 'users.name', 'users.email', 'organization_user.role as organization_role')
             ->orderBy('users.name')
             ->get();
@@ -1658,7 +1658,7 @@ class WorkDashboardService
 
     private function organizationRole(Organization $organization, User $user): string
     {
-        if ($organization->relationLoaded('pivot') && $organization->pivot->role) {
+        if ($organization->relationLoaded('pivot') && $organization->pivot->role && (int) $organization->pivot->user_id === $user->id) {
             return (string) $organization->pivot->role;
         }
 

@@ -5,36 +5,29 @@ import {
     BriefcaseBusiness,
     Building2,
     ChevronDown,
+    ChevronRight,
     FileWarning,
     Mail,
-    MapPin,
-    RefreshCcw,
+    Plus,
     ShieldAlert,
     ShieldCheck,
     UserCheck,
-    UserMinus,
     UserPlus,
-    UserRoundX,
     Users,
-    X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import {
     AssignDialog,
-    EmptyRow,
     InviteDialog,
     NewCompanyDialog,
     Notice,
     PageHeader,
-    SectionHeader,
     Shell,
     badge,
-    chip,
     formatDate,
     panel,
     priorityLabel,
-    relativeTime,
     scoped,
     useOfficeQuery,
 } from '@/components/office-admin/kit';
@@ -144,6 +137,7 @@ export default function OfficeAdminDashboard({
     const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [companyOpen, setCompanyOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
     const scopeName = data.office?.name ?? 'Todas las oficinas';
     const kpis: {
         key: keyof Metrics;
@@ -167,20 +161,6 @@ export default function OfficeAdminDashboard({
             href: '/office/companies',
         },
         {
-            key: 'companies_without_accountant',
-            label: 'Empresas sin contador',
-            icon: UserRoundX,
-            tone: 'red',
-            href: '/office/assignments',
-        },
-        {
-            key: 'companies_without_assistant',
-            label: 'Empresas sin auxiliar',
-            icon: UserMinus,
-            tone: 'amber',
-            href: '/office/assignments',
-        },
-        {
             key: 'pending_assignments',
             label: 'Asignaciones pendientes',
             icon: FileWarning,
@@ -192,10 +172,10 @@ export default function OfficeAdminDashboard({
             label: 'Invitaciones pendientes',
             icon: Mail,
             tone: 'blue',
-            href: '/office/users#invitaciones',
+            href: '/office/invitations',
         },
     ];
-    const teamCards: {
+    const teamRows: {
         label: string;
         value: number | null;
         icon: LucideIcon;
@@ -203,32 +183,25 @@ export default function OfficeAdminDashboard({
         href: string;
     }[] = [
         {
-            label: 'Usuarios con alta carga',
+            label: 'Con alta carga',
             value: data.team_status.high_workload,
             icon: AlertTriangle,
-            tone: 'bg-red-50 text-red-700',
+            tone: 'bg-amber-50 text-amber-600',
             href: '/office/team-workload',
         },
         {
-            label: 'Usuarios sin empresa',
+            label: 'Sin empresa asignada',
             value: data.team_status.without_company,
-            icon: UserPlus,
-            tone: 'bg-amber-50 text-amber-700',
-            href: '/office/users',
+            icon: Users,
+            tone: 'bg-slate-100 text-slate-600',
+            href: '/office/team',
         },
         {
-            label: 'Usuarios con 2FA pendiente',
+            label: '2FA pendiente',
             value: data.team_status.pending_2fa,
             icon: ShieldAlert,
-            tone: 'bg-blue-50 text-blue-700',
-            href: '/office/security',
-        },
-        {
-            label: 'Usuarios inactivos',
-            value: data.team_status.inactive,
-            icon: UserRoundX,
             tone: 'bg-red-50 text-red-700',
-            href: '/office/users',
+            href: '/office/security',
         },
     ];
     const quickActions: {
@@ -270,17 +243,19 @@ export default function OfficeAdminDashboard({
             action: () => router.visit(scoped('/office/audit', officeQuery)),
         },
     ];
-    const open = (href: string) => {
-        if (href.startsWith('#')) {
-            document
-                .getElementById(href.slice(1))
-                ?.scrollIntoView({ behavior: 'smooth' });
-
-            return;
-        }
-
-        router.visit(scoped(href, officeQuery));
-    };
+    const visibleActions = quickActions.filter((item) => item.visible);
+    const shortcuts: { label: string; icon: LucideIcon; href: string }[] = [
+        { label: 'Empresas', icon: Building2, href: '/office/companies' },
+        { label: 'Usuarios', icon: Users, href: '/office/users' },
+        {
+            label: 'Asignar responsables',
+            icon: UserCheck,
+            href: '/office/assignments',
+        },
+        { label: 'Auditoría', icon: ShieldCheck, href: '/office/audit' },
+    ];
+    const open = (href: string) => router.visit(scoped(href, officeQuery));
+    const priorities = data.incomplete_assignments.slice(0, 5);
 
     return (
         <>
@@ -289,22 +264,62 @@ export default function OfficeAdminDashboard({
                 <Notice message={notice} />
                 <PageHeader
                     title="Panel Administrador de Oficina"
-                    subtitle={`Gestión operativa y administrativa · ${scopeName}`}
+                    subtitle={`${scopeName} · Gestión operativa`}
                     actions={
-                        data.permissions.canInvite && (
-                            <button
-                                type="button"
-                                onClick={() => setInviteOpen(true)}
-                                className="inline-flex h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-[#d9a441] to-[#e8bd62] px-5 text-sm font-black text-[#3b2400] shadow-[0_10px_24px_-14px_#8c5e00]"
-                            >
-                                <UserPlus className="size-4" /> Invitar usuario{' '}
-                                <ChevronDown className="size-4" />
-                            </button>
+                        visibleActions.length > 0 && (
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setMenuOpen((value) => !value)
+                                    }
+                                    aria-expanded={menuOpen}
+                                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#8a0b0b] px-5 text-sm font-bold text-white shadow-md hover:brightness-110"
+                                >
+                                    <Plus className="size-4" /> Nueva acción{' '}
+                                    <ChevronDown className="size-4" />
+                                </button>
+                                {menuOpen && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            aria-label="Cerrar menú"
+                                            className="fixed inset-0 z-10 cursor-default"
+                                            onClick={() => setMenuOpen(false)}
+                                        />
+                                        <ul className="absolute right-0 z-20 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                                            {visibleActions.map(
+                                                ({
+                                                    label,
+                                                    icon: Icon,
+                                                    action,
+                                                }) => (
+                                                    <li key={label}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setMenuOpen(
+                                                                    false,
+                                                                );
+                                                                action();
+                                                            }}
+                                                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold hover:bg-amber-50"
+                                                        >
+                                                            <Icon className="size-4 text-[#8a0b0b]" />
+                                                            {label}
+                                                        </button>
+                                                    </li>
+                                                ),
+                                            )}
+                                        </ul>
+                                    </>
+                                )}
+                            </div>
                         )
                     }
                 />
 
-                <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+                <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     {kpis.map(({ key, label, icon: Icon, tone, href }) => {
                         const comparison = data.comparisons[key];
 
@@ -313,463 +328,214 @@ export default function OfficeAdminDashboard({
                                 key={key}
                                 type="button"
                                 onClick={() => open(href)}
-                                className={`${panel} p-3 text-left transition hover:border-[#c9a36a]`}
+                                className={`${panel} flex items-center gap-4 p-4 text-left transition hover:border-[#c9a36a]`}
                             >
-                                <div className="flex items-center gap-3">
-                                    <span
-                                        className={`grid size-11 shrink-0 place-items-center rounded-full ${kpiTone[tone]}`}
-                                    >
-                                        <Icon className="size-5" />
-                                    </span>
-                                    <div className="min-w-0">
-                                        <p className="truncate text-xs font-semibold text-[#466287]">
-                                            {label}
-                                        </p>
-                                        <p className="text-2xl font-black text-[#061633]">
-                                            {data.metrics[key]}
-                                        </p>
-                                    </div>
-                                </div>
-                                <p
-                                    className={`mt-2 text-xs font-bold ${comparison.tone === 'positive' ? 'text-emerald-700' : comparison.tone === 'negative' ? 'text-red-600' : 'text-[#526b92]'}`}
+                                <span
+                                    className={`grid size-14 shrink-0 place-items-center rounded-full ${kpiTone[tone]}`}
                                 >
-                                    {comparison.direction === 'up'
-                                        ? '↑'
-                                        : comparison.direction === 'down'
-                                          ? '↓'
-                                          : '→'}{' '}
-                                    {comparison.label}
-                                </p>
+                                    <Icon className="size-6" />
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block text-sm font-semibold text-[#466287]">
+                                        {label}
+                                    </span>
+                                    <span className="block text-3xl font-black text-[#061633]">
+                                        {data.metrics[key]}
+                                    </span>
+                                    <span
+                                        className={`block text-xs font-bold ${comparison.tone === 'positive' ? 'text-emerald-700' : comparison.tone === 'negative' ? 'text-red-600' : 'text-[#526b92]'}`}
+                                    >
+                                        {comparison.direction === 'up'
+                                            ? '↑'
+                                            : comparison.direction === 'down'
+                                              ? '↓'
+                                              : '→'}{' '}
+                                        {comparison.label}
+                                    </span>
+                                </span>
                             </button>
                         );
                     })}
                 </section>
 
-                <section className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,.8fr)_minmax(0,1.1fr)]">
-                    <div className={`${panel} min-w-0 p-3`}>
-                        <SectionHeader
-                            id="asignaciones"
-                            title="Asignaciones incompletas"
-                            action={
-                                <Link
-                                    href={scoped(
-                                        '/office/assignments',
-                                        officeQuery,
-                                    )}
-                                    className={chip}
-                                >
-                                    Ver todas
-                                </Link>
-                            }
-                        />
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-xs">
-                                <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                    <tr>
-                                        <th className="px-2 py-2">Empresa</th>
-                                        <th className="px-2 py-2">Falta</th>
-                                        <th className="px-2 py-2">Prioridad</th>
-                                        <th className="px-2 py-2">Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {data.incomplete_assignments.map((row) => {
-                                        const [label, tone] = priorityLabel[
-                                            row.priority
-                                        ] ?? ['Media', 'amber'];
-
-                                        return (
-                                            <tr
-                                                key={`${row.company_id}-${row.missing_role}`}
-                                            >
-                                                <td className="px-2 py-2">
-                                                    <p className="font-bold text-[#061633]">
-                                                        {row.company_name}
-                                                    </p>
-                                                    <p className="text-[11px] text-[#526b92]">
-                                                        NIT {row.tax_id}
-                                                        {data.office === null
-                                                            ? ` · ${row.office_name}`
-                                                            : ''}
-                                                    </p>
-                                                </td>
-                                                <td className="px-2 py-2">
-                                                    <p className="font-semibold">
-                                                        {row.missing_label}
-                                                    </p>
-                                                    <p
-                                                        className="text-[11px] text-[#526b92]"
-                                                        title={row.reason}
-                                                    >
-                                                        {row.reason}
-                                                    </p>
-                                                </td>
-                                                <td className="px-2 py-2">
-                                                    <span
-                                                        className={badge(
-                                                            tone as Tone,
-                                                        )}
-                                                    >
-                                                        {label}
-                                                    </span>
-                                                </td>
-                                                <td className="px-2 py-2">
-                                                    {data.permissions
-                                                        .canAssign ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setAssignTarget(
-                                                                    row,
-                                                                )
-                                                            }
-                                                            className="rounded-lg border border-[#d9a441] px-3 py-1.5 font-bold text-[#8a5b00] hover:bg-amber-50"
-                                                        >
-                                                            Asignar
-                                                            <span className="ml-1 font-normal text-[#8a6d3b]">
-                                                                (
-                                                                {
-                                                                    row.compatible_users_count
-                                                                }
-                                                                )
-                                                            </span>
-                                                        </button>
-                                                    ) : (
-                                                        <span className="text-[#526b92]">
-                                                            Sin permiso
-                                                        </span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                    {data.incomplete_assignments.length ===
-                                        0 && (
-                                        <EmptyRow
-                                            colSpan={4}
-                                            text="Todas las empresas tienen responsables configurados."
-                                        />
-                                    )}
-                                </tbody>
-                            </table>
+                <section className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                    <div id="asignaciones" className={`${panel} min-w-0 p-4`}>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <h2 className="flex items-center gap-3 text-xl font-black text-[#061633]">
+                                Prioridades de la oficina
+                                {data.incomplete_assignments.length > 0 && (
+                                    <span className="rounded-full bg-[#fbe9e9] px-3 py-1 text-xs font-bold text-[#8a0b0b]">
+                                        {data.incomplete_assignments.length}{' '}
+                                        pendiente
+                                        {data.incomplete_assignments.length ===
+                                        1
+                                            ? ''
+                                            : 's'}
+                                    </span>
+                                )}
+                            </h2>
+                            <Link
+                                href={scoped(
+                                    '/office/assignments',
+                                    officeQuery,
+                                )}
+                                className="inline-flex items-center gap-1.5 text-sm font-bold text-[#8a0b0b]"
+                            >
+                                Ver asignaciones{' '}
+                                <ArrowRight className="size-4" />
+                            </Link>
                         </div>
+                        <ul className="divide-y divide-slate-100">
+                            {priorities.map((row) => {
+                                const [label, tone] = priorityLabel[
+                                    row.priority
+                                ] ?? ['Media', 'amber'];
+
+                                return (
+                                    <li
+                                        key={`${row.company_id}-${row.missing_role}`}
+                                        className="flex flex-wrap items-center gap-3 py-3"
+                                    >
+                                        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-600">
+                                            <Building2 className="size-5" />
+                                        </span>
+                                        <span className="min-w-40 flex-1">
+                                            <span className="block font-bold text-[#061633]">
+                                                {row.company_name}
+                                            </span>
+                                            {data.office === null && (
+                                                <span className="block text-xs text-[#526b92]">
+                                                    {row.office_name}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span
+                                            className="min-w-36 text-sm text-[#061633]"
+                                            title={row.reason}
+                                        >
+                                            {row.missing_label}
+                                        </span>
+                                        <span className={badge(tone as Tone)}>
+                                            {label}
+                                        </span>
+                                        {data.permissions.canAssign ? (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setAssignTarget(row)
+                                                }
+                                                className="h-10 rounded-xl bg-[#8a0b0b] px-6 text-sm font-bold text-white hover:brightness-110"
+                                            >
+                                                Asignar
+                                            </button>
+                                        ) : (
+                                            <span className="text-xs text-[#526b92]">
+                                                Sin permiso
+                                            </span>
+                                        )}
+                                    </li>
+                                );
+                            })}
+                            {priorities.length === 0 && (
+                                <li className="rounded-xl bg-emerald-50 p-4 text-center text-sm font-semibold text-emerald-800">
+                                    Todas las empresas tienen responsables
+                                    configurados.
+                                </li>
+                            )}
+                        </ul>
                     </div>
 
-                    <div
-                        id="equipo"
-                        className={`${panel} min-w-0 scroll-mt-24 p-3`}
-                    >
-                        <SectionHeader
-                            title="Estado del equipo"
-                            action={
-                                <Link
-                                    href={scoped('/office/team', officeQuery)}
-                                    className={chip}
-                                >
-                                    Ver detalle
-                                </Link>
-                            }
-                        />
-                        <div className="grid grid-cols-2 gap-2.5">
-                            {teamCards.map(
+                    <div id="equipo" className={`${panel} min-w-0 p-4`}>
+                        <h2 className="mb-3 text-xl font-black text-[#061633]">
+                            Estado del equipo
+                        </h2>
+                        <div className="space-y-2.5">
+                            {teamRows.map(
                                 ({ label, value, icon: Icon, tone, href }) => (
                                     <button
                                         key={label}
                                         type="button"
                                         onClick={() => open(href)}
-                                        className={`rounded-xl p-3 text-left transition hover:brightness-95 ${tone}`}
+                                        className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition hover:border-[#c9a36a]"
                                     >
-                                        <div className="flex items-center justify-between">
+                                        <span
+                                            className={`grid size-10 shrink-0 place-items-center rounded-full ${tone}`}
+                                        >
                                             <Icon className="size-5" />
-                                            <ArrowRight className="size-4 opacity-60" />
-                                        </div>
-                                        <p className="mt-2 text-2xl font-black">
-                                            {value ?? 'N/D'}
-                                        </p>
-                                        <p className="text-xs leading-tight font-semibold">
+                                        </span>
+                                        <span className="flex-1 font-medium text-[#061633]">
                                             {label}
-                                        </p>
+                                        </span>
+                                        <span
+                                            className={`text-2xl font-black ${tone.split(' ').find((c) => c.startsWith('text-')) ?? ''}`}
+                                        >
+                                            {value ?? 'N/D'}
+                                        </span>
+                                        <ChevronRight className="size-4 text-slate-400" />
                                     </button>
                                 ),
                             )}
                         </div>
-                        <p className="mt-2 text-xs text-[#526b92]">
-                            {data.team_status.active_users} usuario(s) activos
-                            en {scopeName}.
-                        </p>
-                    </div>
-
-                    <div
-                        id="carga"
-                        className={`${panel} min-w-0 scroll-mt-24 p-3`}
-                    >
-                        <SectionHeader
-                            title="Carga del equipo"
-                            action={
-                                <Link
-                                    href={scoped(
-                                        '/office/team-workload',
-                                        officeQuery,
-                                    )}
-                                    className={chip}
-                                >
-                                    Ver carga
-                                </Link>
-                            }
-                        />
-                        {data.team_workload === null ? (
-                            <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
-                                {data.workload_error ??
-                                    'Carga temporalmente no disponible.'}
-                            </p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-xs">
-                                    <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                        <tr>
-                                            <th className="px-2 py-2">
-                                                Colaborador
-                                            </th>
-                                            <th className="px-2 py-2">Rol</th>
-                                            <th className="px-2 py-2 text-right">
-                                                Empresas
-                                            </th>
-                                            <th className="px-2 py-2 text-right">
-                                                Tareas
-                                            </th>
-                                            <th className="px-2 py-2">Carga</th>
-                                            <th className="px-2 py-2">
-                                                Estado
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {data.team_workload.map((row) => {
-                                            const open = Object.entries(
-                                                row.tasks,
-                                            )
-                                                .filter(
-                                                    ([key]) =>
-                                                        ![
-                                                            'overdue',
-                                                            'completed_month',
-                                                        ].includes(key),
-                                                )
-                                                .reduce(
-                                                    (sum, [, value]) =>
-                                                        sum + value,
-                                                    0,
-                                                );
-
-                                            return (
-                                                <tr key={row.user_id}>
-                                                    <td className="px-2 py-2 font-bold">
-                                                        <Link
-                                                            href={scoped(
-                                                                `/office/users?user=${row.user_id}`,
-                                                                officeQuery,
-                                                            )}
-                                                            className="hover:text-[#640000]"
-                                                        >
-                                                            {row.name}
-                                                        </Link>
-                                                    </td>
-                                                    <td className="px-2 py-2 text-[#395277]">
-                                                        {row.role_label}
-                                                    </td>
-                                                    <td className="px-2 py-2 text-right font-black">
-                                                        {row.assigned_companies}
-                                                    </td>
-                                                    <td className="px-2 py-2 text-right font-black">
-                                                        {open}
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="w-8 font-black">
-                                                                {
-                                                                    row.utilization_percentage
-                                                                }
-                                                                %
-                                                            </span>
-                                                            <div className="h-2 w-14 overflow-hidden rounded bg-slate-100">
-                                                                <div
-                                                                    className={`h-full ${row.utilization_percentage >= 85 ? 'bg-red-500' : row.utilization_percentage >= 65 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                                                    style={{
-                                                                        width: `${row.utilization_percentage}%`,
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-2 py-2">
-                                                        <span
-                                                            className={badge(
-                                                                row.status ===
-                                                                    'Alta'
-                                                                    ? 'red'
-                                                                    : row.status ===
-                                                                        'Media'
-                                                                      ? 'amber'
-                                                                      : 'green',
-                                                            )}
-                                                        >
-                                                            {row.status}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {data.team_workload.length === 0 && (
-                                            <EmptyRow
-                                                colSpan={6}
-                                                text="No existen usuarios activos en esta oficina."
-                                            />
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
+                        <Link
+                            href={scoped('/office/team-workload', officeQuery)}
+                            className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-[#8a0b0b]"
+                        >
+                            Ver carga de trabajo{' '}
+                            <ArrowRight className="size-4" />
+                        </Link>
                     </div>
                 </section>
 
-                <section className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(220px,.5fr)]">
-                    <div className={`${panel} min-w-0 p-3`}>
-                        <SectionHeader
-                            title="Invitaciones pendientes"
-                            action={
+                <section className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                    <div className={`${panel} min-w-0 p-4`}>
+                        <h2 className="mb-3 text-xl font-black text-[#061633]">
+                            Accesos rápidos
+                        </h2>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            {shortcuts.map(({ label, icon: Icon, href }) => (
                                 <Link
-                                    href={scoped(
-                                        '/office/users#invitaciones',
-                                        officeQuery,
-                                    )}
-                                    className={chip}
+                                    key={label}
+                                    href={scoped(href, officeQuery)}
+                                    className="flex flex-col items-center gap-3 rounded-xl border border-slate-200 px-3 py-5 text-center text-sm font-semibold transition hover:border-[#c9a36a]"
                                 >
-                                    Ver todas
+                                    <span className="grid size-14 place-items-center rounded-full bg-[#fbe9e9] text-[#8a0b0b]">
+                                        <Icon className="size-7" />
+                                    </span>
+                                    {label}
                                 </Link>
-                            }
-                        />
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-xs">
-                                <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                    <tr>
-                                        <th className="px-2 py-2">
-                                            Correo electrónico
-                                        </th>
-                                        <th className="px-2 py-2">Rol</th>
-                                        <th className="px-2 py-2">Oficina</th>
-                                        <th className="px-2 py-2">Enviado</th>
-                                        <th className="px-2 py-2">Estado</th>
-                                        <th className="px-2 py-2">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {data.invitations.map((invitation) => (
-                                        <tr key={invitation.public_id}>
-                                            <td className="px-2 py-2">
-                                                {invitation.email}
-                                            </td>
-                                            <td className="px-2 py-2">
-                                                {invitation.role_name}
-                                            </td>
-                                            <td className="px-2 py-2">
-                                                {invitation.office_name}
-                                            </td>
-                                            <td className="px-2 py-2">
-                                                {formatDate(invitation.sent_at)}
-                                            </td>
-                                            <td className="px-2 py-2">
-                                                <span
-                                                    className={badge(
-                                                        invitation.status ===
-                                                            'expired'
-                                                            ? 'red'
-                                                            : 'amber',
-                                                    )}
-                                                >
-                                                    {invitation.status ===
-                                                    'expired'
-                                                        ? 'Vencida'
-                                                        : 'Pendiente'}
-                                                </span>
-                                            </td>
-                                            <td className="px-2 py-2">
-                                                {data.permissions.canInvite && (
-                                                    <div className="flex gap-1.5">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                router.post(
-                                                                    `/office/invitations/${invitation.public_id}/resend`,
-                                                                    {},
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                )
-                                                            }
-                                                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 font-bold"
-                                                        >
-                                                            <RefreshCcw className="size-3" />{' '}
-                                                            Reenviar
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                confirm(
-                                                                    `¿Cancelar la invitación de ${invitation.email}?`,
-                                                                ) &&
-                                                                router.post(
-                                                                    `/office/invitations/${invitation.public_id}/cancel`,
-                                                                    {},
-                                                                    {
-                                                                        preserveScroll: true,
-                                                                    },
-                                                                )
-                                                            }
-                                                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 font-bold text-red-700"
-                                                        >
-                                                            <X className="size-3" />{' '}
-                                                            Cancelar
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {data.invitations.length === 0 && (
-                                        <EmptyRow
-                                            colSpan={6}
-                                            text="No existen invitaciones pendientes."
-                                        />
-                                    )}
-                                </tbody>
-                            </table>
+                            ))}
                         </div>
                     </div>
 
-                    <div className={`${panel} min-w-0 p-3`}>
-                        <SectionHeader
-                            title="Actividad administrativa reciente"
-                            action={
-                                <Link
-                                    href={scoped('/office/audit', officeQuery)}
-                                    className={chip}
-                                >
-                                    Ver todas
-                                </Link>
-                            }
-                        />
-                        <ul className="space-y-2.5">
-                            {data.recent_activity.map((event) => {
+                    <div className={`${panel} min-w-0 p-4`}>
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                            <h2 className="text-xl font-black text-[#061633]">
+                                Actividad reciente
+                            </h2>
+                            <Link
+                                href={scoped('/office/audit', officeQuery)}
+                                className="inline-flex items-center gap-1.5 text-sm font-bold text-[#8a0b0b]"
+                            >
+                                Ver historial <ArrowRight className="size-4" />
+                            </Link>
+                        </div>
+                        <ul className="divide-y divide-slate-100">
+                            {data.recent_activity.slice(0, 4).map((event) => {
                                 const content = (
                                     <>
-                                        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">
-                                            <Users className="size-4" />
+                                        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-blue-50 text-blue-700">
+                                            <UserCheck className="size-5" />
                                         </span>
-                                        <span className="min-w-0 flex-1 text-sm leading-snug text-[#061633]">
-                                            {event.description}
-                                        </span>
-                                        <span className="shrink-0 text-[11px] text-[#526b92]">
-                                            {relativeTime(event.created_at)}
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm leading-snug font-semibold text-[#061633]">
+                                                {event.description}
+                                            </span>
+                                            <span className="block text-xs text-[#526b92]">
+                                                {formatDate(
+                                                    event.created_at,
+                                                    true,
+                                                )}
+                                            </span>
                                         </span>
                                     </>
                                 );
@@ -779,12 +545,12 @@ export default function OfficeAdminDashboard({
                                         {event.destination ? (
                                             <Link
                                                 href={event.destination}
-                                                className="flex items-start gap-2.5 rounded-lg p-1 hover:bg-slate-50"
+                                                className="flex items-center gap-3 py-2.5 hover:bg-slate-50"
                                             >
                                                 {content}
                                             </Link>
                                         ) : (
-                                            <div className="flex items-start gap-2.5 p-1">
+                                            <div className="flex items-center gap-3 py-2.5">
                                                 {content}
                                             </div>
                                         )}
@@ -798,124 +564,74 @@ export default function OfficeAdminDashboard({
                             )}
                         </ul>
                     </div>
-
-                    <div className={`${panel} min-w-0 p-3`}>
-                        <h2 className="mb-3 text-lg font-black">
-                            Acciones rápidas
-                        </h2>
-                        <div className="space-y-2">
-                            {quickActions
-                                .filter((item) => item.visible)
-                                .map(({ label, icon: Icon, action }) => (
-                                    <button
-                                        key={label}
-                                        type="button"
-                                        onClick={action}
-                                        className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 text-left text-sm font-bold hover:border-[#c9a36a]"
-                                    >
-                                        <span className="flex items-center gap-2">
-                                            <Icon className="size-4 text-[#365173]" />
-                                            {label}
-                                        </span>
-                                        <ArrowRight className="size-4 text-[#526b92]" />
-                                    </button>
-                                ))}
-                        </div>
-                    </div>
                 </section>
 
-                <section className={`${panel} p-3`}>
-                    <SectionHeader
-                        title="Resumen de oficinas"
-                        action={
-                            <Link href="/office/offices" className={chip}>
-                                Ver todas
-                            </Link>
-                        }
-                    />
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-xs">
-                            <thead className="bg-[#f3f6f9] text-left text-[#526b92]">
-                                <tr>
-                                    <th className="px-2 py-2">Oficina</th>
-                                    <th className="px-2 py-2">Responsable</th>
-                                    <th className="px-2 py-2 text-right">
-                                        Usuarios
-                                    </th>
-                                    <th className="px-2 py-2 text-right">
-                                        Empresas
-                                    </th>
-                                    <th className="px-2 py-2 text-right">
-                                        Asignaciones pendientes
-                                    </th>
-                                    <th className="px-2 py-2">Estado</th>
-                                    <th className="px-2 py-2" />
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {data.office_summaries.map((office) => (
-                                    <tr key={office.id}>
-                                        <td className="px-2 py-2.5">
-                                            <p className="flex items-center gap-1.5 font-bold">
-                                                <MapPin className="size-3.5 text-[#b0661b]" />
-                                                {office.name}
-                                            </p>
-                                            <p className="pl-5 text-[11px] text-[#526b92]">
-                                                {office.location ??
-                                                    'Sin ubicación'}
-                                            </p>
-                                        </td>
-                                        <td className="px-2 py-2.5">
-                                            <p className="font-semibold">
-                                                {office.responsible ?? (
-                                                    <span className="text-amber-700">
-                                                        Sin administrador
-                                                    </span>
-                                                )}
-                                            </p>
-                                            {office.responsible_role && (
-                                                <p className="text-[11px] text-[#526b92]">
-                                                    {office.responsible_role}
-                                                </p>
-                                            )}
-                                        </td>
-                                        <td className="px-2 py-2.5 text-right font-black">
-                                            {office.users}
-                                        </td>
-                                        <td className="px-2 py-2.5 text-right font-black">
-                                            {office.companies}
-                                        </td>
-                                        <td
-                                            className={`px-2 py-2.5 text-right font-black ${office.pending_assignments > 0 ? 'text-red-700' : ''}`}
-                                        >
-                                            {office.pending_assignments}
-                                        </td>
-                                        <td className="px-2 py-2.5">
-                                            <span
-                                                className={badge(
-                                                    office.status === 'active'
-                                                        ? 'green'
-                                                        : 'slate',
-                                                )}
-                                            >
-                                                {office.status === 'active'
-                                                    ? 'Activa'
-                                                    : 'Inactiva'}
+                <section className={`${panel} p-4`}>
+                    <h2 className="mb-3 text-xl font-black text-[#061633]">
+                        Resumen de la oficina
+                    </h2>
+                    <ul className="divide-y divide-slate-100">
+                        {data.office_summaries.map((office) => (
+                            <li
+                                key={office.id}
+                                className="flex flex-wrap items-center gap-x-6 gap-y-2 py-3"
+                            >
+                                <span className="flex min-w-56 items-center gap-3">
+                                    <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
+                                        <Building2 className="size-6" />
+                                    </span>
+                                    <span>
+                                        <span className="block font-bold text-[#061633]">
+                                            {office.name}
+                                        </span>
+                                        <span className="block text-xs text-[#526b92]">
+                                            {office.location ?? 'Sin ubicación'}
+                                        </span>
+                                    </span>
+                                </span>
+                                <span className="min-w-48 flex-1 text-sm">
+                                    <span className="block font-semibold">
+                                        {office.responsible ?? (
+                                            <span className="text-amber-700">
+                                                Sin administrador
                                             </span>
-                                        </td>
-                                        <td className="px-2 py-2.5 text-right">
-                                            <Link
-                                                href={`/office/offices/${office.id}`}
-                                                className="font-bold text-[#640000]"
-                                            >
-                                                Detalle
-                                            </Link>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                        )}
+                                    </span>
+                                    {office.responsible_role && (
+                                        <span className="block text-xs text-[#526b92]">
+                                            {office.responsible_role}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="text-xs text-[#526b92]">
+                                    {office.users} usuarios · {office.companies}{' '}
+                                    empresas
+                                    {office.pending_assignments > 0 && (
+                                        <b className="text-red-700">
+                                            {' '}
+                                            · {office.pending_assignments}{' '}
+                                            pendientes
+                                        </b>
+                                    )}
+                                </span>
+                                <span
+                                    className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold ${office.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
+                                >
+                                    <span className="size-2.5 rounded-full bg-current" />
+                                    {office.status === 'active'
+                                        ? 'Activa'
+                                        : 'Inactiva'}
+                                </span>
+                                <Link
+                                    href={`/office/offices/${office.id}`}
+                                    className="inline-flex items-center gap-1.5 text-sm font-bold text-[#8a0b0b]"
+                                >
+                                    Ver oficina{' '}
+                                    <ArrowRight className="size-4" />
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
                 </section>
             </Shell>
 

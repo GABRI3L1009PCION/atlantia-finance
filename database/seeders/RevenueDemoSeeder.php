@@ -14,8 +14,12 @@ use Illuminate\Support\Facades\DB;
  */
 class RevenueDemoSeeder extends Seeder
 {
+    use RefusesProduction;
+
     public function run(): void
     {
+        $this->refuseInProduction();
+
         $organizationId = (int) DB::table('organization_user')
             ->join('users', 'users.id', '=', 'organization_user.user_id')
             ->where('users.email', 'socio.director@atlantia.test')

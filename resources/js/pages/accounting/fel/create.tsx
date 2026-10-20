@@ -42,7 +42,8 @@ type FelCreateProps = {
     }[];
     document: Document | null;
     today: string;
-    notice: string;
+    notice: string | null;
+    satManual?: boolean;
 };
 
 export function FelInvoiceForm({
@@ -51,6 +52,7 @@ export function FelInvoiceForm({
     invoices = [],
     document,
     today,
+    satManual = false,
 }: FelCreateProps) {
     const form = useForm({
         issued_on: document?.issued_on.slice(0, 10) ?? today,
@@ -494,12 +496,15 @@ export function FelInvoiceForm({
                                 disabled={form.processing || !validQuote}
                                 onClick={() => save('issue')}
                             >
-                                Emitir factura de prueba
+                                {satManual
+                                    ? 'Preparar para emitir en SAT'
+                                    : 'Emitir factura de prueba'}
                             </button>
                         </div>
                         <p className="mt-4 text-xs text-amber-800">
-                            Esta factura se procesará mediante el certificador
-                            FEL de prueba.
+                            {satManual
+                                ? 'La factura queda lista para emitirla en el portal de la SAT. Luego registras aquí lo que la SAT emitió.'
+                                : 'Esta factura se procesará mediante el certificador FEL de prueba.'}
                         </p>
                     </Card>
                 </div>

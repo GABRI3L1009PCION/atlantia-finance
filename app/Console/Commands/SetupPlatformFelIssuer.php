@@ -55,7 +55,7 @@ class SetupPlatformFelIssuer extends Command
             $id = DB::table('companies')->insertGetId(['public_id' => $uuid, 'office_id' => $office->id,
                 'name' => config('fel.platform.name'), 'tax_id' => config('fel.platform.nit'), 'currency' => 'GTQ', 'created_at' => now(), 'updated_at' => now()]);
             DB::table('company_fel_settings')->insert(['company_id' => $id, 'legal_name' => config('fel.platform.name'),
-                'nit' => config('fel.platform.nit'), 'address' => $address, 'provider' => 'mock', 'environment' => 'test',
+                'nit' => config('fel.platform.nit'), 'address' => $address, 'provider' => 'sat_manual', 'certifier' => 'sat_manual', 'environment' => 'test',
                 'logo_data_uri' => 'data:image/png;base64,'.base64_encode($logo),
                 'updated_by' => $owner->id, 'created_at' => now(), 'updated_at' => now()]);
             DB::table('platform_fel_issuer')->insert(['id' => 1, 'company_id' => $id]);

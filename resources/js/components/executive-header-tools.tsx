@@ -1,5 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import {
+    Archive,
+    ArchiveRestore,
     Bell,
     Building2,
     CalendarDays,
@@ -30,6 +32,7 @@ export type Inbox = {
         body: string | null;
         href: string;
         read: boolean;
+        archived: boolean;
         created_at: string;
     }[];
     comments: {
@@ -479,9 +482,42 @@ export function OperationsPeriodSelector() {
     );
 }
 
+type InboxNotification = Inbox['notifications'][number];
+
+const notificationTabs = [
+    { key: 'unread', label: 'No leídas' },
+    { key: 'read', label: 'Leídas' },
+    { key: 'archived', label: 'Archivadas' },
+] as const;
+
+type NotificationTab = (typeof notificationTabs)[number]['key'];
+
+function notificationTab(notification: InboxNotification): NotificationTab {
+    if (notification.archived) {
+        return 'archived';
+    }
+
+    return notification.read ? 'read' : 'unread';
+}
+
 export function NotificationsMenu({ inbox }: { inbox: Inbox | undefined }) {
     const unread = inbox?.unread ?? 0;
     const notifications = inbox?.notifications ?? [];
+    const [tab, setTab] = useState<NotificationTab>('unread');
+    const counts = {
+        unread,
+        read: notifications.filter((row) => notificationTab(row) === 'read')
+            .length,
+        archived: notifications.filter(
+            (row) => notificationTab(row) === 'archived',
+        ).length,
+    };
+    const visible = notifications.filter((row) => notificationTab(row) === tab);
+    const emptyText = {
+        unread: 'Estás al día: no tienes notificaciones sin leer.',
+        read: 'Aquí aparecen las notificaciones que ya abriste.',
+        archived: 'No has archivado notificaciones.',
+    }[tab];
 
     return (
         <DropdownMenu>
@@ -499,7 +535,10 @@ export function NotificationsMenu({ inbox }: { inbox: Inbox | undefined }) {
                     )}
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 rounded-xl p-2">
+            <DropdownMenuContent
+                align="end"
+                className="w-96 max-w-[calc(100vw-1rem)] rounded-xl border-[#e7e1dd] bg-white p-2 text-[#061633]"
+            >
                 <div className="flex items-center justify-between px-2 py-1.5">
                     <p className="text-sm font-black">Notificaciones</p>
                     {unread > 0 && (
@@ -515,46 +554,98 @@ export function NotificationsMenu({ inbox }: { inbox: Inbox | undefined }) {
                             className="flex items-center gap-1 text-xs font-bold text-[#640000]"
                         >
                             <CheckCheck className="size-3.5" />
-                            Marcar todas
+                            Marcar todas como leídas
                         </button>
                     )}
                 </div>
-                <DropdownMenuSeparator />
-                {notifications.length === 0 && (
-                    <p className="p-3 text-sm text-[#526b92]">
-                        No tienes notificaciones.
-                    </p>
-                )}
-                {notifications.map((notification) => (
-                    <DropdownMenuItem
-                        key={notification.id}
-                        onSelect={() =>
-                            router.post(
-                                `/work/notifications/${notification.id}/read`,
-                            )
-                        }
-                        className="flex items-start gap-2 rounded-lg p-2"
-                    >
-                        <span
-                            className={`mt-1.5 size-2 shrink-0 rounded-full ${notification.read ? 'bg-transparent' : 'bg-red-600'}`}
-                        />
-                        <span className="min-w-0">
-                            <span
-                                className={`block text-sm leading-tight ${notification.read ? 'text-[#395277]' : 'font-bold text-[#061633]'}`}
-                            >
-                                {notification.title}
-                            </span>
-                            {notification.body && (
-                                <span className="mt-0.5 block truncate text-xs text-[#526b92]">
-                                    {notification.body}
+                <div className="mb-1 flex gap-1 border-b border-[#ebe5e1] px-1">
+                    {notificationTabs.map((item) => (
+                        <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => setTab(item.key)}
+                            className={`-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-2 text-xs font-bold ${tab === item.key ? 'border-[#640000] text-[#640000]' : 'border-transparent text-[#526b92] hover:text-[#061633]'}`}
+                        >
+                            {item.label}
+                            {counts[item.key] > 0 && (
+                                <span
+                                    className={`rounded-full px-1.5 text-[10px] ${item.key === 'unread' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                                >
+                                    {counts[item.key]}
                                 </span>
                             )}
-                            <span className="mt-0.5 block text-[11px] text-[#7188a7]">
-                                {relativeTime(notification.created_at)}
-                            </span>
-                        </span>
-                    </DropdownMenuItem>
-                ))}
+                        </button>
+                    ))}
+                </div>
+                <div className="max-h-[22rem] overflow-y-auto">
+                    {visible.length === 0 && (
+                        <p className="p-4 text-center text-sm text-[#526b92]">
+                            {emptyText}
+                        </p>
+                    )}
+                    {visible.map((notification) => (
+                        <div
+                            key={notification.id}
+                            className="group flex items-start gap-1 rounded-lg hover:bg-[#f6f1ee]"
+                        >
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    router.post(
+                                        `/work/notifications/${notification.id}/read`,
+                                    )
+                                }
+                                className="flex min-w-0 flex-1 items-start gap-2 p-2 text-left"
+                            >
+                                <span
+                                    className={`mt-1.5 size-2 shrink-0 rounded-full ${notification.read ? 'bg-transparent' : 'bg-red-600'}`}
+                                />
+                                <span className="min-w-0">
+                                    <span
+                                        className={`block text-sm leading-tight ${notification.read ? 'text-[#395277]' : 'font-bold text-[#061633]'}`}
+                                    >
+                                        {notification.title}
+                                    </span>
+                                    {notification.body && (
+                                        <span className="mt-0.5 line-clamp-2 block text-xs text-[#526b92]">
+                                            {notification.body}
+                                        </span>
+                                    )}
+                                    <span className="mt-0.5 block text-[11px] text-[#7188a7]">
+                                        {relativeTime(notification.created_at)}
+                                    </span>
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                title={
+                                    notification.archived
+                                        ? 'Restaurar a la bandeja'
+                                        : 'Archivar'
+                                }
+                                aria-label={
+                                    notification.archived
+                                        ? 'Restaurar notificación'
+                                        : 'Archivar notificación'
+                                }
+                                onClick={() =>
+                                    router.post(
+                                        `/work/notifications/${notification.id}/${notification.archived ? 'restore' : 'archive'}`,
+                                        {},
+                                        { preserveScroll: true },
+                                    )
+                                }
+                                className="mt-1.5 mr-1 grid size-7 shrink-0 place-items-center rounded-md text-[#7188a7] hover:bg-white hover:text-[#640000]"
+                            >
+                                {notification.archived ? (
+                                    <ArchiveRestore className="size-4" />
+                                ) : (
+                                    <Archive className="size-4" />
+                                )}
+                            </button>
+                        </div>
+                    ))}
+                </div>
             </DropdownMenuContent>
         </DropdownMenu>
     );
@@ -574,7 +665,10 @@ export function MessagesMenu({ inbox }: { inbox: Inbox | undefined }) {
                     <MessageSquare className="size-[19px]" />
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 rounded-xl p-2">
+            <DropdownMenuContent
+                align="end"
+                className="w-80 rounded-xl border-[#e7e1dd] bg-white p-2 text-[#061633]"
+            >
                 <DropdownMenuLabel>Comentarios en tus tareas</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {comments.length === 0 && (

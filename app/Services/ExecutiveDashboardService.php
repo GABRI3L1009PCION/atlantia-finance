@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\Accounting\PeriodLedgerFacts;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -270,6 +271,7 @@ class ExecutiveDashboardService
         }
 
         return [
+            'id' => (int) $row->id,
             'name' => (string) $row->name,
             'starts_on' => (string) $row->starts_on,
             'ends_on' => (string) $row->ends_on,
@@ -308,6 +310,11 @@ class ExecutiveDashboardService
         }
 
         $pending = [];
+        // A period with no posted entries has nothing to review: it is not "ready", it is empty.
+        $empty = isset($period['id']) && app(PeriodLedgerFacts::class)->postedEntries((int) $period['id']) === 0;
+        if ($empty) {
+            $pending[] = 'Sin asientos contabilizados en el período';
+        }
         if ($pendingBank > 0) {
             $pending[] = $pendingBank.' movimiento(s) bancario(s) sin conciliar';
         }
@@ -318,7 +325,7 @@ class ExecutiveDashboardService
         return [
             'label' => (string) $period['name'],
             'status' => (string) $period['status'],
-            'progress' => max(0, min(100, 100 - (count($pending) * 18))),
+            'progress' => $empty ? 0 : max(0, min(100, 100 - (count($pending) * 18))),
             'pending' => $pending,
         ];
     }

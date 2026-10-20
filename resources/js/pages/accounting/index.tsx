@@ -1,14 +1,7 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import {
-    ArrowUpRight,
-    Building2,
-    Plus,
-    Search,
-    ShieldCheck,
-} from 'lucide-react';
+import { ArrowUpRight, Building2, Plus, Search } from 'lucide-react';
 import { useState } from 'react';
 import {
-    Card,
     Errors,
     field,
     Pager,
@@ -16,6 +9,12 @@ import {
     secondary,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { index, show, storeCompany } from '@/routes/accounting';
 
 type Company = {
@@ -32,6 +31,7 @@ type Props = {
     offices: { id: number; name: string }[];
     search: string;
     notice: string | null;
+    companyQuota?: { limit: number | null; used: number };
 };
 
 export default function AccountingIndex({
@@ -41,8 +41,12 @@ export default function AccountingIndex({
     offices,
     search,
     notice,
+    companyQuota,
 }: Props) {
     const [adding, setAdding] = useState(false);
+    const [limitReached, setLimitReached] = useState(false);
+    const atLimit =
+        companyQuota?.limit != null && companyQuota.used >= companyQuota.limit;
     const readOnly = Boolean(usePage().props.executiveReadOnly);
     const form = useForm({
         name: '',
@@ -55,23 +59,18 @@ export default function AccountingIndex({
         <>
             <Head title="Empresas y contabilidad" />
             <main className="min-h-full space-y-6 bg-[#faf8f7] p-4 text-[#142135] sm:p-8">
-                <header className="relative overflow-hidden rounded-3xl bg-[#640000] p-7 text-white sm:p-9">
-                    <div className="pointer-events-none absolute -top-20 -right-10 size-72 rounded-full border border-white/10" />
-                    <p className="text-xs font-semibold tracking-[.2em] text-rose-200">
-                        ATLANTIA FINANCE / CONTABILIDAD
+                <header>
+                    <p className="text-xs font-bold tracking-[.22em] text-[#8a3b32]">
+                        CONTABILIDAD
                     </p>
-                    <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
-                        Cada empresa, sus propios libros.
+                    <h1 className="mt-1 text-3xl font-black text-[#061633]">
+                        Empresas y contabilidad
                     </h1>
-                    <p className="mt-3 max-w-2xl text-rose-100">
+                    <p className="mt-2 max-w-3xl text-[#395277]">
                         Administra la contabilidad de tus clientes en{' '}
                         {organizationName}, con acceso por asignación y
-                        trazabilidad.
+                        trazabilidad. Datos separados por empresa · Moneda GTQ.
                     </p>
-                    <div className="mt-6 flex items-center gap-2 text-sm text-rose-200">
-                        <ShieldCheck size={18} /> Datos separados por empresa ·
-                        Moneda GTQ
-                    </div>
                 </header>
                 {notice && (
                     <p
@@ -100,122 +99,180 @@ export default function AccountingIndex({
                     {canManage && (
                         <button
                             className={primary}
-                            onClick={() => setAdding(!adding)}
+                            onClick={() =>
+                                atLimit
+                                    ? setLimitReached(true)
+                                    : setAdding(!adding)
+                            }
                         >
                             <Plus size={18} /> Nueva empresa
                         </button>
                     )}
                 </div>
-                {adding && canManage && (
-                    <Card title="Registrar empresa cliente">
-                        <p className="mb-4 text-sm text-slate-500">
-                            Cada empresa utiliza un expediente del plan. El NIT
-                            se registra como identificador; esta pantalla no
-                            valida su inscripción fiscal.
-                        </p>
-                        <form
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                form.post(storeCompany.url());
-                            }}
-                        >
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <label className="text-sm font-medium">
-                                    Razón social
-                                    <input
-                                        required
-                                        maxLength={150}
-                                        className={field}
-                                        value={form.data.name}
-                                        onChange={(e) =>
-                                            form.setData('name', e.target.value)
-                                        }
-                                    />
-                                </label>
-                                <label className="text-sm font-medium">
-                                    NIT / identificador fiscal
-                                    <input
-                                        required
-                                        maxLength={30}
-                                        className={field}
-                                        value={form.data.tax_id}
-                                        onChange={(e) =>
-                                            form.setData(
+                <Dialog open={limitReached} onOpenChange={setLimitReached}>
+                    <DialogContent className="bg-white text-[#142135] sm:max-w-md">
+                        <div className="mx-auto grid size-14 place-items-center rounded-full bg-red-50 text-[#640000]">
+                            <Building2 className="size-7" />
+                        </div>
+                        <DialogTitle className="text-center">
+                            Alcanzaste el límite de empresas
+                        </DialogTitle>
+                        <DialogDescription className="text-center">
+                            Tu plan permite hasta {companyQuota?.limit} empresas
+                            y ya tienes {companyQuota?.used} registradas. Para
+                            seguir creciendo, amplía tu plan desde la sección de
+                            suscripción.
+                        </DialogDescription>
+                        <div className="flex flex-wrap justify-center gap-2 pt-2">
+                            <Link
+                                href="/office/subscription"
+                                className={primary}
+                            >
+                                Ver planes
+                            </Link>
+                            <button
+                                type="button"
+                                className={secondary}
+                                onClick={() => setLimitReached(false)}
+                            >
+                                Entendido
+                            </button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+                {canManage && (
+                    <Dialog open={adding} onOpenChange={setAdding}>
+                        <DialogContent className="max-h-[90dvh] overflow-y-auto bg-white text-[#142135] sm:max-w-2xl">
+                            <div className="flex items-center gap-3">
+                                <span className="grid size-11 place-items-center rounded-xl bg-[#f5e7e7] text-[#640000]">
+                                    <Building2 size={22} />
+                                </span>
+                                <DialogTitle>
+                                    Registrar empresa cliente
+                                </DialogTitle>
+                            </div>
+                            <DialogDescription>
+                                Cada empresa utiliza un expediente del plan. El
+                                NIT se registra como identificador; esta
+                                pantalla no valida su inscripción fiscal.
+                            </DialogDescription>
+                            <form
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    form.post(storeCompany.url(), {
+                                        preserveScroll: true,
+                                        onSuccess: () => {
+                                            form.reset(
+                                                'name',
                                                 'tax_id',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </label>
-                                <label className="text-sm font-medium">
-                                    Correo de contacto (opcional)
-                                    <input
-                                        type="email"
-                                        className={field}
-                                        value={form.data.email}
-                                        onChange={(e) =>
-                                            form.setData(
                                                 'email',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </label>
-                                <label className="text-sm font-medium">
-                                    Oficina responsable
-                                    <select
-                                        required
-                                        className={field}
-                                        value={form.data.office_id}
-                                        onChange={(e) =>
-                                            form.setData(
-                                                'office_id',
-                                                e.target.value,
-                                            )
-                                        }
-                                    >
-                                        <option value="">
-                                            Selecciona una oficina
-                                        </option>
-                                        {offices.map((office) => (
-                                            <option
-                                                key={office.id}
-                                                value={office.id}
-                                            >
-                                                {office.name}
+                                            );
+                                            setAdding(false);
+                                        },
+                                    });
+                                }}
+                            >
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="text-sm font-medium">
+                                        Razón social
+                                        <input
+                                            required
+                                            maxLength={150}
+                                            className={field}
+                                            value={form.data.name}
+                                            onChange={(e) =>
+                                                form.setData(
+                                                    'name',
+                                                    e.target.value,
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="text-sm font-medium">
+                                        NIT / identificador fiscal
+                                        <input
+                                            required
+                                            maxLength={30}
+                                            className={field}
+                                            value={form.data.tax_id}
+                                            onChange={(e) =>
+                                                form.setData(
+                                                    'tax_id',
+                                                    e.target.value,
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="text-sm font-medium">
+                                        Correo de contacto (opcional)
+                                        <input
+                                            type="email"
+                                            className={field}
+                                            value={form.data.email}
+                                            onChange={(e) =>
+                                                form.setData(
+                                                    'email',
+                                                    e.target.value,
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                    <label className="text-sm font-medium">
+                                        Oficina responsable
+                                        <select
+                                            required
+                                            className={field}
+                                            value={form.data.office_id}
+                                            onChange={(e) =>
+                                                form.setData(
+                                                    'office_id',
+                                                    e.target.value,
+                                                )
+                                            }
+                                        >
+                                            <option value="">
+                                                Selecciona una oficina
                                             </option>
-                                        ))}
-                                    </select>
-                                </label>
-                            </div>
-                            <Errors errors={form.errors} />
-                            <div className="mt-5 flex gap-3">
-                                <button
-                                    disabled={
-                                        form.processing || !offices.length
-                                    }
-                                    className={primary}
-                                >
-                                    {form.processing
-                                        ? 'Guardando…'
-                                        : 'Crear y configurar'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setAdding(false)}
-                                    className={secondary}
-                                >
-                                    Cancelar
-                                </button>
-                            </div>
-                            {!offices.length && (
-                                <p className="mt-3 text-sm text-amber-800">
-                                    Completa primero la configuración de tu
-                                    oficina en Mi organización.
-                                </p>
-                            )}
-                        </form>
-                    </Card>
+                                            {offices.map((office) => (
+                                                <option
+                                                    key={office.id}
+                                                    value={office.id}
+                                                >
+                                                    {office.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                </div>
+                                <Errors errors={form.errors} />
+                                <div className="mt-5 flex gap-3">
+                                    <button
+                                        disabled={
+                                            form.processing || !offices.length
+                                        }
+                                        className={primary}
+                                    >
+                                        {form.processing
+                                            ? 'Guardando…'
+                                            : 'Crear y configurar'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAdding(false)}
+                                        className={secondary}
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                                {!offices.length && (
+                                    <p className="mt-3 text-sm text-amber-800">
+                                        Completa primero la configuración de tu
+                                        oficina en Mi organización.
+                                    </p>
+                                )}
+                            </form>
+                        </DialogContent>
+                    </Dialog>
                 )}
                 {companies.data.length ? (
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

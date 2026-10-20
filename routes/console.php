@@ -2,7 +2,10 @@
 
 use App\Jobs\LuzmaMaintenanceJob;
 use App\Models\Organization;
+use App\Services\Fel\SatPendingAlertService;
 use App\Services\Integrations\WebhookDeliveryService;
+use App\Services\Luzma\LuzmaSwitch;
+use App\Services\Notifications\AlertDispatchService;
 use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\Billing\SubscriptionService;
 use App\Services\Platform\GlobalConfigurationService;
@@ -10,7 +13,10 @@ use App\Services\Platform\PlatformHealthService;
 use App\Services\Platform\SupportAccessService;
 use App\Services\Platform\UsageMeterService;
 use App\Services\Tenancy\TenantDatabaseContext;
+use App\Services\WorkManagement\CrmAlertService;
 use App\Services\WorkManagement\OfficeStaffingAlertService;
+use App\Services\WorkManagement\ReminderService;
+use App\Services\WorkManagement\TaskSyncService;
 use Database\Seeders\NormativeLibrarySeeder;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -24,7 +30,7 @@ Artisan::command('inspire', function () {
 Schedule::command('fel:recover')->everyFiveMinutes()->withoutOverlapping();
 
 Artisan::command('luzma:run', function () {
-    if (! config('luzma.enabled')) {
+    if (! app(LuzmaSwitch::class)->enabled()) {
         return;
     }
     $ids = app(TenantDatabaseContext::class)->runAsSystem(fn () => Organization::where('status', 'active')->pluck('id'));
@@ -35,6 +41,9 @@ Artisan::command('luzma:run', function () {
 })->purpose('Recordatorios automáticos, entrega de recordatorios e insights de Luzma');
 
 Schedule::command('luzma:run')->everyFiveMinutes()->withoutOverlapping();
+
+// Luzma must not switch itself off: bring the gateway back and keep the model in memory.
+Schedule::command('luzma:watchdog')->everyMinute()->withoutOverlapping(5)->runInBackground();
 
 Artisan::command('webhooks:deliver', function (WebhookDeliveryService $deliveries) {
     $sent = $deliveries->deliverDue();
@@ -103,3 +112,70 @@ Artisan::command('office:staffing-alerts', function (OfficeStaffingAlertService 
 })->purpose('Avisa a los administradores de oficina de empresas sin contador o auxiliar');
 
 Schedule::command('office:staffing-alerts')->dailyAt('08:00')->withoutOverlapping()->onOneServer();
+
+Artisan::command('crm:alerts', function (CrmAlertService $alerts) {
+    $notified = app(TenantDatabaseContext::class)->runAsSystem(function () use ($alerts): int {
+        $total = 0;
+
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            $total += $alerts->sweep($organization);
+        }
+
+        return $total;
+    });
+    $this->info('Alertas comerciales enviadas: '.$notified);
+})->purpose('Envía como notificaciones las alertas comerciales: renovaciones, clientes en riesgo, sin contrato y onboarding');
+
+Schedule::command('crm:alerts')->dailyAt('08:15')->withoutOverlapping()->onOneServer();
+
+Artisan::command('fel:sat-alerts', function (SatPendingAlertService $alerts) {
+    $notified = app(TenantDatabaseContext::class)->runAsSystem(function () use ($alerts): int {
+        $total = 0;
+
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            $total += $alerts->sweep($organization);
+        }
+
+        return $total;
+    });
+    $this->info('Avisos de facturas sin emitir en la SAT: '.$notified);
+})->purpose('Avisa al contador de las facturas preparadas que siguen sin emitirse en el portal de la SAT');
+
+Schedule::command('fel:sat-alerts')->dailyAt('08:30')->withoutOverlapping()->onOneServer();
+
+Artisan::command('tasks:remind', function (ReminderService $reminders) {
+    $sent = app(TenantDatabaseContext::class)->runAsSystem(function () use ($reminders): int {
+        $total = 0;
+
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            $total += $reminders->sweep($organization);
+        }
+
+        return $total;
+    });
+    $this->info('Recordatorios de tareas enviados: '.$sent);
+})->purpose('Recuerda las tareas según su estado: por vencer, vencidas, en espera del cliente y revisiones pendientes');
+
+Schedule::command('tasks:remind')->dailyAt('07:45')->withoutOverlapping()->onOneServer();
+
+Artisan::command('tasks:sync', function (TaskSyncService $sync) {
+    $changed = app(TenantDatabaseContext::class)->runAsSystem(function () use ($sync): int {
+        $total = 0;
+
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            $total += $sync->sweep($organization);
+        }
+
+        return $total;
+    });
+    $this->info('Tareas alineadas con su origen: '.$changed);
+})->purpose('Alinea cada tarea con el objeto de negocio que coordina (cobranza, pagos, nómina, conciliación, cierre, solicitudes)');
+
+Schedule::command('tasks:sync')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
+
+Artisan::command('alerts:dispatch', function (AlertDispatchService $alerts) {
+    $result = $alerts->run();
+    $this->info('Alertas enviadas: '.$result['notifications'].' notificaciones, '.$result['emails'].' correos');
+})->purpose('Envía las alertas de vencimientos fiscales, cobros y pagos según las preferencias de cada persona');
+
+Schedule::command('alerts:dispatch')->hourly()->withoutOverlapping()->onOneServer();

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\WorkManagement;
 
+use App\Models\Organization;
 use App\Models\User;
 use App\Services\Integrations\IntegrationConnectionService;
+use App\Services\WorkspaceContext;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -64,17 +66,20 @@ class WorkNotificationService
             ->where('work_notifications.organization_id', $organizationId)
             ->where('user_id', $user->id);
 
-        $notifications = (clone $base)
-            ->orderByDesc('id')
-            ->limit(8)
-            ->get(['id', 'type', 'title', 'body', 'related_type', 'related_id', 'read_at', 'created_at'])
+        $essential = $this->isEssential($organizationId);
+        $columns = ['id', 'type', 'title', 'body', 'related_type', 'related_id', 'read_at', 'archived_at', 'created_at'];
+        // Unread first (so none is lost behind newer read ones), then the latest read and the latest archived.
+        $notifications = (clone $base)->whereNull('archived_at')->whereNull('read_at')->orderByDesc('id')->limit(30)->get($columns)
+            ->concat((clone $base)->whereNull('archived_at')->whereNotNull('read_at')->orderByDesc('id')->limit(20)->get($columns))
+            ->concat((clone $base)->whereNotNull('archived_at')->orderByDesc('id')->limit(20)->get($columns))
             ->map(fn (object $row): array => [
                 'id' => (int) $row->id,
                 'type' => (string) $row->type,
                 'title' => (string) $row->title,
                 'body' => $row->body === null ? null : (string) $row->body,
-                'href' => $this->href($row->related_type, $row->related_id === null ? null : (int) $row->related_id),
+                'href' => $this->href($row->related_type, $row->related_id === null ? null : (int) $row->related_id, $essential),
                 'read' => $row->read_at !== null,
+                'archived' => $row->archived_at !== null,
                 'created_at' => (string) $row->created_at,
             ])
             ->values()
@@ -109,7 +114,7 @@ class WorkNotificationService
             ->all();
 
         return [
-            'unread' => (clone $base)->whereNull('read_at')->count(),
+            'unread' => (clone $base)->whereNull('read_at')->whereNull('archived_at')->count(),
             'notifications' => array_values($notifications),
             'comments' => array_values($comments),
         ];
@@ -128,7 +133,20 @@ class WorkNotificationService
             DB::table('work_notifications')->where('id', $notification->id)->update(['read_at' => now(), 'updated_at' => now()]);
         }
 
-        return $this->href($notification->related_type, $notification->related_id === null ? null : (int) $notification->related_id);
+        return $this->href($notification->related_type, $notification->related_id === null ? null : (int) $notification->related_id, $this->isEssential($organizationId));
+    }
+
+    /** Archives (or restores) one of the user's own notifications; archiving also marks it as read. */
+    public function archive(int $organizationId, User $user, int $notificationId, bool $archived): void
+    {
+        $updated = DB::table('work_notifications')
+            ->where('work_notifications.organization_id', $organizationId)
+            ->where('user_id', $user->id)
+            ->where('id', $notificationId)
+            ->update($archived
+                ? ['archived_at' => now(), 'read_at' => DB::raw('COALESCE(read_at, now())'), 'updated_at' => now()]
+                : ['archived_at' => null, 'updated_at' => now()]);
+        abort_if($updated === 0, 404);
     }
 
     public function markAllRead(int $organizationId, User $user): int
@@ -137,28 +155,45 @@ class WorkNotificationService
             ->where('work_notifications.organization_id', $organizationId)
             ->where('user_id', $user->id)
             ->whereNull('read_at')
+            ->whereNull('archived_at')
             ->update(['read_at' => now(), 'updated_at' => now()]);
     }
 
-    private function href(?string $relatedType, ?int $relatedId): string
+    /** The Esencial plan has no per-role panels: its notices open the screens of its own workspace. */
+    private function isEssential(int $organizationId): bool
+    {
+        $organization = Organization::query()->find($organizationId);
+
+        return $organization !== null && app(WorkspaceContext::class)->price($organization)?->plan->code === 'essential';
+    }
+
+    private function href(?string $relatedType, ?int $relatedId, bool $essential = false): string
     {
         if ($relatedId === null) {
-            return '/work/dashboard';
+            return $essential ? '/essential/dashboard' : '/work/dashboard';
         }
 
         return match ($relatedType) {
-            'work_tasks' => '/work/tasks/'.$relatedId,
+            'work_tasks' => ($essential ? '/essential/tasks/' : '/work/tasks/').$relatedId,
             'company_period_reviews' => '/work/reviews/'.$relatedId,
             'users' => '/office/users?user='.$relatedId,
             'office_staffing' => '/office/assignments',
+            'crm' => '/office/crm',
+            'fel_documents' => (function () use ($relatedId): string {
+                $row = DB::table('fel_documents')->join('companies', 'companies.id', '=', 'fel_documents.company_id')
+                    ->where('fel_documents.id', $relatedId)->first(['companies.public_id as company', 'fel_documents.public_id as document']);
+
+                return $row === null ? '/work/dashboard' : '/accounting/companies/'.$row->company.'/fel/'.$row->document;
+            })(),
             'operational_incidents' => '/operations/incidents?incident='.$relatedId,
             'communications' => '/communication?message='.$relatedId,
             'review_observations' => '/work/observations/'.$relatedId,
-            'fiscal_obligations' => '/tax/obligations/'.$relatedId,
+            'fiscal_obligations' => ($essential ? '/essential/obligations/' : '/tax/obligations/').$relatedId,
             'luzma_reminders' => (string) (DB::table('luzma_reminders')->where('id', $relatedId)->value('destination') ?: '/luzma?tab=reminders'),
             'luzma_insights' => '/luzma?tab=insights',
             'audit_engagements' => '/work/audit/engagements/'.$relatedId,
             'webhook_endpoints' => '/office/integrations?tab=webhooks',
+            'password_reset_requests' => '/office/password-requests',
             'client_requests' => '/client-open/request/'.$relatedId,
             'client_approval_requests' => '/client-open/approval/'.$relatedId,
             'client_documents' => '/client-open/document/'.$relatedId,

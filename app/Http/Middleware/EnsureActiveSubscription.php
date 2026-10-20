@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Services\Platform\PlatformAuthorization;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Support\PlatformStatus;
 use Closure;
@@ -13,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureActiveSubscription
 {
-    public function __construct(private TenantDatabaseContext $context) {}
+    public function __construct(private TenantDatabaseContext $context, private PlatformAuthorization $staff) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -29,6 +30,11 @@ class EnsureActiveSubscription
                 ->exists() ?? false));
 
         if (! $hasActiveSubscription) {
+            // SaaS staff have no firm of their own: their workspace is the Control Center, not a plan checkout.
+            if ($currentOrganizationId === null && $this->staff->staff($request->user()) !== null) {
+                return redirect('/control-center');
+            }
+
             return redirect()->route('billing.checkout.show');
         }
 

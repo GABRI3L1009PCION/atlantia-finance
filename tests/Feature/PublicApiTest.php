@@ -109,6 +109,46 @@ test('integrations create customers, idempotent draft sales and purchases, and r
     $this->withToken($token)->getJson($base.'/reports/balance-sheet')->assertStatus(422);
 });
 
+test('nothing with history is deleted: customers and suppliers are removed only when unused and documents are annulled with a reason', function () {
+    $f = apiFixture();
+    $this->withoutMiddleware(ThrottleRequests::class);
+    $token = apiToken($f, $f['owner'], ['customers:read', 'customers:write', 'suppliers:write', 'sales:read', 'sales:write', 'sales:void', 'purchases:write', 'purchases:void']);
+    $limited = apiToken($f, $f['owner'], ['customers:write', 'sales:write']);
+    auth()->logout();
+    $base = '/api/v1/companies/'.$f['mayaPublic'];
+
+    $spare = $this->withToken($token)->postJson($base.'/customers', ['name' => 'Cliente sin movimientos'])->assertCreated()->json('data.id');
+    $this->withToken($token)->deleteJson($base.'/customers/'.$spare)->assertNoContent();
+    $this->assertDatabaseMissing('sales_customers', ['id' => $spare]);
+    $this->assertDatabaseHas('audit_logs', ['action' => 'sales.customer.deleted', 'auditable_id' => $spare]);
+    $this->withToken($token)->deleteJson($base.'/customers/'.$spare)->assertNotFound();
+
+    $customer = $this->withToken($token)->postJson($base.'/customers', ['name' => 'Tienda Central', 'payment_terms_days' => 30])->assertCreated()->json('data.id');
+    $sale = $this->withToken($token)->postJson($base.'/sales-invoices', ['request_id' => (string) Str::uuid(), 'customer_id' => $customer, 'issued_on' => '2026-09-30',
+        'lines' => [['description' => 'Servicio', 'quantity' => 1, 'unit_price' => '100.00', 'tax_treatment' => 'services']]])->assertCreated()->json('data.id');
+    $this->withToken($token)->deleteJson($base.'/customers/'.$customer)->assertStatus(409)->assertJsonPath('error.code', 'has_history');
+    $this->assertDatabaseHas('sales_customers', ['id' => $customer]);
+
+    $this->withToken($limited)->postJson($base.'/sales-invoices/'.$sale.'/void', ['reason' => 'Error de captura'])->assertForbidden()->assertJsonPath('error.code', 'missing_ability');
+    $this->withToken($token)->postJson($base.'/sales-invoices/'.$sale.'/void', [])->assertStatus(422)->assertJsonValidationErrors('reason');
+    $this->withToken($token)->postJson($base.'/sales-invoices/'.$sale.'/void', ['reason' => 'Error de captura'])->assertOk()->assertJsonPath('data.status', 'void');
+    $this->assertDatabaseHas('sales_invoices', ['public_id' => $sale, 'status' => 'void', 'void_reason' => 'Error de captura']);
+    expect(DB::table('sales_invoices')->where('public_id', $sale)->exists())->toBeTrue();
+    $this->assertDatabaseHas('audit_logs', ['action' => 'sales.invoice.void']);
+    $this->withToken($token)->postJson($base.'/sales-invoices/'.$sale.'/void', ['reason' => 'Otra vez'])->assertStatus(422);
+    $this->withToken($token)->postJson($base.'/sales-invoices/'.Str::uuid().'/void', ['reason' => 'No existe'])->assertNotFound();
+
+    $supplier = $this->withToken($token)->postJson($base.'/suppliers', ['name' => 'Distribuidora Norte', 'payment_terms_days' => 15])->assertCreated()->json('data.id');
+    $expense = DB::table('ledger_accounts')->where('company_id', $f['mayaId'])->where('type', 'expense')->value('id');
+    $purchase = $this->withToken($token)->postJson($base.'/purchase-documents', ['request_id' => (string) Str::uuid(), 'supplier_id' => $supplier, 'document_type' => 'expense', 'document_date' => '2026-09-29',
+        'lines' => [['account_id' => $expense, 'description' => 'Papelería', 'quantity' => 1, 'unit_price' => '112.00']]])->assertCreated()->json('data.id');
+    $this->withToken($token)->deleteJson($base.'/suppliers/'.$supplier)->assertStatus(409)->assertJsonPath('error.code', 'has_history');
+    // A draft purchase is not annulled: only approved documents are, and they go through the same reversal as the web.
+    $this->withToken($token)->postJson($base.'/purchase-documents/'.$purchase.'/void', ['reason' => 'Duplicado'])->assertStatus(422);
+    $freeSupplier = $this->withToken($token)->postJson($base.'/suppliers', ['name' => 'Proveedor sin movimientos'])->assertCreated()->json('data.id');
+    $this->withToken($token)->deleteJson($base.'/suppliers/'.$freeSupplier)->assertNoContent();
+});
+
 test('each key is rate limited', function () {
     config(['integrations.api.rate_limit_per_minute' => 2]);
     $f = apiFixture();

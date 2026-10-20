@@ -39,6 +39,12 @@ type ExchangeRate = {
     reference: string | null;
 };
 
+type Overview = {
+    obligation: { name: string; due_on: string; period: string } | null;
+    fel: { configured: boolean; mode: string | null };
+    integrity: { percent: number; missing: string[] };
+};
+
 const labels: Record<string, string> = {
     general: 'Régimen general',
     small_taxpayer: 'Pequeño contribuyente',
@@ -61,6 +67,7 @@ export default function FiscalSettings({
     today,
     exchangeRates,
     canManage,
+    overview,
 }: {
     company: Company;
     profile: FiscalProfile;
@@ -69,6 +76,7 @@ export default function FiscalSettings({
     today: string;
     exchangeRates: ExchangeRate[];
     canManage: boolean;
+    overview: Overview;
 }) {
     const endpoint = `/accounting/companies/${company.public_id}/fiscal-settings`;
     const profileForm = useForm({ ...profile });
@@ -202,13 +210,23 @@ export default function FiscalSettings({
                             </span>
                         </div>
                         <p className="mt-3 text-xs text-slate-500">
-                            Declaración mensual de IVA
+                            Próxima obligación fiscal
                         </p>
                         <strong className="mt-1 block text-lg">
-                            14 de octubre de 2026
+                            {overview.obligation
+                                ? new Date(
+                                      `${overview.obligation.due_on}T12:00:00`,
+                                  ).toLocaleDateString('es-GT', {
+                                      day: 'numeric',
+                                      month: 'long',
+                                      year: 'numeric',
+                                  })
+                                : 'Sin obligaciones pendientes'}
                         </strong>
                         <p className="mt-1 text-[10px] text-slate-500">
-                            Formulario SAT-2237 · septiembre
+                            {overview.obligation
+                                ? `${overview.obligation.name} · ${overview.obligation.period}`
+                                : 'Se generan desde el perfil tributario de la empresa.'}
                         </p>
                     </article>
                     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -216,18 +234,29 @@ export default function FiscalSettings({
                             <span className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
                                 <FileCheck2 className="size-5" />
                             </span>
-                            <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-semibold text-emerald-700">
-                                Activo
+                            <span
+                                className={`rounded-full px-2 py-1 text-[10px] font-semibold ${overview.fel.configured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}
+                            >
+                                {overview.fel.configured
+                                    ? 'Activo'
+                                    : 'Pendiente'}
                             </span>
                         </div>
                         <p className="mt-3 text-xs text-slate-500">
                             Facturación electrónica
                         </p>
                         <strong className="mt-1 block text-lg">
-                            FEL configurada
+                            {overview.fel.configured
+                                ? 'FEL configurada'
+                                : 'FEL sin configurar'}
                         </strong>
                         <p className="mt-1 text-[10px] text-slate-500">
-                            Ambiente simulado · NIT {company.tax_id}
+                            {overview.fel.mode === 'sat_manual'
+                                ? 'Emisión en el portal SAT'
+                                : overview.fel.configured
+                                  ? 'Con certificador'
+                                  : 'Elige cómo se emiten las facturas'}{' '}
+                            · NIT {company.tax_id}
                         </p>
                     </article>
                     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -235,18 +264,27 @@ export default function FiscalSettings({
                             <span className="grid size-10 place-items-center rounded-xl bg-violet-50 text-violet-600">
                                 <BadgeCheck className="size-5" />
                             </span>
-                            <span className="text-lg font-bold text-emerald-600">
-                                100%
+                            <span
+                                className={`text-lg font-bold ${overview.integrity.percent === 100 ? 'text-emerald-600' : 'text-amber-600'}`}
+                            >
+                                {overview.integrity.percent}%
                             </span>
                         </div>
                         <p className="mt-3 text-xs text-slate-500">
                             Integridad de parámetros
                         </p>
                         <strong className="mt-1 block text-lg">
-                            Configuración completa
+                            {overview.integrity.missing.length === 0
+                                ? 'Configuración completa'
+                                : `Falta: ${overview.integrity.missing.join(', ')}`}
                         </strong>
                         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                            <span className="block h-full w-full bg-emerald-500" />
+                            <span
+                                className="block h-full bg-emerald-500"
+                                style={{
+                                    width: `${overview.integrity.percent}%`,
+                                }}
+                            />
                         </div>
                     </article>
                 </section>

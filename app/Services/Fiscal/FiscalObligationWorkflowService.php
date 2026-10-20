@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Fiscal;
 
+use App\Events\Work\FiscalObligationPresented;
+use App\Events\Work\ReviewApproved;
+use App\Events\Work\ReviewChangesRequested;
+use App\Events\Work\ReviewRequested;
+use App\Events\Work\TaskCompleted;
+use App\Events\Work\TaskStarted;
+use App\Events\Work\WorkEvent;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
@@ -43,6 +50,7 @@ class FiscalObligationWorkflowService
     public function start(Organization $organization, User $actor, int $obligationId): void
     {
         $this->move($organization, $actor, $obligationId, ['pending', 'changes_requested'], 'in_progress', ['started_at' => now()], 'fiscal.obligation.started', 'in_progress');
+        $this->announce(TaskStarted::class, $organization, $actor, $obligationId);
     }
 
     /** Sends the prepared obligation to its reviewer; blocked checks stop it and the source fingerprint is stored. */
@@ -63,17 +71,19 @@ class FiscalObligationWorkflowService
             $this->syncTask($organization->id, $obligationId, 'ready_for_review');
             $this->accounting->audit($organization, $actor, 'fiscal.obligation.submitted', 'fiscal_obligations', $obligationId, ['checks' => collect($check['checks'])->pluck('status', 'key')->all()], (int) $obligation->office_id);
             $this->notifications->notify($organization->id, $obligation->reviewer_id === null ? null : (int) $obligation->reviewer_id, $actor->id, 'fiscal.obligation.submitted', 'Obligación fiscal por revisar: '.$obligation->name.' · '.$obligation->reference_period, null, 'fiscal_obligations', $obligationId);
+            $this->announce(ReviewRequested::class, $organization, $actor, $obligationId);
         });
     }
 
-    public function approve(Organization $organization, User $actor, int $obligationId, ?string $comment = null): void
+    /** A solo practitioner has nobody else to review their work: they may approve it, and the audit trail says so. */
+    public function approve(Organization $organization, User $actor, int $obligationId, ?string $comment = null, bool $soloOffice = false, ?string $reviewPolicy = null): void
     {
-        DB::transaction(function () use ($organization, $actor, $obligationId, $comment): void {
+        DB::transaction(function () use ($organization, $actor, $obligationId, $comment, $soloOffice, $reviewPolicy): void {
             $obligation = $this->lock($organization->id, $obligationId);
             if ($obligation->status !== 'ready_for_review') {
                 throw ValidationException::withMessages(['status' => 'Solo se aprueba una obligación enviada a revisión.']);
             }
-            if ($obligation->assigned_to !== null && (int) $obligation->assigned_to === $actor->id) {
+            if (! $soloOffice && $obligation->assigned_to !== null && (int) $obligation->assigned_to === $actor->id) {
                 throw ValidationException::withMessages(['status' => 'Quien preparó la obligación no puede aprobarla.']);
             }
             if ($this->readiness->isStale($obligation)) {
@@ -82,15 +92,16 @@ class FiscalObligationWorkflowService
 
             DB::table('fiscal_obligations')->where('id', $obligationId)->update(['status' => 'approved', 'approved_by' => $actor->id, 'approved_at' => now(), 'updated_at' => now()]);
             $this->syncTask($organization->id, $obligationId, 'approved');
-            $this->accounting->audit($organization, $actor, 'fiscal.obligation.approved', 'fiscal_obligations', $obligationId, ['comment' => $comment], (int) $obligation->office_id);
+            $this->accounting->audit($organization, $actor, 'fiscal.obligation.approved', 'fiscal_obligations', $obligationId, ['comment' => $comment, 'self_reviewed' => $soloOffice && (int) $obligation->assigned_to === $actor->id, 'prepared_by' => $obligation->assigned_to, 'approved_by' => $actor->id, 'review_policy' => $reviewPolicy], (int) $obligation->office_id);
             $this->notifications->notify($organization->id, $obligation->assigned_to === null ? null : (int) $obligation->assigned_to, $actor->id, 'fiscal.obligation.approved', 'Obligación aprobada: '.$obligation->name.' · '.$obligation->reference_period, $comment, 'fiscal_obligations', $obligationId);
+            $this->announce(ReviewApproved::class, $organization, $actor, $obligationId, ['self_reviewed' => $soloOffice]);
         });
     }
 
     /** Returns the obligation to the preparer with a mandatory observation, tracked as a review observation. */
-    public function requestChanges(Organization $organization, User $actor, int $obligationId, string $message): void
+    public function requestChanges(Organization $organization, User $actor, int $obligationId, string $message, ?string $relatedType = null, ?int $relatedId = null, ?string $relatedLabel = null): void
     {
-        DB::transaction(function () use ($organization, $actor, $obligationId, $message): void {
+        DB::transaction(function () use ($organization, $actor, $obligationId, $message, $relatedType, $relatedId, $relatedLabel): void {
             $obligation = $this->lock($organization->id, $obligationId);
             if (! in_array($obligation->status, ['ready_for_review', 'approved'], true)) {
                 throw ValidationException::withMessages(['status' => 'Solo se devuelven obligaciones en revisión o aprobadas sin presentar.']);
@@ -101,14 +112,29 @@ class FiscalObligationWorkflowService
             $this->observations->create($organization, $actor, [
                 'company_id' => (int) $obligation->company_id,
                 'accounting_period_id' => $obligation->accounting_period_id === null ? null : (int) $obligation->accounting_period_id,
-                'related_type' => 'fiscal_obligations',
-                'related_id' => $obligationId,
-                'related_label' => $obligation->name.' · '.$obligation->reference_period,
+                'related_type' => $relatedType ?? 'fiscal_obligations',
+                'related_id' => $relatedType === null ? $obligationId : $relatedId,
+                'related_label' => $relatedLabel ?? $obligation->name.' · '.$obligation->reference_period,
+                'origin_type' => 'fiscal_obligations',
+                'origin_id' => $obligationId,
                 'severity' => 'high',
                 'message' => $message,
                 'assigned_to' => $obligation->assigned_to === null ? null : (int) $obligation->assigned_to,
             ]);
-            $this->accounting->audit($organization, $actor, 'fiscal.obligation.changes_requested', 'fiscal_obligations', $obligationId, ['message' => $message], (int) $obligation->office_id);
+            $this->accounting->audit($organization, $actor, 'fiscal.obligation.changes_requested', 'fiscal_obligations', $obligationId, ['message' => $message, 'related_type' => $relatedType, 'related_id' => $relatedId], (int) $obligation->office_id);
+            $this->announce(ReviewChangesRequested::class, $organization, $actor, $obligationId, ['message' => $message]);
+        });
+    }
+
+    /**
+     * The person who runs the practice and prepared the obligation finishes it without a review sent to themselves
+     * (the review policy allows it). Submission and approval still happen, in one transaction, so the history shows both.
+     */
+    public function finalizeOwn(Organization $organization, User $actor, int $obligationId, string $reviewPolicy): void
+    {
+        DB::transaction(function () use ($organization, $actor, $obligationId, $reviewPolicy): void {
+            $this->submit($organization, $actor, $obligationId);
+            $this->approve($organization, $actor, $obligationId, 'Preparación finalizada por quien la preparó.', true, $reviewPolicy);
         });
     }
 
@@ -141,6 +167,10 @@ class FiscalObligationWorkflowService
             if ($this->readiness->isStale($obligation)) {
                 throw ValidationException::withMessages(['status' => 'Los datos de origen cambiaron después de la aprobación; recalcula antes de presentar.']);
             }
+            // The same filing reference cannot close two obligations of a company (a duplicated or mistyped presentation).
+            if (DB::table('fiscal_obligations')->where('fiscal_obligations.organization_id', $organization->id)->where('company_id', $obligation->company_id)->where('id', '!=', $obligationId)->where('filing_reference', $reference)->exists()) {
+                throw ValidationException::withMessages(['filing_reference' => 'Esa referencia ya registra la presentación de otra obligación de esta empresa.']);
+            }
 
             $path = $evidence->storeAs('fiscal-evidence/'.$obligation->organization_id.'/'.$obligation->company_id, Str::uuid().'.'.$evidence->getClientOriginalExtension(), 'local');
             DB::table('fiscal_obligations')->where('id', $obligationId)->update([
@@ -154,6 +184,8 @@ class FiscalObligationWorkflowService
             $this->accounting->audit($organization, $actor, 'fiscal.obligation.completed', 'fiscal_obligations', $obligationId, ['filing_mode' => 'external', 'reference' => $reference, 'filed_on' => $filedOn], (int) $obligation->office_id);
             $this->accounting->audit($organization, $actor, 'fiscal.evidence.attached', 'fiscal_obligations', $obligationId, ['file' => $evidence->getClientOriginalName()], (int) $obligation->office_id);
             $this->notifications->notify($organization->id, $obligation->assigned_to === null ? null : (int) $obligation->assigned_to, $actor->id, 'fiscal.obligation.completed', 'Obligación presentada: '.$obligation->name.' · '.$obligation->reference_period, 'Referencia '.$reference, 'fiscal_obligations', $obligationId);
+            $this->announce(FiscalObligationPresented::class, $organization, $actor, $obligationId, ['reference' => $reference, 'filed_on' => $filedOn]);
+            $this->announce(TaskCompleted::class, $organization, $actor, $obligationId, ['source' => 'presentation']);
         });
     }
 
@@ -183,6 +215,16 @@ class FiscalObligationWorkflowService
         return $obligation;
     }
 
+    /**
+     * @param  class-string<WorkEvent>  $event
+     * @param  array<string, mixed>  $payload
+     */
+    private function announce(string $event, Organization $organization, User $actor, int $obligationId, array $payload = []): void
+    {
+        $taskId = DB::table('work_tasks')->where('work_tasks.organization_id', $organization->id)->where('automation_key', 'fiscal_obligation:'.$obligationId)->value('id');
+        event(new $event($organization->id, $actor->id, $taskId === null ? null : (int) $taskId, 'fiscal_obligations', $obligationId, $payload));
+    }
+
     /** The preparation task mirrors the obligation so nobody has to close the same work twice. */
     private function syncTask(int $organizationId, int $obligationId, string $status): void
     {
@@ -190,6 +232,9 @@ class FiscalObligationWorkflowService
             'status' => $status,
             'started_at' => $status === 'in_progress' ? DB::raw('COALESCE(started_at, NOW())') : DB::raw('started_at'),
             'submitted_at' => $status === 'ready_for_review' ? now() : DB::raw('submitted_at'),
+            'ready_at' => $status === 'ready_for_review' ? now() : DB::raw('ready_at'),
+            'review_started_at' => $status === 'ready_for_review' ? now() : DB::raw('review_started_at'),
+            'approved_at' => $status === 'approved' ? now() : DB::raw('approved_at'),
             'completed_at' => $status === 'completed' ? now() : DB::raw('completed_at'),
             'updated_at' => now(),
         ]);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\SalesInvoiceDraftService;
 use Illuminate\Http\JsonResponse;
@@ -57,5 +58,16 @@ class SalesInvoiceController extends ApiController
         $row = DB::table('sales_invoices')->where('id', $result['id'])->first() ?? $this->fail(404, 'not_found', 'La venta no existe.');
 
         return $this->item($this->resources->salesInvoice($row, true), $result['created'] ? 201 : 200);
+    }
+
+    /** Annuls the sale: it is never deleted. The reason is required and the accounting entry is reversed. */
+    public function void(Request $request, string $company, string $invoice, DocumentAnnulmentService $annulments): JsonResponse
+    {
+        $record = $this->company($request, $company, 'sales:void');
+        $data = $request->validate(['reason' => 'required|string|min:3|max:500']);
+        DB::table('sales_invoices')->where('company_id', $record->id)->where('public_id', $invoice)->first() ?? $this->fail(404, 'not_found', 'La venta no existe en esta empresa.');
+        $annulments->annulSale($this->organization($request), $this->user($request), $record, $invoice, $data['reason'], $this->via($request));
+
+        return $this->item($this->resources->salesInvoice(DB::table('sales_invoices')->where('company_id', $record->id)->where('public_id', $invoice)->first() ?? $this->fail(404, 'not_found', 'La venta no existe.'), true));
     }
 }

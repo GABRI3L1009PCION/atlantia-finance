@@ -37,6 +37,7 @@ import {
     Globe2,
     History,
     Home,
+    KeyRound,
     Landmark,
     LibraryBig,
     ListTree,
@@ -101,6 +102,7 @@ import {
     PAYROLL_HOME,
     AUDITOR_HOME,
     CLIENT_HOME,
+    ESSENTIAL_HOME,
     firmWorkspace,
     withOfficeScope,
 } from '@/lib/executive-workspace';
@@ -193,6 +195,14 @@ function future(
     return { title, href: moduleLink(path, module), icon, isActive: false };
 }
 
+/** Inventory is outside the project scope and fixed assets now has its own screen, so neither shows as a prepared module. */
+const outOfScopeModules: PlanModule[] = [
+    'inventario',
+    'kardex',
+    'inventario-fisico',
+    'activos-fijos',
+];
+
 function availableFutureModules(
     features: readonly string[],
     path: string,
@@ -203,6 +213,7 @@ function availableFutureModules(
     }[],
 ): NavItem[] {
     return modules
+        .filter((item) => !outOfScopeModules.includes(item.module))
         .filter((item) => hasPlanModule(features, item.module))
         .map((item) => future(path, item.title, item.module, item.icon));
 }
@@ -447,6 +458,31 @@ export function AppSidebar() {
               ]),
           ]
         : [];
+    const advancedItems: NavItem[] =
+        companyId && hasAccounting
+            ? [
+                  ['Inventario y kardex', 'inventory', Boxes],
+                  ['Activos fijos', 'fixed-assets', Building2],
+                  ['Centros de costo', 'cost-centers', Tags],
+                  ['Políticas contables', 'policies', ScrollText],
+                  ['Conciliación de cuentas', 'reconciliations', Scale],
+                  [
+                      'Estados financieros',
+                      'financial-statements',
+                      FileChartColumn,
+                  ],
+                  ['ISR y retenciones', 'tax-reports', Calculator],
+                  ['Cheques', 'checks', FileCheck2],
+                  ['Configuración regional', 'regional', Globe2],
+              ].map(([title, path, icon]) => ({
+                  title: title as string,
+                  href: `/accounting/companies/${companyId}/${path as string}`,
+                  icon: icon as LucideIcon,
+                  isActive:
+                      currentPath ===
+                      `/accounting/companies/${companyId}/${path as string}`,
+              }))
+            : [];
     const systemItems: NavItem[] = companyId
         ? [
               ...(hasAccounting
@@ -575,6 +611,17 @@ export function AppSidebar() {
     ];
     const executiveTeamItems: NavItem[] = [
         { title: 'Personal', href: '/office/users-roles', icon: Users },
+        { title: 'Roles y permisos', href: '/office/roles', icon: ShieldCheck },
+        {
+            title: 'Accesos de clientes',
+            href: '/office/client-access',
+            icon: LockKeyhole,
+        },
+        {
+            title: 'Solicitudes de contraseña',
+            href: '/office/password-requests',
+            icon: KeyRound,
+        },
         {
             title: 'Carga de trabajo',
             href: '/office/workload',
@@ -594,6 +641,11 @@ export function AppSidebar() {
             title: 'Proyecciones',
             href: '/office/projections',
             icon: ChartNoAxesCombined,
+        },
+        {
+            title: 'Rentabilidad por cliente',
+            href: '/office/profitability',
+            icon: Gauge,
         },
         {
             title: 'Ingresos de la firma',
@@ -619,6 +671,16 @@ export function AppSidebar() {
     ];
     // Once an Administrador de Oficina exists the director only supervises; until then they set the firm up.
     const executiveAccountItems: NavItem[] = [
+        ...(hasPlanFeature(planFeatures, 'initial_training')
+            ? [
+                  {
+                      title: 'Puesta en marcha',
+                      href: '/office/setup',
+                      icon: ClipboardCheck,
+                      isActive: currentPath === '/office/setup',
+                  },
+              ]
+            : []),
         ...(!executiveReadOnly && navigation?.canAdministerOffice
             ? [
                   {
@@ -693,6 +755,151 @@ export function AppSidebar() {
         isActive: currentPath === href.split('?')[0].split('#')[0],
         badge,
     });
+    // Everyone who works on clients records their hours from their own work group.
+    const withHours = (groups: { label: string; items: NavItem[] }[]) =>
+        groups.map((group) =>
+            group.label === 'Mi trabajo'
+                ? {
+                      ...group,
+                      items: [
+                          ...group.items,
+                          supervisorLink('Mis horas', '/work/time', Clock3),
+                      ],
+                  }
+                : group,
+        );
+    const essential = (
+        page.props as {
+            essential?: {
+                owner: boolean;
+                badges?: { tasks?: number; obligations?: number };
+            };
+        }
+    ).essential;
+    const isEssentialOwner =
+        essential?.owner ?? navigation?.organization.role === 'owner';
+    // Detail screens (an obligation, a task) keep their section highlighted and open in the menu.
+    const essentialLink = (
+        title: string,
+        href: string,
+        icon: LucideIcon,
+        badge?: number,
+    ): NavItem => ({
+        ...supervisorLink(title, href, icon, badge),
+        isActive:
+            currentPath === href.split('?')[0] ||
+            (href !== ESSENTIAL_HOME &&
+                currentPath.startsWith(`${href.split('?')[0]}/`)),
+    });
+    const essentialGroups: { label: string; items: NavItem[] }[] = [
+        {
+            label: 'Mi oficina',
+            items: [
+                essentialLink('Inicio', ESSENTIAL_HOME, Home),
+                essentialLink(
+                    isEssentialOwner ? 'Clientes' : 'Mis clientes',
+                    isEssentialOwner ? '/office/companies' : '/accounting',
+                    Building2,
+                ),
+                ...(isEssentialOwner
+                    ? [essentialLink('Equipo', '/office/users', UsersRound)]
+                    : []),
+            ],
+        },
+        {
+            label: 'Trabajo',
+            items: [
+                essentialLink(
+                    isEssentialOwner ? 'Tareas' : 'Mis tareas',
+                    '/essential/tasks',
+                    ClipboardList,
+                    essential?.badges?.tasks,
+                ),
+                ...(hasObligations
+                    ? [
+                          essentialLink(
+                              'Obligaciones fiscales',
+                              '/essential/obligations',
+                              CalendarDays,
+                              essential?.badges?.obligations,
+                          ),
+                      ]
+                    : []),
+                ...(hasInvoicing
+                    ? [
+                          essentialLink(
+                              'Facturación',
+                              '/essential/invoicing',
+                              ReceiptText,
+                          ),
+                      ]
+                    : []),
+                ...(isEssentialOwner
+                    ? [
+                          essentialLink(
+                              'Contabilidad de clientes',
+                              '/accounting',
+                              Calculator,
+                          ),
+                      ]
+                    : []),
+            ],
+        },
+        ...(isEssentialOwner
+            ? [
+                  {
+                      label: 'Control',
+                      items: [
+                          ...(hasPlanFeature(planFeatures, 'audit_log')
+                              ? [
+                                    essentialLink(
+                                        'Auditoría',
+                                        '/essential/audit',
+                                        History,
+                                    ),
+                                ]
+                              : []),
+                          ...(hasPlanFeature(planFeatures, 'automatic_backups')
+                              ? [
+                                    essentialLink(
+                                        'Respaldos',
+                                        '/essential/backups',
+                                        ShieldCheck,
+                                    ),
+                                ]
+                              : []),
+                          essentialLink(
+                              'Seguridad',
+                              '/office/security',
+                              LockKeyhole,
+                          ),
+                      ],
+                  },
+              ]
+            : []),
+        {
+            label: 'Cuenta',
+            items: [
+                ...(isEssentialOwner
+                    ? [
+                          essentialLink(
+                              'Plan y suscripción',
+                              '/office/subscription',
+                              BadgeDollarSign,
+                          ),
+                          essentialLink(
+                              'Configuración',
+                              '/office/settings',
+                              Settings2,
+                          ),
+                      ]
+                    : []),
+                essentialLink('Luzma IA', '/luzma', WandSparkles),
+                libraryLink,
+                essentialLink('Soporte', '/support', MessageSquare),
+            ],
+        },
+    ];
     const supervisorGroups: { label: string; items: NavItem[] }[] = [
         {
             label: 'Dashboard',
@@ -1602,6 +1809,24 @@ export function AppSidebar() {
             label: 'Información',
             items: [
                 ...clientLink(
+                    'Resumen financiero',
+                    '/client/finances',
+                    TrendingUp,
+                    'client.finances.view',
+                ),
+                ...clientLink(
+                    'Cuenta con la oficina',
+                    '/client/account',
+                    BadgeDollarSign,
+                    'client.account.view',
+                ),
+                ...clientLink(
+                    'Nómina',
+                    '/client/payroll',
+                    Users,
+                    'client.payroll.view',
+                ),
+                ...clientLink(
                     'Reportes y estados',
                     '/client/reports',
                     FileChartColumn,
@@ -2046,6 +2271,17 @@ export function AppSidebar() {
                               href: EXECUTIVE_HOME,
                               icon: Gauge,
                           },
+                          ...(hasPlanFeature(planFeatures, 'initial_training')
+                              ? [
+                                    {
+                                        title: 'Puesta en marcha',
+                                        href: '/office/setup',
+                                        icon: ClipboardCheck,
+                                        isActive:
+                                            currentPath === '/office/setup',
+                                    },
+                                ]
+                              : []),
                       ],
                   },
               ]
@@ -2066,10 +2302,20 @@ export function AppSidebar() {
                 adminLink('Usuarios', '/office/users', UsersRound),
                 {
                     title: 'Roles y Permisos',
-                    href: '/office/users-roles',
+                    href: '/office/roles',
                     icon: ShieldCheck,
                 },
-                adminLink('Invitaciones', '/office/users#invitaciones', Mail),
+                adminLink('Invitaciones', '/office/invitations', Mail),
+                {
+                    title: 'Accesos de clientes',
+                    href: '/office/client-access',
+                    icon: LockKeyhole,
+                },
+                {
+                    title: 'Solicitudes de contraseña',
+                    href: '/office/password-requests',
+                    icon: KeyRound,
+                },
             ],
         },
         {
@@ -2079,11 +2325,6 @@ export function AppSidebar() {
                     'Carga de trabajo',
                     '/office/team-workload',
                     ListTree,
-                ),
-                adminLink(
-                    'Tareas sin asignar',
-                    '/office/unassigned-tasks',
-                    ClipboardList,
                 ),
                 {
                     title: 'Capacitación',
@@ -2116,7 +2357,7 @@ export function AppSidebar() {
                 adminLink('Configuración', '/office/settings', Settings2),
                 {
                     title: 'Plan y Suscripción',
-                    href: '/billing/plans',
+                    href: '/office/subscription',
                     icon: WalletCards,
                 },
             ],
@@ -2166,14 +2407,30 @@ export function AppSidebar() {
                         <NavMain items={home} label={company?.name} />
                         <NavMain items={accountingItems} label="Contabilidad" />
                         <NavMain items={operationItems} label="Operaciones" />
+                        {advancedItems.length > 0 && (
+                            <NavMain
+                                items={advancedItems}
+                                label="Contabilidad avanzada"
+                            />
+                        )}
                         {financeItems.length > 0 && (
                             <NavMain items={financeItems} label="Finanzas" />
                         )}
                         <NavMain items={systemItems} label="Sistema" />
                     </>
+                ) : workspace === 'essential' ? (
+                    <>
+                        {essentialGroups.map((group) => (
+                            <NavMain
+                                key={group.label}
+                                items={group.items}
+                                label={group.label}
+                            />
+                        ))}
+                    </>
                 ) : workspace === 'receivables' ? (
                     <>
-                        {receivablesGroups.map((group) => (
+                        {withHours(receivablesGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2183,7 +2440,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'payables' ? (
                     <>
-                        {payablesGroups.map((group) => (
+                        {withHours(payablesGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2213,7 +2470,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'payroll' ? (
                     <>
-                        {payrollGroups.map((group) => (
+                        {withHours(payrollGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2223,7 +2480,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'treasury' ? (
                     <>
-                        {treasuryGroups.map((group) => (
+                        {withHours(treasuryGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2233,7 +2490,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'tax' ? (
                     <>
-                        {taxGroups.map((group) => (
+                        {withHours(taxGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2243,7 +2500,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'assistant' ? (
                     <>
-                        {assistantGroups.map((group) => (
+                        {withHours(assistantGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2253,7 +2510,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'accountant' ? (
                     <>
-                        {accountantGroups.map((group) => (
+                        {withHours(accountantGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2263,7 +2520,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'supervisor' ? (
                     <>
-                        {supervisorGroups.map((group) => (
+                        {withHours(supervisorGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2273,7 +2530,7 @@ export function AppSidebar() {
                     </>
                 ) : workspace === 'operations' ? (
                     <>
-                        {operationsGroups.map((group) => (
+                        {withHours(operationsGroups).map((group) => (
                             <NavMain
                                 key={group.label}
                                 items={group.items}
@@ -2310,7 +2567,34 @@ export function AppSidebar() {
                     </>
                 ) : (
                     <NavMain
-                        items={organizationNavItems}
+                        items={[
+                            ...organizationNavItems.filter((item) => {
+                                if (
+                                    item.href === '/office/executive-dashboard'
+                                ) {
+                                    return (
+                                        navigation?.canViewExecutive !== false
+                                    );
+                                }
+
+                                if (
+                                    [
+                                        '/office/dashboard',
+                                        '/office/offices',
+                                        '/office/users-roles',
+                                        '/office/company-assignments',
+                                    ].includes(String(item.href))
+                                ) {
+                                    return (
+                                        navigation?.canAdministerOffice !==
+                                        false
+                                    );
+                                }
+
+                                return true;
+                            }),
+                            supervisorLink('Mis horas', '/work/time', Clock3),
+                        ]}
                         label="Organización"
                     />
                 )}

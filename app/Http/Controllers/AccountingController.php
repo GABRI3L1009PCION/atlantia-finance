@@ -6,7 +6,10 @@ use App\Actions\Accounting\ApproveAccountingPeriodReopening;
 use App\Actions\Accounting\CloseAccountingPeriod;
 use App\Actions\Accounting\ReopenAccountingPeriod;
 use App\Actions\Accounting\RequestAccountingPeriodReopening;
+use App\Models\Organization;
 use App\Services\Accounting\AccountingDashboardService;
+use App\Services\Accounting\AccountingPeriodCloseChecklistService;
+use App\Services\Accounting\CostCenterService;
 use App\Services\Accounting\LedgerService;
 use App\Services\Accounting\TrialBalanceService;
 use App\Services\AccountingService;
@@ -16,6 +19,7 @@ use App\Services\WorkManagement\CompanyPortfolioService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkspaceContext;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -57,10 +61,22 @@ class AccountingController extends Controller
         return Inertia::render('accounting/index', [
             'organizationName' => $org->name,
             'canManage' => $org->pivot->role === 'owner',
+            'companyQuota' => $this->companyQuota($org),
             'companies' => $companies->orderBy('companies.name')->paginate(12)->withQueryString(),
             'offices' => $org->pivot->role === 'owner' ? $org->offices()->where('status', 'active')->get(['id', 'name']) : [],
             'search' => $search,
         ]);
+    }
+
+    /** @return array{limit: int|null, used: int} */
+    private function companyQuota(Organization $organization): array
+    {
+        $limit = $this->context->limit($organization, 'active_cases');
+
+        return [
+            'limit' => $limit === PHP_INT_MAX ? null : $limit,
+            'used' => DB::table('companies')->where('companies.organization_id', $organization->id)->count(),
+        ];
     }
 
     /** POST accounting/companies: create company under an owned office; enforce plan quota. */
@@ -511,6 +527,17 @@ class AccountingController extends Controller
         return back()->with('accounting_notice', $result->message);
     }
 
+    /** GET: every check that gates the close of a period, with its state and what to do about it. */
+    public function periodChecks(Request $request, string $company, int $period, AccountingPeriodCloseChecklistService $checklist): JsonResponse
+    {
+        $org = $this->context->organization($request->user());
+        $record = $this->accounting->company($org, $request->user(), $company);
+        $this->accounting->assertModule($org, $record->id, $request->user(), 'journal.view');
+        abort_unless(DB::table('accounting_periods')->where('company_id', $record->id)->where('id', $period)->exists(), 404);
+
+        return response()->json(['checks' => $checklist->forPeriod((int) $record->id, $period)]);
+    }
+
     public function requestReopen(Request $request, string $company, int $period, RequestAccountingPeriodReopening $reopening): RedirectResponse
     {
         $org = $this->context->organization($request->user());
@@ -574,6 +601,7 @@ class AccountingController extends Controller
             $this->accounting->lock($record->id);
             $this->accounting->company($org, $request->user(), $record->public_id, true);
             $lines = $this->accounting->lines($record->id, $data['lines']);
+            app(CostCenterService::class)->validateLines($record->id, $lines, true);
             $id = $this->accounting->createDraft($org, $request->user(), $record, $data, $lines);
             $this->accounting->audit($org, $request->user(), 'entry.drafted', 'journal_entries', $id);
         });
@@ -664,6 +692,7 @@ class AccountingController extends Controller
             $this->accounting->lock($record->id);
             foreach ($preview['entries'] as $group => $entry) {
                 $lines = $this->accounting->lines($record->id, $entry['lines']);
+                app(CostCenterService::class)->validateLines($record->id, $lines, true);
                 $this->accounting->createDraft($org, $request->user(), $record, [
                     'request_id' => (string) Str::uuid(),
                     'period_id' => $entry['period_id'],
@@ -690,10 +719,17 @@ class AccountingController extends Controller
         if (! $handle) {
             throw ValidationException::withMessages(['file' => 'No fue posible leer el archivo.']);
         }
-        $header = fgetcsv($handle);
+        // Spreadsheets save UTF-8 files with a byte-order mark and, in Spanish locales, separate the columns with semicolons.
+        $firstLine = (string) fgets($handle);
+        $delimiter = substr_count($firstLine, ';') > substr_count($firstLine, ',') ? ';' : ',';
+        rewind($handle);
+        if (fread($handle, 3) !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+        $header = fgetcsv($handle, null, $delimiter);
         $expected = ['grupo', 'fecha', 'periodo_id', 'tipo', 'concepto', 'referencia', 'codigo_cuenta', 'descripcion_linea', 'tercero_tipo', 'tercero_id', 'centro_costo', 'proyecto', 'debe', 'haber'];
-        if (! $header || array_map(fn ($value) => trim((string) $value), $header) !== $expected) {
-            throw ValidationException::withMessages(['file' => 'Usa la plantilla oficial del Libro Diario.']);
+        if (! $header || array_map(fn ($value) => mb_strtolower(trim((string) $value)), $header) !== $expected) {
+            throw ValidationException::withMessages(['file' => 'El archivo no tiene las columnas de la plantilla del Libro Diario ('.implode(', ', $expected).'). Descarga la plantilla y copia tus filas en ella.']);
         }
         $accounts = DB::table('ledger_accounts')->where('company_id', $companyId)->where('is_active', true)->where('accepts_movements', true)->where('is_group', false)->pluck('id', 'code');
         $openPeriods = DB::table('accounting_periods')->where('company_id', $companyId)->whereNull('closed_at')->get();
@@ -701,7 +737,7 @@ class AccountingController extends Controller
         $errors = [];
         $totalDebit = $totalCredit = 0;
         $rowNumber = 1;
-        while (($row = fgetcsv($handle)) !== false) {
+        while (($row = fgetcsv($handle, null, $delimiter)) !== false) {
             $rowNumber++;
             if (count(array_filter($row, fn ($value) => trim((string) $value) !== '')) === 0) {
                 continue;
@@ -771,6 +807,27 @@ class AccountingController extends Controller
         foreach ($entries as $group => $entry) {
             if (count($entry['lines']) < 2 || $entry['debit'] !== $entry['credit'] || $entry['debit'] <= 0) {
                 $errors[] = "Grupo {$group}: el asiento no cumple partida doble.";
+            }
+        }
+
+        // The same document loaded twice must be booked once: same reference and same amount, in the file or already in the books.
+        $seen = [];
+        foreach ($entries as $group => $entry) {
+            if ($entry['reference'] === null) {
+                continue;
+            }
+            $key = mb_strtolower($entry['reference']).'|'.$entry['debit'];
+            if (isset($seen[$key])) {
+                $errors[] = "Grupo {$group}: la referencia {$entry['reference']} con el mismo monto ya está en el archivo (grupo {$seen[$key]}). ¿Es un duplicado?";
+
+                continue;
+            }
+            $seen[$key] = $group;
+            $existing = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')->join('journal_lines as l', 'l.journal_entry_id', '=', 'e.id')
+                ->where('p.company_id', $companyId)->whereRaw('lower(e.reference) = ?', [mb_strtolower($entry['reference'])])->whereNotIn('e.status', ['void', 'rejected', 'reversed'])
+                ->groupBy('e.id')->havingRaw('CAST(SUM(l.debit_cents) AS BIGINT) = ?', [$entry['debit']])->first(['e.id', 'e.description']);
+            if ($existing !== null) {
+                $errors[] = "Grupo {$group}: la referencia {$entry['reference']} con el mismo monto ya existe en el Libro Diario («{$existing->description}»). ¿Es un duplicado?";
             }
         }
 

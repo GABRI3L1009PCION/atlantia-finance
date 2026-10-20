@@ -62,6 +62,13 @@ test('core plans share the complete tenant scoped financial cockpit', function (
             ->has('metrics.ai_context.suggestions'));
 })->with(['essential', 'enterprise']);
 
+test('the FEL module opens the real invoicing screen instead of a placeholder', function () {
+    $fixture = executiveDashboardFixture('Facturadora');
+
+    $this->actingAs($fixture['owner'])
+        ->get(route('accounting.companyDashboard', [$fixture['uuid'], 'module' => 'fel']))
+        ->assertRedirect(route('accounting.fel.index', $fixture['uuid']));
+});
 test('company cockpit rejects cross organization access', function () {
     $authorized = executiveDashboardFixture('Autorizada');
     $foreign = executiveDashboardFixture('Extranjera');

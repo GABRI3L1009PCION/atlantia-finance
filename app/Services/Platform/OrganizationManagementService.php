@@ -146,6 +146,8 @@ class OrganizationManagementService
                 'address' => 'Ciudad', 'email' => $data['billing_email'] ?? $email, 'created_at' => now(), 'updated_at' => now()]);
             $office = $organization->offices()->create(['public_id' => (string) Str::uuid(), 'code' => 'PRINCIPAL', 'name' => $data['office_name'], 'city' => $data['office_city'] ?? null,
                 'country_code' => $data['country_code'] ?? 'GT', 'timezone' => $data['timezone'] ?? 'America/Guatemala', 'status' => 'active', 'is_primary' => true]);
+            // A new firm starts strict: unreconciled banks and unfiled obligations stop the close until the office decides otherwise.
+            DB::table('offices')->where('id', $office->id)->update(['treasury_close_policy' => 'block', 'fiscal_close_policy' => 'block']);
             $subscriptionId = $this->subscriptions->create($actor, (int) $organization->id, (int) $data['plan_price_id'], (bool) $data['trial'], (float) ($data['discount_percent'] ?? 0));
             app(WorkAuthorizationService::class)->ensureDefaults($organization);
             $invitation = Invitation::query()->create(['public_id' => (string) Str::uuid(), 'organization_id' => $organization->id, 'invited_by' => $actor->id, 'email' => $email, 'name' => trim($data['owner_name']),

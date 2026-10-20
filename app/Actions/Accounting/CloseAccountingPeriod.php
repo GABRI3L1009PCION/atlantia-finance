@@ -46,7 +46,7 @@ class CloseAccountingPeriod
                 $this->accounting->audit($organization, $actor, 'accounting_period.close_blocked', 'accounting_periods', $periodId, [
                     'blocking_checks' => $blocking,
                 ]);
-                throw ValidationException::withMessages(['accounting' => 'No se puede cerrar el período porque existen bloqueantes contables.']);
+                throw ValidationException::withMessages(['accounting' => 'No se puede cerrar el período. Pendiente: '.implode('; ', array_map(fn (array $check): string => $check['label'].' ('.$check['message'].')', $blocking))]);
             }
 
             $snapshotId = $this->snapshot((int) $company->id, $periodId, $actor, $checks, $warnings, $blocking);

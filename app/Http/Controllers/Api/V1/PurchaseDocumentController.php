@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\PurchaseDocumentDraftService;
 use Illuminate\Http\JsonResponse;
@@ -60,5 +61,16 @@ class PurchaseDocumentController extends ApiController
         $row = DB::table('purchase_documents')->where('id', $result['id'])->first() ?? $this->fail(404, 'not_found', 'La compra no existe.');
 
         return $this->item($this->resources->purchaseDocument($row, true), $result['created'] ? 201 : 200);
+    }
+
+    /** Annuls the purchase: it is never deleted. The reason is required and the accounting entry is reversed. */
+    public function void(Request $request, string $company, string $document, DocumentAnnulmentService $annulments): JsonResponse
+    {
+        $record = $this->company($request, $company, 'purchases:void');
+        $data = $request->validate(['reason' => 'required|string|min:3|max:500']);
+        DB::table('purchase_documents')->where('company_id', $record->id)->where('public_id', $document)->first() ?? $this->fail(404, 'not_found', 'La compra no existe en esta empresa.');
+        $annulments->annulPurchase($this->organization($request), $this->user($request), $record, $document, $data['reason'], $this->via($request));
+
+        return $this->item($this->resources->purchaseDocument(DB::table('purchase_documents')->where('company_id', $record->id)->where('public_id', $document)->first() ?? $this->fail(404, 'not_found', 'La compra no existe.'), true));
     }
 }

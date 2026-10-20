@@ -37,3 +37,16 @@ Los datos contables, documentos y consultas no serán enviados a servicios exter
 ## Estado
 
 Versión inicial: 0.1.0
+
+## Cerebro propio de Luzma
+
+Luzma entiende la pregunta y redacta la respuesta con su propio cerebro (`app/services/brain.py`), solo con la biblioteca
+estándar de Python: sin API, sin clave y sin Ollama. Las cifras salen siempre de los datos oficiales que calcula Laravel.
+
+`AI_ENGINE` (en `.env` del servicio):
+
+- `brain` (por defecto): solo el cerebro propio.
+- `auto`: Ollama redacta y el cerebro responde si Ollama no está disponible.
+- `ollama`: solo Ollama.
+
+Pruebas: `PYTHONPATH=. .venv/Scripts/python.exe -m unittest tests.test_brain`

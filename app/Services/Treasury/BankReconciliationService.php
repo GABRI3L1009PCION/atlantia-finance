@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Treasury;
 
+use App\Events\Work\SourceChanged;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
@@ -152,6 +153,7 @@ class BankReconciliationService
                 throw ValidationException::withMessages(['reconciliation' => $bankItems.' movimiento(s) del banco aún no están registrados y contabilizados en libros (comisiones, depósitos sin identificar o asientos en borrador).']);
             }
             DB::table('bank_reconciliations')->where('id', $id)->update(['status' => 'submitted', 'review_note' => null, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'bank_reconciliations', (int) $id));
             $this->accounting->audit($organization, $actor, 'reconciliation.submitted', 'bank_reconciliations', $id, [], $row->office_id === null ? null : (int) $row->office_id);
             foreach ($this->approverIds($row) as $recipient) {
                 if ($recipient !== $actor->id) {
@@ -175,6 +177,7 @@ class BankReconciliationService
                 throw ValidationException::withMessages(['reconciliation' => 'Los movimientos cambiaron después del envío; solicita que se recalcule.']);
             }
             DB::table('bank_reconciliations')->where('id', $id)->update(['status' => 'approved', 'approved_by' => $actor->id, 'approved_at' => now(), 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'bank_reconciliations', (int) $id));
             DB::table('bank_accounts')->where('id', $row->bank_account_id)->where(fn ($query) => $query->whereNull('last_reconciled_on')->orWhere('last_reconciled_on', '<', $row->cutoff_date))
                 ->update(['last_reconciled_on' => $row->cutoff_date, 'updated_at' => now()]);
             $this->accounting->audit($organization, $actor, 'reconciliation.approved', 'bank_reconciliations', $id, [], $row->office_id === null ? null : (int) $row->office_id);
@@ -190,6 +193,7 @@ class BankReconciliationService
                 throw ValidationException::withMessages(['reconciliation' => 'Solo se devuelven conciliaciones enviadas.']);
             }
             DB::table('bank_reconciliations')->where('id', $id)->update(['status' => 'changes_requested', 'review_note' => $note, 'updated_at' => now()]);
+            event(new SourceChanged(0, null, null, 'bank_reconciliations', (int) $id));
             $this->accounting->audit($organization, $actor, 'reconciliation.changes_requested', 'bank_reconciliations', $id, ['note' => $note], $row->office_id === null ? null : (int) $row->office_id);
             $this->notifications->notify($organization->id, (int) $row->prepared_by, $actor->id, 'bank_reconciliation', 'Conciliación bancaria con observaciones', $note, 'bank_reconciliations', $id);
         });

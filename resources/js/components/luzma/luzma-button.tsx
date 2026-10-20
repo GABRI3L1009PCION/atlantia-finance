@@ -1,16 +1,16 @@
-import { Link, usePage } from '@inertiajs/react';
-import { History, Sparkles } from 'lucide-react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { Bell, History, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { luzmaRequest, useLuzmaScreen } from '@/components/luzma/client';
 import type { LuzmaInsight } from '@/components/luzma/client';
-import { LuzmaChat } from '@/components/luzma/luzma-chat';
+import { LuzmaOrbChat } from '@/components/luzma/luzma-orb-chat';
 import { LuzmaInsightItem } from '@/components/luzma/luzma-parts';
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetTitle,
-} from '@/components/ui/sheet';
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 type ScreenContext = {
     company: string | null;
@@ -73,6 +73,9 @@ export function LuzmaButton() {
         return () => window.removeEventListener('luzma:open', listener);
     }, []);
 
+    // A link inside an answer takes the user to that screen, so the panel gets out of the way.
+    useEffect(() => router.on('navigate', () => setOpen(false)), []);
+
     useEffect(() => {
         if (!open) {
             return;
@@ -105,66 +108,64 @@ export function LuzmaButton() {
                 <Sparkles className="size-4" />
                 <span className="hidden sm:inline">Luzma</span>
             </button>
-            <Sheet open={open} onOpenChange={setOpen}>
-                <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-                    <div className="border-b border-[#e7e1dd] bg-gradient-to-r from-[#061633] to-[#1c2f55] px-4 py-3 text-white">
-                        <SheetTitle className="flex items-center gap-2 text-white">
-                            <Sparkles className="size-4 text-amber-300" /> Luzma
-                        </SheetTitle>
-                        <SheetDescription className="text-xs text-white/70">
-                            Asistente inteligente de Atlantia Finance
-                        </SheetDescription>
-                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-                            <span className="rounded-full bg-white/15 px-2 py-0.5">
-                                {context?.company ?? 'Todas mis empresas'}
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="top-1/2 left-1/2 flex h-[min(92dvh,800px)] w-[min(96vw,900px)] max-w-none -translate-x-1/2 -translate-y-1/2 flex-col gap-0 overflow-visible rounded-none border-0 bg-transparent p-0 text-white shadow-none sm:max-w-none [&>button]:top-5 [&>button]:right-5 [&>button]:z-20 [&>button]:text-white [&>button]:opacity-70 [&>button]:hover:opacity-100">
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute -inset-[10%] bg-[radial-gradient(ellipse_at_center,#2b0b13_0%,#0c0407_58%,#000_100%)] [mask-image:radial-gradient(ellipse_at_center,#000_40%,transparent_70%)]"
+                    />
+                    <DialogTitle className="sr-only">Luzma</DialogTitle>
+                    <DialogDescription className="sr-only">
+                        Inteligencia de Atlantia Finance
+                    </DialogDescription>
+                    <div className="relative z-10 flex flex-wrap items-center gap-2 px-5 pt-4 pr-16 text-xs sm:px-8">
+                        <span className="rounded-full border border-white/15 px-3 py-1.5 text-white/80">
+                            {context?.company ?? 'Todas mis empresas'}
+                        </span>
+                        {context?.period && (
+                            <span className="rounded-full border border-white/15 px-3 py-1.5 text-white/80">
+                                {context.period}
                             </span>
-                            {context?.period && (
-                                <span className="rounded-full bg-white/15 px-2 py-0.5">
-                                    {context.period}
-                                </span>
-                            )}
-                            <span className="rounded-full bg-white/15 px-2 py-0.5">
-                                {MODULE_LABELS[screen.module] ?? screen.module}
-                            </span>
-                        </div>
-                        <div className="mt-3 flex gap-1 text-xs font-semibold">
-                            {(
-                                [
-                                    ['chat', 'Conversación'],
-                                    [
-                                        'insights',
-                                        `Alertas${context?.insights.length ? ` (${context.insights.length})` : ''}`,
-                                    ],
-                                ] as const
-                            ).map(([key, label]) => (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    onClick={() => setTab(key)}
-                                    className={`rounded-lg px-3 py-1 ${tab === key ? 'bg-white text-[#061633]' : 'text-white/80 hover:bg-white/10'}`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
+                        )}
+                        <span className="rounded-full border border-white/15 px-3 py-1.5 text-white/80">
+                            {MODULE_LABELS[screen.module] ?? screen.module}
+                        </span>
+                        <span className="ml-auto flex items-center gap-1">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setTab(tab === 'chat' ? 'insights' : 'chat')
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
+                                aria-pressed={tab === 'insights'}
+                            >
+                                <Bell className="size-4" />
+                                {tab === 'chat' ? 'Alertas' : 'Conversación'}
+                                {tab === 'chat' &&
+                                    (context?.insights.length ?? 0) > 0 && (
+                                        <span className="rounded-full bg-[#e8c98a] px-1.5 text-[11px] font-bold text-[#2a0a14]">
+                                            {context?.insights.length}
+                                        </span>
+                                    )}
+                            </button>
                             <Link
                                 href="/luzma?tab=history"
-                                className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-white/80 hover:bg-white/10"
+                                className="inline-flex items-center gap-1.5 rounded-lg border-l border-white/15 px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
                             >
-                                <History className="size-3.5" /> Historial
+                                <History className="size-4" /> Historial
                             </Link>
-                        </div>
+                        </span>
                     </div>
                     {tab === 'chat' ? (
-                        <LuzmaChat
+                        <LuzmaOrbChat
                             screen={screen}
                             suggestions={context?.suggestions ?? []}
                             initialQuestion={question}
-                            compact
                         />
                     ) : (
-                        <div className="flex-1 space-y-2 overflow-y-auto p-4">
+                        <div className="relative z-10 mx-auto w-full max-w-3xl flex-1 space-y-2 overflow-y-auto px-5 pb-5 sm:px-8">
                             {(context?.insights ?? []).length === 0 && (
-                                <p className="text-sm text-slate-500">
+                                <p className="rounded-2xl bg-white/[0.06] p-4 text-sm text-white/75">
                                     Luzma no detectó alertas para este contexto.
                                 </p>
                             )}
@@ -176,14 +177,14 @@ export function LuzmaButton() {
                             ))}
                             <Link
                                 href="/luzma?tab=insights"
-                                className="inline-block text-xs font-bold text-[#640000]"
+                                className="inline-block text-xs font-bold text-[#e8c98a]"
                             >
                                 Ver todas las alertas
                             </Link>
                         </div>
                     )}
-                </SheetContent>
-            </Sheet>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

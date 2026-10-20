@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Events\Work\CollectionActivityRecorded;
+use App\Events\Work\DocumentAccepted;
+use App\Events\Work\DocumentSubmitted;
+use App\Events\Work\SourceChanged;
 use App\Http\Middleware\AuthenticateApiToken;
 use App\Http\Responses\LoginResponse;
 use App\Http\Responses\RegisterResponse;
@@ -9,8 +13,12 @@ use App\Http\Responses\VerifyEmailResponse;
 use App\Models\User;
 use App\Services\Fel\FelProviderInterface;
 use App\Services\Fel\FelProviderResolver;
+use App\Services\Fiscal\ExternalFilingProvider;
+use App\Services\Fiscal\TaxFilingProviderInterface;
 use App\Services\Integrations\WebhookDispatcher;
+use App\Services\Luzma\ChainLuzmaProvider;
 use App\Services\Luzma\Contracts\LuzmaModelProvider;
+use App\Services\Luzma\GeminiLuzmaProvider;
 use App\Services\Luzma\OllamaLuzmaProvider;
 use App\Services\Platform\Billing\PaymentProviderInterface;
 use App\Services\Platform\Billing\RecurrentePaymentProvider;
@@ -19,6 +27,7 @@ use App\Services\Platform\PlatformAuthorization;
 use App\Services\Platform\PlatformMonitoringRecorder;
 use App\Services\Platform\SignInRecorder;
 use App\Services\Tenancy\TenantDatabaseContext;
+use App\Services\WorkManagement\TaskSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
@@ -64,7 +73,19 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(AuthenticateApiToken::class);
         $this->app->singleton(WebhookDispatcher::class);
         $this->app->bind(PaymentProviderInterface::class, RecurrentePaymentProvider::class);
-        $this->app->bind(LuzmaModelProvider::class, OllamaLuzmaProvider::class);
+        $this->app->bind(LuzmaModelProvider::class, function ($app): LuzmaModelProvider {
+            $available = ['gemini' => fn (): LuzmaModelProvider => $app->make(GeminiLuzmaProvider::class), 'ollama' => fn (): LuzmaModelProvider => $app->make(OllamaLuzmaProvider::class)];
+            $chain = [];
+            foreach ((array) config('luzma.providers', ['ollama']) as $name) {
+                if (isset($available[$name])) {
+                    $chain[] = ['name' => (string) $name, 'provider' => $available[$name]()];
+                }
+            }
+
+            return new ChainLuzmaProvider($chain === [] ? [['name' => 'ollama', 'provider' => $app->make(OllamaLuzmaProvider::class)]] : $chain);
+        });
+        $this->app->singleton(TaskSyncService::class);
+        $this->app->bind(TaxFilingProviderInterface::class, ExternalFilingProvider::class);
     }
 
     /**
@@ -72,6 +93,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // The modules announce what happens; tasks follow their business objects from these events.
+        Event::listen(DocumentSubmitted::class, [TaskSyncService::class, 'onDocumentSubmitted']);
+        Event::listen(DocumentAccepted::class, [TaskSyncService::class, 'onDocumentAccepted']);
+        Event::listen(CollectionActivityRecorded::class, [TaskSyncService::class, 'onCollectionActivityRecorded']);
+        Event::listen(SourceChanged::class, [TaskSyncService::class, 'onSourceChanged']);
+
         $this->configureDefaults();
         $this->configureTenantDatabaseContext();
         $this->app->make(TenantDatabaseContext::class)->runAsSystem(fn () => IntegrationManagementService::applyStoredSecrets());
