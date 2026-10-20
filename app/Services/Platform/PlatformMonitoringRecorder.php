@@ -130,7 +130,7 @@ class PlatformMonitoringRecorder
             }
             DB::table('job_runs')->where('id', $run['id'])->update(['status' => $status, 'attempts' => $job->attempts(), 'finished_at' => now(),
                 'duration_ms' => (int) round((microtime(true) - $run['started']) * 1000),
-                'exception' => $exception === null ? null : mb_strimwidth(SystemLogService::sanitize(get_class($exception).': '.$exception->getMessage()), 0, 2000, '…'), 'updated_at' => now()]);
+                'exception' => $exception === null ? null : mb_strimwidth(PlatformLogReader::sanitize(get_class($exception).': '.$exception->getMessage()), 0, 2000, '…'), 'updated_at' => now()]);
             if ($status !== 'retrying') {
                 unset($this->running[$this->key($job)]);
             }

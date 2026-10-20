@@ -102,7 +102,7 @@ class SecurityCenterService
     public function failedLogins(): array
     {
         return array_values(DB::table('login_attempts')->where('succeeded', false)->orderByDesc('id')->limit(100)->get()
-            ->map(fn (stdClass $row): array => ['email' => $row->email === null ? null : SystemLogService::maskEmail((string) $row->email), 'ip' => $row->ip, 'device' => $this->device((string) $row->user_agent),
+            ->map(fn (stdClass $row): array => ['email' => $row->email === null ? null : PlatformLogReader::maskEmail((string) $row->email), 'ip' => $row->ip, 'device' => $this->device((string) $row->user_agent),
                 'at' => Carbon::parse($row->created_at)->toIso8601String()])->all());
     }
 

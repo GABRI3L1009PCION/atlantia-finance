@@ -210,20 +210,37 @@ function highlight(text: string, term: string): ReactNode {
         return text;
     }
 
-    const pattern = new RegExp(
-        `(${term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`,
-        'gi',
-    );
+    const needle = term.trim().toLowerCase();
+    const haystack = text.toLowerCase();
+    const parts: ReactNode[] = [];
+    let cursor = 0;
 
-    return text.split(pattern).map((part, index) =>
-        index % 2 === 1 ? (
-            <mark key={index} className="rounded bg-amber-200 px-0.5">
-                {part}
-            </mark>
-        ) : (
-            <Fragment key={index}>{part}</Fragment>
-        ),
-    );
+    for (
+        let found = haystack.indexOf(needle);
+        found !== -1;
+        found = haystack.indexOf(needle, cursor)
+    ) {
+        if (found > cursor) {
+            parts.push(
+                <Fragment key={`t${cursor}`}>
+                    {text.slice(cursor, found)}
+                </Fragment>,
+            );
+        }
+
+        cursor = found + needle.length;
+        parts.push(
+            <mark key={`m${found}`} className="rounded bg-amber-200 px-0.5">
+                {text.slice(found, cursor)}
+            </mark>,
+        );
+    }
+
+    if (cursor < text.length) {
+        parts.push(<Fragment key={`t${cursor}`}>{text.slice(cursor)}</Fragment>);
+    }
+
+    return parts;
 }
 
 function useWide(): boolean {

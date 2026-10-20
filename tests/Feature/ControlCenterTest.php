@@ -8,9 +8,9 @@ use App\Services\Platform\IncidentManagementService;
 use App\Services\Platform\PlatformAuditService;
 use App\Services\Platform\PlatformAuthorization;
 use App\Services\Platform\PlatformHealthService;
+use App\Services\Platform\PlatformLogReader;
 use App\Services\Platform\PlatformLuzmaAssistant;
 use App\Services\Platform\SupportTicketService;
-use App\Services\Platform\SystemLogService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -305,9 +305,9 @@ test('the audit log masks secrets and cannot be edited, and logs never show cred
     expect(fn () => DB::table('platform_audit_events')->where('id', $event->id)->update(['reason' => 'alterado']))->toThrow(QueryException::class);
     expect(fn () => DB::table('platform_audit_events')->where('id', $event->id)->delete())->toThrow(QueryException::class);
 
-    $line = SystemLogService::sanitize('Bearer abcdefghijklmnop12345 password=hunter22 sk_live_abcdef123456 tarjeta 4111111111111111');
+    $line = PlatformLogReader::sanitize('Bearer abcdefghijklmnop12345 password=hunter22 sk_live_abcdef123456 tarjeta 4111111111111111');
     expect($line)->not->toContain('abcdefghijklmnop12345')->not->toContain('hunter22')->not->toContain('abcdef123456')->not->toContain('4111111111111111')
-        ->and(SystemLogService::maskEmail('ana@cliente.test'))->toBe('an•••@cliente.test');
+        ->and(PlatformLogReader::maskEmail('ana@cliente.test'))->toBe('an•••@cliente.test');
 });
 
 test('sensitive global settings require re-authentication and templates keep their versions', function () {

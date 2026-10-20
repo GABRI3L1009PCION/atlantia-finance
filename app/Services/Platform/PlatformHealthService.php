@@ -54,7 +54,7 @@ class PlatformHealthService
             try {
                 [$status, $detail, $data] = $this->check($service);
             } catch (Throwable $exception) {
-                [$status, $detail, $data] = ['down', mb_strimwidth(SystemLogService::sanitize($exception->getMessage()), 0, 480, '…'), null];
+                [$status, $detail, $data] = ['down', mb_strimwidth(PlatformLogReader::sanitize($exception->getMessage()), 0, 480, '…'), null];
             }
             $latency = (int) round((microtime(true) - $started) * 1000);
             $results[] = ['service' => $service, 'status' => $status, 'latency_ms' => $latency, 'detail' => $detail];

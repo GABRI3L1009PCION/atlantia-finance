@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
  * webhook deliveries and provider events. Everything is sanitized: keys, tokens, passwords and card-like numbers are
  * masked before they reach the screen.
  */
-class SystemLogService
+class PlatformLogReader
 {
     private const LEVELS = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
 

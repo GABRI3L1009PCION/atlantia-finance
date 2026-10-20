@@ -74,14 +74,9 @@ class LuzmaGatewayRestarter
 
     protected function detach(string $command): void
     {
-        if (PHP_OS_FAMILY === 'Windows') {
-            $handle = popen('start "" /B '.$command, 'r');
-            if ($handle !== false) {
-                pclose($handle);
-            }
-
-            return;
-        }
-        exec($command.' > /dev/null 2>&1 &');
+        $detached = PHP_OS_FAMILY === 'Windows' ? 'start "" /B '.$command : $command.' > /dev/null 2>&1 &';
+        $process = Process::fromShellCommandline($detached)->setTimeout(15);
+        $process->disableOutput();
+        $process->run();
     }
 }

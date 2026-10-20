@@ -6,7 +6,7 @@ namespace App\Http\Controllers\ControlCenter;
 
 use App\Services\Platform\GlobalConfigurationService;
 use App\Services\Platform\NotificationTemplateService;
-use App\Services\Platform\SystemLogService;
+use App\Services\Platform\PlatformLogReader;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -42,7 +42,7 @@ class ControlController extends ControlCenterController
         ]);
     }
 
-    public function logs(Request $request, SystemLogService $logs): Response
+    public function logs(Request $request, PlatformLogReader $logs): Response
     {
         $this->staff($request, 'saas.logs.view');
         $filters = $request->validate(['source' => ['nullable', Rule::in(['application', 'queue', 'integration', 'provider', 'security'])], 'severity' => ['nullable', Rule::in(['debug', 'info', 'notice', 'warning', 'error', 'critical'])],
