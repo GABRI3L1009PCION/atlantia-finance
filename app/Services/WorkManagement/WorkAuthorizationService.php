@@ -589,6 +589,9 @@ class WorkAuthorizationService
         };
     }
 
+    /** Permissions that turn a role into a direction or administration role. */
+    public const HIGH_PRIVILEGE_PERMISSIONS = ['office.roles.manage', 'roles.assign_high_privilege', 'office.executive.view', 'subscription.manage'];
+
     /** Roles a team can hold when its plan has no roles and permissions module: the two seats of a small practice. */
     public const SMALL_PLAN_ROLES = ['accountant_in_charge', 'accounting_assistant'];
 
@@ -688,7 +691,16 @@ class WorkAuthorizationService
             ->join('workspace_permissions as permission', 'permission.id', '=', 'rp.workspace_permission_id')
             ->where('role.organization_id', $organization->id)
             ->where('role.code', $roleCode)
-            ->whereIn('permission.code', ['office.roles.manage', 'roles.assign_high_privilege', 'office.executive.view', 'subscription.manage'])
+            ->whereIn('permission.code', self::HIGH_PRIVILEGE_PERMISSIONS)
+            ->exists();
+    }
+
+    /** @param  list<int>  $permissionIds */
+    public function grantsHighPrivilege(array $permissionIds): bool
+    {
+        return $permissionIds !== [] && DB::table('workspace_permissions')
+            ->whereIn('id', $permissionIds)
+            ->whereIn('code', self::HIGH_PRIVILEGE_PERMISSIONS)
             ->exists();
     }
 

@@ -207,7 +207,7 @@ class IntegrationsController extends Controller
         }
 
         $request->validate(['code' => 'required|string', 'state' => 'required|string']);
-        $completed = $oauth->complete($user, $provider, (string) $request->query('code'), (string) $request->query('state'));
+        $completed = $oauth->complete($user, $organization, $provider, (string) $request->query('code'), (string) $request->query('state'));
         abort_unless($completed->id === $organization->id, 403);
 
         return redirect()->route('integrations.index')->with('workspace_notice', IntegrationConnectionService::PROVIDERS[$provider]['label'].' autorizada correctamente.');

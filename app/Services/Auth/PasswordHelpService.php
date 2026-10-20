@@ -118,7 +118,8 @@ class PasswordHelpService
     {
         $codes = DB::table('user_role_assignments')->join('workspace_roles', 'workspace_roles.id', '=', 'user_role_assignments.workspace_role_id')->where('user_role_assignments.organization_id', $organization->id)
             ->where('user_role_assignments.user_id', $target->id)->where('user_role_assignments.status', 'active')->whereNull('user_role_assignments.deleted_at')->pluck('workspace_roles.code');
-        $holdsHigh = $codes->contains(fn ($code): bool => $this->authorization->isHighPrivilegeRole($organization, (string) $code));
+        $isOwner = DB::table('organization_user')->where('organization_user.organization_id', $organization->id)->where('user_id', $target->id)->where('role', 'owner')->exists();
+        $holdsHigh = $isOwner || $codes->contains(fn ($code): bool => $this->authorization->isHighPrivilegeRole($organization, (string) $code));
         abort_if($holdsHigh && ! $this->authorization->can($organization, $admin, 'roles.assign_high_privilege'), 403, 'Esta cuenta tiene un rol de dirección o administración; solo quien puede asignar esos roles puede restablecerla.');
     }
 

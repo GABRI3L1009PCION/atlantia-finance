@@ -849,3 +849,24 @@ test('the firm administrator edits the firm profile and the supervising director
     $this->patch(route('office.firmProfile.update'), [...$payload, 'trade_name' => 'Otro nombre'])->assertForbidden();
     expect(DB::table('firm_profiles')->where('organization_id', $f['org']->id)->value('trade_name'))->toBe('Contadores de Izabal');
 });
+
+test('office administrator cannot grant direction or administration permissions through a custom role', function () {
+    $f = workManagementFixture();
+    $f['org']->subscriptions()->create(['status' => 'active']);
+    $authorization = app(WorkAuthorizationService::class);
+    $authorization->ensureDefaults($f['org']);
+    $authorization->assignRole($f['org'], $f['owner'], $f['assistant']->id, 'office_admin');
+    $high = DB::table('workspace_permissions')->where('code', 'roles.assign_high_privilege')->value('id');
+    $plain = DB::table('workspace_permissions')->whereIn('code', ['tasks.view', 'reviews.view'])->pluck('id')->all();
+
+    $this->actingAs($f['assistant']);
+    expect($this->post(route('office.roles.store'), ['name' => 'Rol escalado', 'permission_ids' => [...$plain, $high]])->status())->toBe(403);
+    expect(DB::table('workspace_roles')->where('organization_id', $f['org']->id)->where('name', 'Rol escalado')->exists())->toBeFalse();
+
+    $this->post(route('office.roles.store'), ['name' => 'Rol operativo', 'permission_ids' => $plain])->assertRedirect();
+    $roleId = (int) DB::table('workspace_roles')->where('organization_id', $f['org']->id)->where('name', 'Rol operativo')->value('id');
+    expect($roleId)->toBeGreaterThan(0);
+
+    expect($this->patch(route('office.roles.update', $roleId), ['name' => 'Rol operativo', 'permission_ids' => [...$plain, $high]])->status())->toBe(403);
+    expect(DB::table('workspace_role_permissions')->where('workspace_role_id', $roleId)->where('workspace_permission_id', $high)->exists())->toBeFalse();
+});
