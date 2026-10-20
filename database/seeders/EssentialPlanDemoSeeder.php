@@ -23,8 +23,12 @@ use Illuminate\Support\Str;
  */
 class EssentialPlanDemoSeeder extends Seeder
 {
+    use RefusesProduction;
+
     public function run(): void
     {
+        $this->refuseInProduction();
+
         $this->call(PlanCatalogSeeder::class);
 
         $owner = $this->user('esencial.propietario@atlantia.test', 'Lucrecia Ramírez');

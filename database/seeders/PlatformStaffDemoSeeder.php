@@ -15,8 +15,12 @@ use Illuminate\Support\Facades\DB;
  */
 class PlatformStaffDemoSeeder extends Seeder
 {
+    use RefusesProduction;
+
     public function run(): void
     {
+        $this->refuseInProduction();
+
         app(TenantDatabaseContext::class)->runAsSystem(function (): void {
             $user = User::query()->updateOrCreate(
                 ['email' => 'superadmin@atlantia.test'],

@@ -19,10 +19,14 @@ use RuntimeException;
  */
 class MultiOfficePlanDemoSeeder extends Seeder
 {
+    use RefusesProduction;
+
     private const EMAIL = 'contadoresyconsultoresdeizabal@gmail.com';
 
     public function run(): void
     {
+        $this->refuseInProduction();
+
         if (! app()->environment(['local', 'testing'])) {
             throw new RuntimeException('Esta cuenta de prueba solo se crea en local.');
         }

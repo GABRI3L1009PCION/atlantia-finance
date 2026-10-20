@@ -18,6 +18,8 @@ use RuntimeException;
  */
 class MultiOfficeTeamDemoSeeder extends Seeder
 {
+    use RefusesProduction;
+
     private const OWNER_EMAIL = 'contadoresyconsultoresdeizabal@gmail.com';
 
     /** @var array<string, array{name: string, city: string}> */
@@ -59,6 +61,8 @@ class MultiOfficeTeamDemoSeeder extends Seeder
 
     public function run(): void
     {
+        $this->refuseInProduction();
+
         if (! app()->environment(['local', 'testing'])) {
             throw new RuntimeException('Este equipo de prueba solo se crea en local.');
         }
