@@ -34,6 +34,9 @@ class FiscalObligationChecklistService
             ['credit_notes', 'Notas de crédito y de débito consideradas', false], ['withholdings_verified', 'Retenciones de IVA verificadas', false], ['differences', 'Diferencias investigadas o justificadas', false]],
         'isr' => [['income_expenses', 'Ingresos y gastos del período verificados', false], ['tax_adjustments', 'Ajustes fiscales y pagos a cuenta revisados', false]],
         'withholding' => [['withholdings_listed', 'Retenciones del mes listadas y validadas', false], ['withheld_documents', 'Constancias de retención emitidas o recibidas', false]],
+        'iso' => [['iso_base', 'Base del año anterior confirmada (activo neto o ingresos brutos, la mayor)', false], ['iso_credit', 'Acreditamiento ISO / ISR decidido para el año', false]],
+        'isr_annual' => [['annual_statements', 'Estados financieros del año cerrados y firmados', true], ['tax_reconciliation', 'Conciliación de la renta imponible revisada', false],
+            ['annual_payments', 'Pagos trimestrales de ISR e ISO del año acreditados', false], ['annual_withholdings', 'Retenciones soportadas del año acreditadas', false]],
     ];
 
     public function __construct(

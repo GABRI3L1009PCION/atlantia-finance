@@ -11,6 +11,7 @@ export const fiscalDocumentTypes: Record<string, string> = {
     FACT: 'Factura (FACT)',
     FCAM: 'Factura cambiaria (FCAM)',
     FPEQ: 'Factura pequeño contribuyente (FPEQ)',
+    FESP: 'Factura especial (FESP)',
 };
 
 export const taxTreatments: Record<TaxTreatment, string> = {
