@@ -17,6 +17,8 @@ createInertiaApp({
             case name === 'service-hours':
             case name === 'error':
             case name === 'work/certificate':
+            case name === 'legal/show':
+            case name === 'legal/accept':
                 return null;
             case name === 'billing/checkout':
             case name === 'billing/embedded-checkout':

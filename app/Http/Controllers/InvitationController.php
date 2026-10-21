@@ -7,6 +7,7 @@ use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\User;
 use App\Notifications\WorkspaceInvitation;
+use App\Services\Platform\LegalDocumentService;
 use App\Services\WorkManagement\OfficeInvitationService;
 use App\Services\WorkspaceContext;
 use App\Support\PlatformStatus;
@@ -123,6 +124,9 @@ class InvitationController extends Controller
             }
             abort_if($existing && $organization->users()->whereKey($existing->id)->exists(), 409);
             $user = $existing ?? User::query()->create(['name' => $data['name'], 'email' => $record->email, 'password' => $data['password']]);
+            if ($existing === null) {
+                app(LegalDocumentService::class)->acceptCurrent($user, 'invitation', request()->ip(), request()->userAgent());
+            }
             if (! $user->hasVerifiedEmail()) {
                 $user->markEmailAsVerified();
                 event(new Verified($user));

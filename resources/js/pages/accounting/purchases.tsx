@@ -40,6 +40,7 @@ import {
     FiscalDocumentFields,
     TaxTreatmentSelect,
 } from '@/components/fiscal/fiscal-document-fields';
+import { statusLabel } from '@/lib/status-labels';
 import * as routes from '@/routes/accounting';
 
 type Supplier = {
@@ -884,10 +885,10 @@ export default function Purchases({
                                                 : 'borrador'}
                                         </b>{' '}
                                         ·{' '}
-                                        {
+                                        {statusLabel(
                                             selected.source_entries[0]
-                                                .entry_status
-                                        }
+                                                .entry_status,
+                                        )}
                                     </p>
                                 )}
                             </div>

@@ -7,6 +7,7 @@ use App\Http\Middleware\EnforceOfficeTwoFactor;
 use App\Http\Middleware\EnforcePasswordChange;
 use App\Http\Middleware\EnforceServiceHours;
 use App\Http\Middleware\EnsureActiveSubscription;
+use App\Http\Middleware\EnsureLegalAcceptance;
 use App\Http\Middleware\EnsurePlanFeature;
 use App\Http\Middleware\EnsurePlatformStaff;
 use App\Http\Middleware\HandleAppearance;
@@ -55,6 +56,7 @@ return Application::configure(basePath: dirname(__DIR__))
             SetTenantDatabaseContext::class,
             EnforceServiceHours::class,
             EnforcePasswordChange::class,
+            EnsureLegalAcceptance::class,
             EnforceOfficeTwoFactor::class,
             RestrictSupervisingDirector::class,
             RestrictClientPortalUsers::class,

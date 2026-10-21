@@ -14,6 +14,7 @@ import type {
     TreasuryContext,
     TreasuryPermissions,
 } from '@/components/treasury/kit';
+import { statusLabel } from '@/lib/status-labels';
 
 type Transfer = {
     id: number;
@@ -213,7 +214,9 @@ export default function TreasuryTransfers({
                                 <td className="px-2 py-2 font-semibold">
                                     {amount(transfer.amount_cents)}
                                 </td>
-                                <td className="px-2 py-2">{transfer.status}</td>
+                                <td className="px-2 py-2">
+                                    {statusLabel(transfer.status)}
+                                </td>
                             </tr>
                         ))}
                     </Table>

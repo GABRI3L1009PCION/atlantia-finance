@@ -11,6 +11,7 @@ import {
     secondaryButton,
 } from '@/components/office-admin/kit';
 import { Card, Table, money, toneBadge } from '@/components/supervisor/kit';
+import { statusLabel } from '@/lib/status-labels';
 
 type Usage = {
     metric: string;
@@ -189,7 +190,7 @@ export default function EssentialDashboard({
                                     </td>
                                     <td className="px-2 py-2">
                                         <span className={toneBadge('slate')}>
-                                            {row.status}
+                                            {statusLabel(row.status)}
                                         </span>
                                     </td>
                                 </tr>
@@ -232,7 +233,7 @@ export default function EssentialDashboard({
                                                 {task.title}
                                             </Link>
                                             <p className="text-[11px] text-slate-500">
-                                                {task.status}
+                                                {statusLabel(task.status)}
                                             </p>
                                         </td>
                                         <td className="px-2 py-2">

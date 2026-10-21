@@ -8,6 +8,7 @@ import {
     input,
 } from '@/components/office-admin/kit';
 import { Card, Table, toneBadge } from '@/components/supervisor/kit';
+import { statusLabel } from '@/lib/status-labels';
 import { ReconciliationTable } from './reconciliations';
 import type { ReconciliationRow } from './reconciliations';
 
@@ -339,7 +340,7 @@ export default function AuditorAccountingReview({
                                                       : 'amber',
                                             )}
                                         >
-                                            {row.status}
+                                            {statusLabel(String(row.status))}
                                         </span>
                                     </td>
                                     <td className="px-2 py-1">

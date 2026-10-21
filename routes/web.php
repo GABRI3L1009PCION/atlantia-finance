@@ -33,6 +33,7 @@ use App\Http\Controllers\ForcedPasswordController;
 use App\Http\Controllers\IntegrationsController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LuzmaController;
 use App\Http\Controllers\NormativeLibraryController;
 use App\Http\Controllers\ObservationRedirectController;
@@ -64,6 +65,7 @@ use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\WorkManagementController;
 use App\Http\Controllers\WorkspaceController;
 use App\Services\Audit\AuditEngagementService;
+use App\Services\Platform\LegalDocumentService;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', WelcomeController::class)->name('home');
@@ -71,6 +73,13 @@ Route::get('/', WelcomeController::class)->name('home');
 Route::post('webhooks/recurrente', RecurrenteWebhookController::class)->middleware(['throttle:120,1', 'tenancy.system'])->name('webhooks.recurrente');
 Route::get('calendar/{token}.ics', [CalendarFeedController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware(['throttle:60,1', 'tenancy.system'])->name('calendar.feed');
 Route::post('forgot-password', [PasswordHelpController::class, 'store'])->middleware(['guest', 'throttle:5,1', 'tenancy.system'])->name('password.email');
+foreach (LegalDocumentService::DOCUMENTS as $legalSlug => $legalDocument) {
+    Route::get($legalDocument['path'], [LegalController::class, 'show'])->defaults('slug', $legalSlug)->middleware('throttle:60,1')->name('legal.'.$legalSlug);
+}
+Route::middleware('auth')->prefix('legal')->name('legal.')->group(function () {
+    Route::get('aceptar', [LegalController::class, 'accept'])->name('accept');
+    Route::post('aceptar', [LegalController::class, 'store'])->middleware('throttle:10,1')->name('store');
+});
 Route::middleware('auth')->group(function () {
     Route::get('password/change', [ForcedPasswordController::class, 'show'])->name('password.force');
     Route::put('password/change', [ForcedPasswordController::class, 'update'])->middleware('throttle:10,1')->name('password.force.update');
@@ -342,6 +351,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('settings', 'settings')->name('settings');
             Route::post('settings', 'updateSetting')->middleware('throttle:30,1')->name('settings.update');
             Route::put('settings/templates/{template}', 'updateTemplate')->name('settings.template');
+            Route::get('legal', 'legal')->name('legal');
+            Route::post('legal/{slug}', 'publishLegal')->whereIn('slug', array_keys(LegalDocumentService::DOCUMENTS))->middleware('throttle:10,1')->name('legal.publish');
         });
     });
 

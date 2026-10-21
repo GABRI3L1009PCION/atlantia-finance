@@ -324,6 +324,27 @@ export default function EmbeddedCheckout({
                                     ? 'El pago se aplica a esta factura al confirmarse con el proveedor; es un cargo único, no se programan cobros automáticos.'
                                     : 'La cuenta se activa únicamente al confirmar el webhook firmado. Es un cargo único: cada renovación se paga con su propia factura.'}
                             </p>
+                            <p className="mt-3 text-xs leading-5 text-slate-500">
+                                Al pagar aceptas los{' '}
+                                <a
+                                    href="/terminos"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-semibold underline"
+                                >
+                                    Términos y Condiciones
+                                </a>{' '}
+                                y la{' '}
+                                <a
+                                    href="/privacidad"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-semibold underline"
+                                >
+                                    Política de Privacidad
+                                </a>
+                                .
+                            </p>
                             {!invoice && (
                                 <Link
                                     href="/billing/plans"

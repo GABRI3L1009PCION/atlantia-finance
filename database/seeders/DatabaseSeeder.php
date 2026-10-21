@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
             PlanCatalogSeeder::class,
             NormativeLibrarySeeder::class,
             PayrollParameterSeeder::class,
+            LegalDocumentSeeder::class,
         ]);
 
         if (app()->environment(['local', 'testing'])) {

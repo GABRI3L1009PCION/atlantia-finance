@@ -3,6 +3,7 @@ import { ReviewFilter, amount } from '@/components/auditor/kit';
 import type { AuditorContext } from '@/components/auditor/kit';
 import { PageHeader, Shell, formatDate } from '@/components/office-admin/kit';
 import { Card, Table } from '@/components/supervisor/kit';
+import { statusLabel } from '@/lib/status-labels';
 
 type Document = {
     type: string;
@@ -80,7 +81,9 @@ export default function AuditorDocuments({
                                         ? '—'
                                         : amount(doc.amount_cents)}
                                 </td>
-                                <td className="px-2 py-2">{doc.status}</td>
+                                <td className="px-2 py-2">
+                                    {statusLabel(doc.status)}
+                                </td>
                                 <td className="px-2 py-2">
                                     <a
                                         href={doc.trace}

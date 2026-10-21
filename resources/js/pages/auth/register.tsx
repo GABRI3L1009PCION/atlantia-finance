@@ -178,9 +178,34 @@ export default function Register({
                                         htmlFor="terms"
                                         className="text-xs leading-5 font-normal text-slate-600"
                                     >
-                                        Acepto los términos del servicio y la
-                                        política de privacidad de Atlantia
-                                        Finance.
+                                        Acepto los{' '}
+                                        <a
+                                            href="/terminos"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="font-semibold underline"
+                                        >
+                                            Términos y Condiciones
+                                        </a>
+                                        , la{' '}
+                                        <a
+                                            href="/privacidad"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="font-semibold underline"
+                                        >
+                                            Política de Privacidad
+                                        </a>{' '}
+                                        y el{' '}
+                                        <a
+                                            href="/tratamiento-de-datos"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="font-semibold underline"
+                                        >
+                                            Tratamiento de datos personales
+                                        </a>{' '}
+                                        de Atlantia Finance.
                                     </Label>
                                 </div>
                                 <InputError

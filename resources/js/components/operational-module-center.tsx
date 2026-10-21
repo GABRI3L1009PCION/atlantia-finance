@@ -32,6 +32,7 @@ import type {
     OperationalRecord,
     OperationalWorkflow,
 } from '@/lib/operational-api';
+import { statusLabel } from '@/lib/status-labels';
 
 type Props = {
     company: { public_id: string; name: string };
@@ -41,54 +42,8 @@ type Props = {
     defaultOpen?: boolean;
 };
 
-const statusLabels: Record<string, string> = {
-    active: 'Activo',
-    approved: 'Aprobado',
-    archived: 'Archivado',
-    blocked: 'Bloqueado',
-    calculated: 'Calculado',
-    cancelled: 'Cancelado',
-    closed: 'Cerrado',
-    completed: 'Completado',
-    counting: 'En conteo',
-    draft: 'Borrador',
-    expired: 'Vencido',
-    failed: 'Fallido',
-    generated: 'Generado',
-    in_progress: 'En proceso',
-    in_review: 'En revisión',
-    inactive: 'Inactivo',
-    issued: 'Emitido',
-    maintenance: 'En mantenimiento',
-    open: 'Abierto',
-    paid: 'Pagado',
-    partially_received: 'Recepción parcial',
-    paused: 'En pausa',
-    pending: 'Pendiente',
-    pending_review: 'Pendiente de revisión',
-    posted: 'Contabilizado',
-    processing: 'Procesando',
-    published: 'Publicado',
-    ready: 'Listo',
-    received: 'Recibido',
-    reconciled: 'Conciliado',
-    rejected: 'Rechazado',
-    reopened: 'Reabierto',
-    review: 'Revisión',
-    reviewed: 'Revisado',
-    reversed: 'Revertido',
-    sent: 'Enviado',
-    snoozed: 'Pospuesto',
-    superseded: 'Sustituido',
-    testing: 'En prueba',
-    transferred: 'Trasladado',
-    validation: 'Validación',
-    adjustment: 'Ajustes',
-};
-
 const today = () => new Date().toISOString().slice(0, 10);
-const label = (status: string) =>
-    statusLabels[status] ?? status.replaceAll('_', ' ');
+const label = statusLabel;
 const money = (cents: number, currency: string) =>
     new Intl.NumberFormat('es-GT', { style: 'currency', currency }).format(
         cents / 100,

@@ -11,6 +11,7 @@ use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Platform\LegalDocumentService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -124,6 +125,8 @@ class CreateNewUser implements CreatesNewUsers
             },
             attempts: 3,
         ));
+
+        app(LegalDocumentService::class)->acceptCurrent($user, 'register', request()->ip(), request()->userAgent());
 
         request()->session()->put('onboarding.selected_plan', [
             'code' => $planPrice->plan->code,

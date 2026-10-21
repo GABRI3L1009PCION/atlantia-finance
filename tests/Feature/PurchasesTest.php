@@ -84,6 +84,7 @@ function projectDatabaseTables(): array
         'audit_controls', 'audit_engagements', 'audit_engagement_members', 'audit_plans', 'audit_risks', 'audit_control_assessments', 'audit_programs', 'audit_procedures',
         'audit_samples', 'audit_sample_items', 'audit_findings', 'audit_evidence_requests', 'audit_finding_responses', 'audit_working_papers', 'audit_reports', 'audit_access_grants',
         'client_company_access', 'client_requests', 'client_documents', 'client_document_versions', 'client_approval_requests', 'published_reports', 'client_conversations', 'client_messages', 'company_data_change_requests', 'api_tokens', 'api_request_logs', 'webhook_endpoints', 'webhook_deliveries', 'platform_staff', 'platform_audit_events', 'plan_versions', 'entitlement_overrides', 'feature_flags', 'feature_flag_targets', 'saas_invoices', 'saas_invoice_lines', 'saas_credits', 'usage_snapshots', 'platform_settings', 'notification_templates', 'platform_integrations', 'service_health_checks', 'job_runs', 'scheduled_task_runs', 'luzma_tool_states', 'login_attempts', 'support_tickets', 'support_ticket_messages', 'support_access_requests', 'system_incidents', 'system_incident_updates', 'system_incident_organizations',
+        'legal_documents', 'legal_acceptances',
     ];
 }
 

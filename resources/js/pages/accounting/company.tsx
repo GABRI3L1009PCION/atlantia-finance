@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/dialog';
 import { hasPlanFeature } from '@/lib/plan-capabilities';
 import type { PlanFeature } from '@/lib/plan-capabilities';
+import { entryStatusLabels } from '@/lib/status-labels';
 import * as routes from '@/routes/accounting';
 import * as fel from '@/routes/accounting/fel';
 
@@ -415,6 +416,7 @@ type Props = {
         trial_view?: string;
         trial_from?: string;
         trial_to?: string;
+        entry?: string;
     };
     importPreview?: {
         entries: Record<
@@ -440,16 +442,7 @@ const types: Record<string, string> = {
     income: 'Ingreso',
     expense: 'Gasto',
 };
-const statuses: Record<string, string> = {
-    draft: 'Borrador',
-    pending_review: 'Pendiente de revisión',
-    reviewed: 'Revisado',
-    approved: 'Aprobado',
-    posted: 'Contabilizado',
-    reversed: 'Revertido',
-    rejected: 'Rechazado',
-    void: 'Descartado',
-};
+const statuses = entryStatusLabels;
 const today = () => new Date().toLocaleDateString('en-CA');
 const entrySources: Record<string, string> = {
     manual: 'Manual',
@@ -3614,7 +3607,14 @@ export default function CompanyAccounting(props: Props) {
     const [journalFrom, setJournalFrom] = useState(filters.journal_from ?? '');
     const [journalTo, setJournalTo] = useState(filters.journal_to ?? '');
     const [importFile, setImportFile] = useState<File | null>(null);
-    const [selectedEntryId, setSelectedEntryId] = useState<number | null>(null);
+    // A link from a source document (purchase, sale, payment...) arrives with the entry to show.
+    const [selectedEntryId, setSelectedEntryId] = useState<number | null>(
+        () =>
+            (filters.entry
+                ? journal.data.find((row) => row.public_id === filters.entry)
+                      ?.id
+                : undefined) ?? null,
+    );
     const [draftOpen, setDraftOpen] = useState(false);
     const [newAccountOpen, setNewAccountOpen] = useState(false);
     const [newPeriodOpen, setNewPeriodOpen] = useState(false);
@@ -3870,6 +3870,14 @@ export default function CompanyAccounting(props: Props) {
         });
     }
 
+    /** Opens the journal and, when the user can write, the new-entry form. */
+    const openJournal = (withForm: boolean) => {
+        switchSection('journal', 'libro-diario');
+
+        if (withForm) {
+            setDraftOpen(true);
+        }
+    };
     const openPreparedModule = (module: string) =>
         router.visit(`${routes.companyDashboard.url(uuid)}?module=${module}`);
     const accountingModules: AccountingModule[] = [
@@ -3884,7 +3892,7 @@ export default function CompanyAccounting(props: Props) {
             title: 'Asientos Contables',
             subtitle: 'Registro y edición de partidas',
             icon: FilePenLine,
-            action: () => setTab(canWrite ? 'draft' : 'journal'),
+            action: () => openJournal(canWrite),
             tone: 'wine',
         },
         {
@@ -3912,7 +3920,7 @@ export default function CompanyAccounting(props: Props) {
             title: 'Auxiliares Contables',
             subtitle: 'Detalle por cuenta y movimiento',
             icon: UsersRound,
-            action: () => setTab('ledger'),
+            action: () => switchSection('ledger', 'libro-mayor'),
             tone: 'wine',
         },
         {
@@ -3947,18 +3955,10 @@ export default function CompanyAccounting(props: Props) {
             tone: 'blue',
         },
         {
-            title: 'Asientos Recurrentes',
-            subtitle: 'Automatización mensual',
-            icon: RefreshCw,
-            action: () => openPreparedModule('asientos-recurrentes'),
-            tone: 'orange',
-            requiredFeature: 'approval_workflows',
-        },
-        {
             title: 'Ajustes Contables',
             subtitle: 'Reclasificaciones y provisiones',
             icon: SlidersHorizontal,
-            action: () => setTab(canWrite ? 'draft' : 'journal'),
+            action: () => openJournal(canWrite),
             tone: 'purple',
         },
         {
@@ -3979,14 +3979,14 @@ export default function CompanyAccounting(props: Props) {
             title: 'Saldos Iniciales',
             subtitle: 'Configuración de arranque',
             icon: FilePlus2,
-            action: () => setTab(canWrite ? 'draft' : 'journal'),
+            action: () => openJournal(canWrite),
             tone: 'purple',
         },
         {
             title: 'Importación Contable',
             subtitle: 'Carga desde Excel o CSV',
             icon: FolderUp,
-            action: () => openPreparedModule('importacion-contable'),
+            action: () => switchSection('journal', 'libro-diario'),
             tone: 'blue',
         },
     ];

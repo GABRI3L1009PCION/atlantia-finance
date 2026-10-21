@@ -24,6 +24,7 @@ import {
     primary,
     secondary,
 } from '@/components/accounting-ui';
+import { statusLabel as translateStatus } from '@/lib/status-labels';
 import * as routes from '@/routes/accounting';
 
 type PurchaseDocument = {
@@ -1047,15 +1048,25 @@ export default function Purchase({
                                                 {entry.entry_number
                                                     ? `#${entry.entry_number}`
                                                     : 'sin numerar'}{' '}
-                                                · {entry.entry_status}
+                                                ·{' '}
+                                                {translateStatus(
+                                                    entry.entry_status,
+                                                )}
                                             </small>
                                         </span>
                                     </span>
                                     <Link
-                                        href={routes.show(company.public_id)}
+                                        href={`${routes.show.url(
+                                            company.public_id,
+                                            {
+                                                query: {
+                                                    entry: entry.entry_public_id,
+                                                },
+                                            },
+                                        )}#libro-diario`}
                                         className="font-semibold text-[#7d0808]"
                                     >
-                                        Abrir libros
+                                        Abrir asiento
                                     </Link>
                                 </div>
                             ))}

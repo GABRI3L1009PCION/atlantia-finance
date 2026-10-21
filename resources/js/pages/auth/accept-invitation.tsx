@@ -96,9 +96,36 @@ export default function AcceptInvitation({
                                                 value="1"
                                                 required
                                             />
-                                            Acepto los términos del servicio y
-                                            la política de privacidad de
-                                            Atlantia Finance.
+                                            <span>
+                                                Acepto los{' '}
+                                                <a
+                                                    href="/terminos"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="font-semibold underline"
+                                                >
+                                                    Términos y Condiciones
+                                                </a>
+                                                , la{' '}
+                                                <a
+                                                    href="/privacidad"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="font-semibold underline"
+                                                >
+                                                    Política de Privacidad
+                                                </a>{' '}
+                                                y el{' '}
+                                                <a
+                                                    href="/tratamiento-de-datos"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="font-semibold underline"
+                                                >
+                                                    Tratamiento de datos
+                                                </a>{' '}
+                                                de Atlantia Finance.
+                                            </span>
                                         </label>
                                         <InputError message={errors.terms} />
                                     </>
