@@ -16,6 +16,8 @@ type Props = {
         name: string;
         tagline: string | null;
         status: string;
+        status_label: string;
+        can_pay: boolean;
         billing_period: 'monthly' | 'annual';
         price: number;
         currency: string;
@@ -58,13 +60,13 @@ type Props = {
 
 const card =
     'rounded-2xl border border-[#ebe3df] bg-white p-6 shadow-[0_10px_28px_-22px_rgba(49,11,8,.55)]';
-const STATUS: Record<string, { label: string; style: string }> = {
-    active: { label: 'Activo', style: 'bg-emerald-100 text-emerald-700' },
-    trialing: { label: 'En prueba', style: 'bg-blue-100 text-blue-700' },
-    past_due: { label: 'Pago vencido', style: 'bg-red-100 text-red-700' },
-    paused: { label: 'Pausado', style: 'bg-amber-100 text-amber-700' },
-    canceled: { label: 'Cancelado', style: 'bg-slate-100 text-slate-600' },
-    none: { label: 'Sin suscripción', style: 'bg-slate-100 text-slate-600' },
+// The label comes from the server; this only picks the badge colour.
+const STATUS_STYLE: Record<string, string> = {
+    active: 'bg-emerald-100 text-emerald-700',
+    trialing: 'bg-blue-100 text-blue-700',
+    past_due: 'bg-red-100 text-red-700',
+    grace_period: 'bg-red-100 text-red-700',
+    paused: 'bg-amber-100 text-amber-700',
 };
 const PAYMENT: Record<string, { label: string; style: string }> = {
     paid: { label: 'Pagada', style: 'bg-emerald-50 text-emerald-700' },
@@ -151,7 +153,10 @@ export default function Subscription({
     const [period, setPeriod] = useState<'monthly' | 'annual'>(
         plan.billing_period,
     );
-    const status = STATUS[plan.status] ?? STATUS.none;
+    const status = {
+        label: plan.status_label,
+        style: STATUS_STYLE[plan.status] ?? 'bg-slate-100 text-slate-600',
+    };
     const monthlyShown =
         plan.billing_period === 'annual' ? plan.price / 12 : plan.price;
 
@@ -187,6 +192,14 @@ export default function Subscription({
                                     >
                                         {status.label}
                                     </span>
+                                    {plan.can_pay && (
+                                        <Link
+                                            href="/billing/checkout"
+                                            className="ml-auto rounded-lg bg-[#8a0b0b] px-4 py-2 text-xs font-bold text-white"
+                                        >
+                                            Pagar ahora
+                                        </Link>
+                                    )}
                                 </div>
                                 <div className="mt-4 flex flex-wrap items-center justify-between gap-6">
                                     <div className="flex items-center gap-4">
