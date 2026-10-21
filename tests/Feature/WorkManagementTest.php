@@ -842,6 +842,7 @@ test('the firm administrator edits the firm profile and the supervising director
     expect(DB::table('firm_profiles')->where('organization_id', $f['org']->id)->value('municipality'))->toBe('Puerto Barrios')
         ->and(DB::table('organizations')->where('id', $f['org']->id)->value('name'))->toBe('Contadores de Izabal');
     $this->patch(route('office.firmProfile.update'), [...$payload, 'primary_color' => 'rojo'])->assertSessionHasErrors('primary_color');
+    $this->patch(route('office.firmProfile.update'), [...$payload, 'website' => 'javascript:alert(1)'])->assertSessionHasErrors('website');
 
     $authorization->assignRole($f['org'], $f['owner'], $f['assistant']->id, 'office_admin');
 

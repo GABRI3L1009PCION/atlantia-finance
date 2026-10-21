@@ -52,7 +52,7 @@ class FirmProfileController extends Controller
             'tax_id' => ['nullable', 'string', 'max:30', 'regex:/^[A-Za-z0-9-]+$/'],
             'organization_type' => ['nullable', Rule::in(self::TYPES)],
             'founded_year' => 'nullable|integer|min:1800|max:'.now()->year,
-            'website' => 'nullable|url|max:190',
+            'website' => 'nullable|url:http,https|max:190',
             'description' => 'nullable|string|max:500',
             'country' => 'required|string|max:60',
             'department' => 'nullable|string|max:80',

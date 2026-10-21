@@ -4,6 +4,7 @@ namespace App\Actions\Fortify;
 
 use App\Concerns\PasswordValidationRules;
 use App\Models\User;
+use App\Services\Auth\SignOutElsewhere;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Fortify\Contracts\ResetsUserPasswords;
 
@@ -28,5 +29,6 @@ class ResetUserPassword implements ResetsUserPasswords
             'temporary_password_expires_at' => null,
             'password_changed_at' => now(),
         ])->save();
+        SignOutElsewhere::after($user);
     }
 }

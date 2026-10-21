@@ -10,6 +10,7 @@ use App\Services\AccountingService;
 use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkManagement\WorkDashboardService;
+use App\Support\CsvCell;
 use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Crypt;
@@ -334,7 +335,7 @@ class IntegrationConnectionService
             $rows[] = [$company['name'], $company['tax_id'], $company['office_name'], $company['period_name'] ?? 'Sin período', $company['progress'], $company['pending_tasks'], $company['overdue_tasks'] ?? 0];
         }
 
-        $csv = "\xEF\xBB\xBF".implode("\n", array_map(fn (array $row): string => implode(',', array_map(fn ($cell): string => '"'.str_replace('"', '""', (string) $cell).'"', $row)), $rows));
+        $csv = "\xEF\xBB\xBF".implode("\n", array_map(fn (array $row): string => implode(',', array_map(CsvCell::quote(...), $row)), $rows));
 
         try {
             $where = app(IntegrationOAuthService::class)->upload($organization, $provider, 'estado-de-empresas-'.now()->format('Ymd-His').'.csv', $csv);
@@ -412,7 +413,7 @@ class IntegrationConnectionService
             str_contains($url, 'logic.azure.com') || str_contains($url, 'powerplatform.com') => ['type' => 'message', 'attachments' => [['contentType' => 'application/vnd.microsoft.card.adaptive', 'content' => ['$schema' => 'http://adaptivecards.io/schemas/adaptive-card.json', 'type' => 'AdaptiveCard', 'version' => '1.4', 'body' => [['type' => 'TextBlock', 'text' => $title, 'weight' => 'Bolder', 'wrap' => true], ['type' => 'TextBlock', 'text' => $text, 'wrap' => true]]]]]],
             default => ['@type' => 'MessageCard', '@context' => 'http://schema.org/extensions', 'summary' => $title, 'title' => $title, 'text' => $text],
         };
-        $response = Http::timeout(8)->withoutRedirecting()->post($url, $payload);
+        $response = Http::timeout(8)->withoutRedirecting()->withOptions($this->guard->pinnedOptions($url))->post($url, $payload);
 
         if ($response->failed()) {
             throw new \RuntimeException(self::PROVIDERS[$provider]['label'].' respondió '.$response->status().'.');

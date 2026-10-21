@@ -68,7 +68,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', WelcomeController::class)->name('home');
 
-Route::post('webhooks/recurrente', RecurrenteWebhookController::class)->middleware('tenancy.system')->name('webhooks.recurrente');
+Route::post('webhooks/recurrente', RecurrenteWebhookController::class)->middleware(['throttle:120,1', 'tenancy.system'])->name('webhooks.recurrente');
 Route::get('calendar/{token}.ics', [CalendarFeedController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware(['throttle:60,1', 'tenancy.system'])->name('calendar.feed');
 Route::post('forgot-password', [PasswordHelpController::class, 'store'])->middleware(['guest', 'throttle:5,1', 'tenancy.system'])->name('password.email');
 Route::middleware('auth')->group(function () {

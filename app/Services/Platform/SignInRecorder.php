@@ -34,6 +34,20 @@ class SignInRecorder
         $this->write(['email' => $email === '' ? null : mb_substr($email, 0, 255), 'user_id' => $event->user instanceof User ? $event->user->id : null, 'succeeded' => false]);
     }
 
+    /**
+     * Security-relevant account events go to the application log with who, from where and what, never secrets, codes
+     * or passwords.
+     */
+    public function security(string $event, ?User $user, ?string $email = null): void
+    {
+        Log::notice('security.'.$event, [
+            'user_id' => $user?->id,
+            'email' => $user->email ?? ($email === null || $email === '' ? null : mb_substr($email, 0, 255)),
+            'ip' => request()->ip(),
+            'user_agent' => mb_substr((string) request()->userAgent(), 0, 255),
+        ]);
+    }
+
     /** @param array<string, mixed> $values */
     private function write(array $values): void
     {
