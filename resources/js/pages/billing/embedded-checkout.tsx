@@ -21,6 +21,11 @@ type Props = {
         currencyCode: string;
         amount: string;
     };
+    invoice?: {
+        number: string;
+        periodStart: string | null;
+        periodEnd: string | null;
+    } | null;
     paymentProviderReady: boolean;
     paymentStatus?: 'processing' | 'cancelled' | null;
     planChanged?: boolean;
@@ -46,6 +51,7 @@ export default function EmbeddedCheckout({
     organization,
     subscription,
     plan,
+    invoice = null,
     paymentProviderReady,
     paymentStatus,
     planChanged = false,
@@ -275,6 +281,14 @@ export default function EmbeddedCheckout({
                                                 ? 'anual'
                                                 : 'mensual'}
                                         </p>
+                                        {invoice && (
+                                            <p className="mt-1 text-sm text-slate-500">
+                                                Factura {invoice.number}
+                                                {invoice.periodStart &&
+                                                    invoice.periodEnd &&
+                                                    ` · del ${invoice.periodStart} al ${invoice.periodEnd}`}
+                                            </p>
+                                        )}
                                     </div>
                                     <strong className="text-xl text-[#640000]">
                                         {currency.format(Number(plan.amount))}
@@ -305,15 +319,19 @@ export default function EmbeddedCheckout({
 
                             <p className="mt-8 text-xs leading-5 text-slate-500">
                                 Atlantia nunca recibe ni almacena el número de
-                                tu tarjeta. La cuenta se activa únicamente al
-                                confirmar el webhook firmado.
+                                tu tarjeta.{' '}
+                                {invoice
+                                    ? 'El pago se aplica a esta factura al confirmarse con el proveedor; es un cargo único, no se programan cobros automáticos.'
+                                    : 'La cuenta se activa únicamente al confirmar el webhook firmado. Es un cargo único: cada renovación se paga con su propia factura.'}
                             </p>
-                            <Link
-                                href="/billing/plans"
-                                className="mt-5 inline-flex items-center rounded-xl border border-[#640000]/20 bg-white px-4 py-2.5 text-sm font-semibold text-[#640000] hover:bg-rose-50"
-                            >
-                                Cambiar plan
-                            </Link>
+                            {!invoice && (
+                                <Link
+                                    href="/billing/plans"
+                                    className="mt-5 inline-flex items-center rounded-xl border border-[#640000]/20 bg-white px-4 py-2.5 text-sm font-semibold text-[#640000] hover:bg-rose-50"
+                                >
+                                    Cambiar plan
+                                </Link>
+                            )}
                         </aside>
 
                         <section className="relative min-h-[760px] bg-white p-3 sm:p-6 lg:p-8">

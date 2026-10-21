@@ -35,14 +35,13 @@ class CreateCheckoutController extends Controller
             throw ValidationException::withMessages(['billing' => 'Completa tus datos fiscales antes de iniciar el pago.']);
         }
 
-        /** @var Subscription $subscription */
-        $subscription = $organization->subscriptions()->whereIn('status', CheckoutController::PAYABLE)
-            ->with(['items.planPrice.plan'])->latest()->firstOrFail();
+        $subscription = CheckoutController::payableSubscription($organization);
+        abort_if($subscription === null, 404);
         $item = $subscription->items->firstWhere('item_type', 'base_plan');
         abort_if($item === null || ! $item->planPrice->is_active, 409, 'El plan seleccionado no está disponible.');
 
-        // A running subscription that fell behind pays its unpaid invoice once (no second recurring charge), and the
-        // webhook settles that invoice, which restores the firm's standing.
+        // A running subscription pays its open invoice (renewal, end of trial or overdue period) with a single charge, and
+        // the webhook settles that invoice, which also restores the firm's standing when it was behind.
         $outstanding = CheckoutController::outstandingInvoice($subscription);
         if ($outstanding !== null) {
             return $this->payInvoice($request, $outstanding);
@@ -86,9 +85,9 @@ class CreateCheckoutController extends Controller
                     'amount_in_cents' => (int) bcmul((string) $price->amount, '100', 0),
                     'currency' => $price->currency_code,
                     'quantity' => 1,
-                    'charge_type' => 'recurring',
-                    'billing_interval' => $price->billing_period === 'annual' ? 'year' : 'month',
-                    'billing_interval_count' => 1,
+                    // A single charge: every later period is invoiced by Atlantia and paid with that invoice's own
+                    // checkout, so the provider never charges on its own and the books always match the bank.
+                    'charge_type' => 'one_time',
                 ]],
                 'metadata' => [
                     'payment_public_id' => $payment->public_id,

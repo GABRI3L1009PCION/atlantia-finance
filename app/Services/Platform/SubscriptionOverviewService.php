@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Platform;
 
 use App\Models\Organization;
+use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkManagement\OfficeInvitationService;
 use App\Support\PlatformStatus;
 use Illuminate\Support\Facades\DB;
@@ -61,8 +62,9 @@ class SubscriptionOverviewService
                 'tagline' => $resolved['plan']->tagline ?? ($resolved['plan']->description ?? null),
                 'status' => $subscription->status ?? 'none',
                 'status_label' => PlatformStatus::SUBSCRIPTION_LABELS[$subscription->status ?? ''] ?? 'Sin suscripción',
-                // A period that fell behind is paid from the checkout screen, which charges the unpaid invoice.
-                'can_pay' => in_array($subscription->status ?? null, ['past_due', 'grace_period'], true),
+                // A renewal, end of trial or overdue period is paid from the checkout screen, which charges the open invoice.
+                'can_pay' => $subscription !== null && $subscription->status !== 'incomplete' && app(TenantDatabaseContext::class)->runAsSystem(fn (): bool => DB::table('saas_invoices')
+                    ->where('organization_id', $organization->id)->where('subscription_id', $subscription->id)->whereIn('status', ['open', 'past_due'])->exists()),
                 'billing_period' => $period,
                 'price' => $price,
                 'currency' => $resolved['plan']->currency_code ?? 'GTQ',

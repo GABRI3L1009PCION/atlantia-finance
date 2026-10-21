@@ -231,7 +231,7 @@ class SubscriptionService
             } else {
                 $result['renewed']++;
             }
-            $this->templates->notifyOnce((int) $subscription->organization_id, 'subscription_renewal', 'renewal:'.$invoice->id, ['invoice' => $invoice->number, 'amount' => $invoice->currency_code.' '.number_format((float) $invoice->total, 2)]);
+            $this->templates->notifyOnce((int) $subscription->organization_id, 'subscription_renewal', 'renewal:'.$invoice->id, ['invoice' => $invoice->number, 'amount' => $invoice->currency_code.' '.number_format((float) $invoice->total, 2), 'due' => $invoice->due_on === null ? '' : Carbon::parse($invoice->due_on)->format('d/m/Y')]);
             $this->audit->record(null, 'subscription.renewed', 'subscriptions', (int) $subscription->id, null, ['period_start' => $start->toDateString(), 'invoice' => $invoice->number], null, (int) $subscription->organization_id);
         }
         foreach (DB::table('subscriptions')->where('status', 'trialing')->whereBetween('trial_ends_at', [now(), now()->addDays(3)])->get() as $trial) {

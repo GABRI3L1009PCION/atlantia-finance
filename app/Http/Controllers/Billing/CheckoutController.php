@@ -22,8 +22,26 @@ use stdClass;
 
 class CheckoutController extends Controller
 {
-    /** Subscriptions the owner can pay from this screen: the first payment, or an overdue period (past due or in grace). */
+    /**
+     * Subscriptions the owner can pay from this screen: the first payment, an overdue period (past due or in grace) and,
+     * through its open invoice, a running one whose new period (renewal or end of trial) is not paid yet.
+     */
     public const PAYABLE = ['incomplete', 'past_due', 'grace_period'];
+
+    private const RUNNING = ['active', 'trialing'];
+
+    /** The subscription the owner has to pay now, if any. */
+    public static function payableSubscription(Organization $organization): ?Subscription
+    {
+        /** @var Subscription|null $subscription */
+        $subscription = $organization->subscriptions()->whereIn('status', [...self::PAYABLE, ...self::RUNNING])
+            ->with(['items.planPrice.plan'])->latest()->first();
+        if ($subscription === null || (in_array($subscription->status, self::RUNNING, true) && self::outstandingInvoice($subscription) === null)) {
+            return null;
+        }
+
+        return $subscription;
+    }
 
     /** Oldest unpaid invoice of a subscription that is already running (none while the first payment is pending). */
     public static function outstandingInvoice(Subscription $subscription): ?stdClass
@@ -44,7 +62,8 @@ class CheckoutController extends Controller
             ->latest('organizations.created_at')->first();
         abort_if($organization === null, 403);
 
-        $active = $organization->subscriptions()->where('status', 'active')->exists();
+        // "Confirmed" means active with nothing left to pay, so paying a renewal invoice is confirmed only by its webhook.
+        $active = $organization->subscriptions()->where('status', 'active')->exists() && self::payableSubscription($organization) === null;
 
         return response()->json([
             'active' => $active,
@@ -62,7 +81,8 @@ class CheckoutController extends Controller
 
         abort_if($organization === null, 403, 'No tienes una organización para facturar.');
 
-        if ($organization->subscriptions()->where('status', 'active')->exists()) {
+        $subscription = self::payableSubscription($organization);
+        if ($subscription === null && $organization->subscriptions()->where('status', 'active')->exists()) {
             return redirect()->route('dashboard');
         }
 
@@ -74,16 +94,10 @@ class CheckoutController extends Controller
             $organization->update(['status' => 'pending_payment']);
         }
 
-        /** @var Subscription $subscription */
-        $subscription = $organization->subscriptions()
-            ->whereIn('status', self::PAYABLE)
-            ->with(['items.planPrice.plan'])
-            ->latest()
-            ->firstOrFail();
-
+        abort_if($subscription === null, 404);
         $item = $subscription->items->firstWhere('item_type', 'base_plan');
         abort_if($item === null, 409, 'La suscripción no tiene un plan base.');
-        // An overdue firm pays what it owes (its oldest unpaid invoice), not a fresh plan price.
+        // A running firm pays what it owes (its oldest unpaid invoice: a renewal or an overdue period), not a fresh plan price.
         $outstanding = self::outstandingInvoice($subscription);
 
         return Inertia::render('billing/embedded-checkout', [
@@ -101,6 +115,11 @@ class CheckoutController extends Controller
                 'billingPeriod' => $item->planPrice->billing_period,
                 'currencyCode' => $item->planPrice->currency_code,
                 'amount' => $outstanding === null ? $item->planPrice->amount : (string) $outstanding->total,
+            ],
+            'invoice' => $outstanding === null ? null : [
+                'number' => (string) $outstanding->number,
+                'periodStart' => $outstanding->period_start,
+                'periodEnd' => $outstanding->period_end,
             ],
             'paymentProviderReady' => filled(config('services.recurrente.secret')) && filled(config('services.recurrente.webhook_secret')),
             'paymentStatus' => $request->string('payment')->toString() ?: null,
