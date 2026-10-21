@@ -9,12 +9,15 @@ use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\Subscription;
 use App\Services\Payments\RecurrenteClient;
+use App\Services\Platform\Billing\SaaSBillingService;
+use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use stdClass;
 use Throwable;
 
 class CreateCheckoutController extends Controller
@@ -33,10 +36,17 @@ class CreateCheckoutController extends Controller
         }
 
         /** @var Subscription $subscription */
-        $subscription = $organization->subscriptions()->whereIn('status', ['incomplete', 'past_due'])
+        $subscription = $organization->subscriptions()->whereIn('status', CheckoutController::PAYABLE)
             ->with(['items.planPrice.plan'])->latest()->firstOrFail();
         $item = $subscription->items->firstWhere('item_type', 'base_plan');
         abort_if($item === null || ! $item->planPrice->is_active, 409, 'El plan seleccionado no está disponible.');
+
+        // A running subscription that fell behind pays its unpaid invoice once (no second recurring charge), and the
+        // webhook settles that invoice, which restores the firm's standing.
+        $outstanding = CheckoutController::outstandingInvoice($subscription);
+        if ($outstanding !== null) {
+            return $this->payInvoice($request, $outstanding);
+        }
 
         $recentAttempt = $subscription->payments()
             ->where('provider', 'recurrente')
@@ -118,5 +128,30 @@ class CreateCheckoutController extends Controller
             'checkoutUrl' => (string) $checkout['checkout_url'],
             'checkoutId' => (string) $checkout['id'],
         ], 201);
+    }
+
+    private function payInvoice(Request $request, stdClass $invoice): JsonResponse
+    {
+        // The invoice and its payments are platform rows; the invoice was already resolved from the owner's subscription.
+        return app(TenantDatabaseContext::class)->runAsSystem(fn (): JsonResponse => $this->payInvoiceAsPlatform($request, $invoice));
+    }
+
+    private function payInvoiceAsPlatform(Request $request, stdClass $invoice): JsonResponse
+    {
+        $recent = DB::table('payment_attempts')->join('payments', 'payments.id', '=', 'payment_attempts.payment_id')
+            ->where('payments.saas_invoice_id', $invoice->id)->where('payments.status', 'pending')->where('payment_attempts.status', 'created')
+            ->where('payment_attempts.attempted_at', '>=', now()->subMinutes(25))->orderByDesc('payment_attempts.id')->value('payment_attempts.provider_attempt_id');
+        if ($recent !== null) {
+            return response()->json(['checkoutUrl' => 'https://app.recurrente.com/checkout-session/'.$recent, 'checkoutId' => (string) $recent, 'reused' => true]);
+        }
+
+        try {
+            $link = app(SaaSBillingService::class)->paymentLink($request->user(), (int) $invoice->id);
+        } catch (ValidationException $exception) {
+            return response()->json(['message' => collect($exception->errors())->flatten()->first() ?? 'No pudimos crear el pago. No se realizó ningún cobro.'], 503);
+        }
+        $checkoutId = (string) DB::table('payment_attempts')->where('payment_id', $link['payment_id'])->orderByDesc('id')->value('provider_attempt_id');
+
+        return response()->json(['checkoutUrl' => $link['url'], 'checkoutId' => $checkoutId], 201);
     }
 }

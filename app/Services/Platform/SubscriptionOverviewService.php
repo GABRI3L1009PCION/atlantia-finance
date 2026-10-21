@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Platform;
 
 use App\Models\Organization;
+use App\Services\WorkManagement\OfficeInvitationService;
+use App\Support\PlatformStatus;
 use Illuminate\Support\Facades\DB;
 
 /** What the firm has contracted with Atlantia and how much of it is in use. Read only; the plan itself is changed with sales/support. */
@@ -42,8 +44,10 @@ class SubscriptionOverviewService
             + (int) DB::table('journal_entry_documents')->where('organization_id', $organization->id)->sum('size_bytes');
         $usage = [
             ['key' => 'offices', 'label' => 'Oficinas', 'used' => DB::table('offices')->where('organization_id', $organization->id)->whereNull('deleted_at')->count(), 'limit' => $limits['offices']['value'] ?? null, 'unit' => ''],
-            ['key' => 'users', 'label' => 'Usuarios', 'used' => DB::table('organization_user')->where('organization_id', $organization->id)->where('status', 'active')->count(), 'limit' => $limits['users']['value'] ?? null, 'unit' => ''],
-            ['key' => 'companies', 'label' => 'Empresas cliente', 'used' => DB::table('companies')->where('organization_id', $organization->id)->count(), 'limit' => null, 'unit' => ''],
+            // Counted as the invitation and company limits enforce them: client-portal users take no seat and client
+            // companies are the plan's "expedientes activos" (active_cases).
+            ['key' => 'users', 'label' => 'Usuarios', 'used' => app(OfficeInvitationService::class)->seatsInUse($organization), 'limit' => $limits['users']['value'] ?? null, 'unit' => ''],
+            ['key' => 'companies', 'label' => 'Empresas cliente', 'used' => DB::table('companies')->where('organization_id', $organization->id)->count(), 'limit' => $limits['active_cases']['value'] ?? null, 'unit' => ''],
             ['key' => 'storage', 'label' => 'Almacenamiento', 'used' => round($storage / 1_073_741_824, 2), 'limit' => isset($limits['storage_bytes']['value']) ? round($limits['storage_bytes']['value'] / 1_073_741_824, 2) : null, 'unit' => 'GB'],
             ['key' => 'ai', 'label' => 'Consultas a Luzma IA', 'used' => DB::table('luzma_messages')->where('organization_id', $organization->id)->where('role', 'user')->where('created_at', '>=', now()->startOfMonth())->count(), 'limit' => $limits['ai_queries']['value'] ?? null, 'unit' => ''],
         ];
@@ -56,6 +60,9 @@ class SubscriptionOverviewService
                 'name' => $resolved['plan']->name ?? 'Sin plan',
                 'tagline' => $resolved['plan']->tagline ?? ($resolved['plan']->description ?? null),
                 'status' => $subscription->status ?? 'none',
+                'status_label' => PlatformStatus::SUBSCRIPTION_LABELS[$subscription->status ?? ''] ?? 'Sin suscripción',
+                // A period that fell behind is paid from the checkout screen, which charges the unpaid invoice.
+                'can_pay' => in_array($subscription->status ?? null, ['past_due', 'grace_period'], true),
                 'billing_period' => $period,
                 'price' => $price,
                 'currency' => $resolved['plan']->currency_code ?? 'GTQ',

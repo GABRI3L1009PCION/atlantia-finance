@@ -86,15 +86,19 @@ class RecurrenteWebhookController extends Controller
         $attempt->update(['status' => 'succeeded']);
 
         $subscription = $payment->subscription;
-        $billingPeriod = $subscription->items()->with('planPrice')->where('item_type', 'base_plan')->firstOrFail()->planPrice->billing_period;
-        $subscription->update([
-            'provider' => 'recurrente',
-            'status' => 'active',
-            'current_period_starts_at' => now(),
-            'current_period_ends_at' => $billingPeriod === 'annual' ? now()->addYear() : now()->addMonth(),
-        ]);
-        if (! in_array($subscription->organization->status, ['suspended', 'archived'], true)) {
-            $subscription->organization->update(['status' => 'active']);
+        // Paying an invoice of a running subscription keeps its period: settling the invoice restores the standing
+        // (and lifts a suspension for non-payment). Only the first payment starts the subscription and its period.
+        if ($payment->saas_invoice_id === null) {
+            $billingPeriod = $subscription->items()->with('planPrice')->where('item_type', 'base_plan')->firstOrFail()->planPrice->billing_period;
+            $subscription->update([
+                'provider' => 'recurrente',
+                'status' => 'active',
+                'current_period_starts_at' => now(),
+                'current_period_ends_at' => $billingPeriod === 'annual' ? now()->addYear() : now()->addMonth(),
+            ]);
+            if (! in_array($subscription->organization->status, ['suspended', 'archived'], true)) {
+                $subscription->organization->update(['status' => 'active']);
+            }
         }
         DB::table('fel_subscription_requests')->insertOrIgnore([
             'payment_id' => $payment->id, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),

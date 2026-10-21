@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Services\Platform\PublicPlanCatalog;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -121,11 +122,22 @@ class FortifyServiceProvider extends ServiceProvider
                 ? $requestedBillingPeriod
                 : 'monthly';
 
+            // The plan summary shows the live catalog (the prices checkout charges); the config copy is only a fallback
+            // while the catalog cannot be read.
+            $live = collect(rescue(fn (): array => app(PublicPlanCatalog::class)->plans(), [], report: false))->firstWhere('code', $planCode);
+
             return Inertia::render('auth/register', [
                 'passwordRules' => Password::defaults()->toPasswordRulesString(),
-                'selectedPlan' => [
+                'selectedPlan' => $live === null ? [
                     'code' => $planCode,
                     ...$catalog[$planCode],
+                ] : [
+                    'code' => $live['code'],
+                    'name' => $live['name'],
+                    'monthly_price' => $live['monthly_price'],
+                    'annual_price' => $live['annual_price'],
+                    'price_prefix' => $live['price_prefix'],
+                    'features' => array_column($live['features'], 'text'),
                 ],
                 'billingPeriod' => $billingPeriod,
             ]);

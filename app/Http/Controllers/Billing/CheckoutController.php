@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
+use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,9 +18,25 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use stdClass;
 
 class CheckoutController extends Controller
 {
+    /** Subscriptions the owner can pay from this screen: the first payment, or an overdue period (past due or in grace). */
+    public const PAYABLE = ['incomplete', 'past_due', 'grace_period'];
+
+    /** Oldest unpaid invoice of a subscription that is already running (none while the first payment is pending). */
+    public static function outstandingInvoice(Subscription $subscription): ?stdClass
+    {
+        if ($subscription->status === 'incomplete') {
+            return null;
+        }
+
+        // SaaS invoices are platform rows (invisible to the firm's own session); the subscription already belongs to the owner.
+        return app(TenantDatabaseContext::class)->runAsSystem(fn (): ?stdClass => DB::table('saas_invoices')->where('organization_id', $subscription->organization_id)
+            ->where('subscription_id', $subscription->id)->whereIn('status', ['open', 'past_due'])->orderBy('id')->first());
+    }
+
     /** Reads only the authenticated owner's subscription; never activates a payment. */
     public function status(Request $request): JsonResponse
     {
@@ -59,13 +76,15 @@ class CheckoutController extends Controller
 
         /** @var Subscription $subscription */
         $subscription = $organization->subscriptions()
-            ->whereIn('status', ['incomplete', 'past_due'])
+            ->whereIn('status', self::PAYABLE)
             ->with(['items.planPrice.plan'])
             ->latest()
             ->firstOrFail();
 
         $item = $subscription->items->firstWhere('item_type', 'base_plan');
         abort_if($item === null, 409, 'La suscripción no tiene un plan base.');
+        // An overdue firm pays what it owes (its oldest unpaid invoice), not a fresh plan price.
+        $outstanding = self::outstandingInvoice($subscription);
 
         return Inertia::render('billing/embedded-checkout', [
             'organization' => [
@@ -81,7 +100,7 @@ class CheckoutController extends Controller
                 'name' => $item->planPrice->plan->name,
                 'billingPeriod' => $item->planPrice->billing_period,
                 'currencyCode' => $item->planPrice->currency_code,
-                'amount' => $item->planPrice->amount,
+                'amount' => $outstanding === null ? $item->planPrice->amount : (string) $outstanding->total,
             ],
             'paymentProviderReady' => filled(config('services.recurrente.secret')) && filled(config('services.recurrente.webhook_secret')),
             'paymentStatus' => $request->string('payment')->toString() ?: null,

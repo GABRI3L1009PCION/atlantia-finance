@@ -68,7 +68,7 @@ class GrowthOverviewService
         $services = $contracts->where('status', '!=', 'cancelled')->flatMap(fn (object $contract): array => array_map('trim', explode('+', $contract->services)))
             ->countBy()->sortDesc()->map(fn (int $count, string $name): array => ['name' => $name, 'value' => $count])->values();
 
-        $limit = $this->context->limit($organization, 'companies');
+        $limit = $this->context->limit($organization, 'active_cases');
         $limit = $limit > 0 && $limit !== PHP_INT_MAX ? $limit : null;
         $workload = collect($executive['workload']);
 
