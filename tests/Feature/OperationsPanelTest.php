@@ -15,6 +15,8 @@ use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {
     $this->seed(PlanCatalogSeeder::class);
+    // The fixture's period is September 2026; freeze the clock inside its closing window so the expectations never expire.
+    $this->travelTo(now()->setDate(2026, 9, 30)->setTime(10, 0));
 });
 
 test('the manager panel only shows the coordinated office and real metrics', function () {
