@@ -49,8 +49,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
         $middleware->prepend(AssignCorrelationId::class);
 
-        $middleware->web(append: [
-            AddSecurityHeaders::class,
+        $middleware->api(prepend: [AddSecurityHeaders::class]);
+
+        $middleware->web(prepend: [AddSecurityHeaders::class], append: [
             SetTenantDatabaseContext::class,
             EnforceServiceHours::class,
             EnforcePasswordChange::class,

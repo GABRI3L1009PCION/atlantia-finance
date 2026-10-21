@@ -30,8 +30,10 @@ use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkManagement\TaskSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
@@ -55,6 +57,11 @@ use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
 use Laravel\Fortify\Contracts\TwoFactorLoginResponse as TwoFactorLoginResponseContract;
 use Laravel\Fortify\Contracts\VerifyEmailResponse as VerifyEmailResponseContract;
+use Laravel\Fortify\Events\RecoveryCodeReplaced;
+use Laravel\Fortify\Events\RecoveryCodesGenerated;
+use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
+use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
+use Laravel\Fortify\Events\TwoFactorAuthenticationFailed;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -125,6 +132,15 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(ScheduledTaskSkipped::class, fn (ScheduledTaskSkipped $event) => $recorder()->taskSkipped($event));
         Event::listen(Login::class, fn (Login $event) => $this->app->make(SignInRecorder::class)->succeeded($event));
         Event::listen(Failed::class, fn (Failed $event) => $this->app->make(SignInRecorder::class)->failed($event));
+        $security = fn (): SignInRecorder => $this->app->make(SignInRecorder::class);
+        Event::listen(Lockout::class, fn (Lockout $event) => $security()->security('lockout', null, (string) $event->request->input('email')));
+        Event::listen(Logout::class, fn (Logout $event) => $security()->security('logout', $event->user instanceof User ? $event->user : null));
+        Event::listen(PasswordReset::class, fn (PasswordReset $event) => $security()->security('password_reset', $event->user instanceof User ? $event->user : null));
+        Event::listen(TwoFactorAuthenticationFailed::class, fn (TwoFactorAuthenticationFailed $event) => $security()->security('two_factor_failed', $event->user));
+        Event::listen(TwoFactorAuthenticationConfirmed::class, fn (TwoFactorAuthenticationConfirmed $event) => $security()->security('two_factor_enabled', $event->user));
+        Event::listen(TwoFactorAuthenticationDisabled::class, fn (TwoFactorAuthenticationDisabled $event) => $security()->security('two_factor_disabled', $event->user));
+        Event::listen(RecoveryCodesGenerated::class, fn (RecoveryCodesGenerated $event) => $security()->security('recovery_codes_generated', $event->user));
+        Event::listen(RecoveryCodeReplaced::class, fn (RecoveryCodeReplaced $event) => $security()->security('recovery_code_used', $event->user instanceof User ? $event->user : null));
     }
 
     /**
