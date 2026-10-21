@@ -54,7 +54,7 @@ class FiscalObligationReadinessService
             }
         }
 
-        if ($obligation->obligation_type === 'isr') {
+        if (in_array($obligation->obligation_type, ['isr', 'isr_annual'], true)) {
             $checks[] = $this->safe('accounting', 'Contabilidad del período', function () use ($obligation, $from, $to, $base): array {
                 $open = DB::table('journal_entries')->join('accounting_periods', 'accounting_periods.id', '=', 'journal_entries.accounting_period_id')->where('accounting_periods.company_id', $obligation->company_id)
                     ->whereBetween('journal_entries.entry_date', [$from, $to])->whereIn('journal_entries.status', ['draft', 'pending_review', 'reviewed', 'approved'])->count();
@@ -73,8 +73,37 @@ class FiscalObligationReadinessService
             $checks[] = $this->safe('withholdings', 'Retenciones registradas', function () use ($obligation, $from, $to, $base): array {
                 $records = DB::table('operational_records')->where('company_id', $obligation->company_id)->where('module', 'impuestos')->whereBetween('effective_on', [$from, $to])
                     ->where(fn ($query) => $query->where('record_type', 'ilike', '%reten%')->orWhere('title', 'ilike', '%reten%'))->count();
+                $onPayments = DB::table('purchase_payment_withholdings as w')->join('purchase_payments as p', 'p.id', '=', 'w.purchase_payment_id')
+                    ->where('w.company_id', $obligation->company_id)->whereNull('p.voided_at')->whereBetween('p.paid_on', [$from, $to])->count();
 
-                return $records > 0 ? ['PASSED', $records.' registro(s) de retenciones del mes.', $base.'/operations/impuestos'] : ['WARNING', 'No hay retenciones registradas en el mes; confirma que no hubo.', $base.'/operations/impuestos'];
+                return match (true) {
+                    $onPayments > 0 => ['PASSED', $onPayments.' retención(es) aplicadas en pagos a proveedores'.($records > 0 ? ' y '.$records.' registro(s) adicionales' : '').'.', $base.'/tax-reports'],
+                    $records > 0 => ['PASSED', $records.' registro(s) de retenciones del mes.', $base.'/operations/impuestos'],
+                    default => ['WARNING', 'No hay retenciones registradas en el mes; confirma que no hubo.', $base.'/operations/impuestos'],
+                };
+            });
+        }
+
+        if ($obligation->obligation_type === 'iso') {
+            $checks[] = $this->safe('iso_estimate', 'Base del ISO (año anterior)', function () use ($obligation, $base): array {
+                $estimate = app(IsoService::class)->estimate((int) $obligation->company_id, (int) $obligation->reference_year);
+                $money = fn (int $cents): string => 'Q '.number_format($cents / 100, 2);
+                if (! $estimate['has_data']) {
+                    return ['WARNING', 'No hay contabilidad del año anterior en Atlantia: confirma la base con los estados financieros del cliente.', $base.'/financial-statements'];
+                }
+
+                return ['PASSED', 'Estimación de referencia: base '.$money($estimate['base_cents']).' ('.($estimate['basis'] === 'gross_income' ? 'ingresos brutos' : 'activo neto').' / 4) · ISO del trimestre '.$money($estimate['quarterly_cents']).'.', $base.'/financial-statements'];
+            });
+        }
+
+        if ($obligation->obligation_type === 'isr_annual') {
+            $checks[] = $this->safe('annual_payments', 'Pagos trimestrales del año', function () use ($obligation): array {
+                $quarterly = DB::table('fiscal_obligations')->where('company_id', $obligation->company_id)->where('reference_year', $obligation->reference_year)->whereIn('obligation_type', ['isr', 'iso']);
+                $total = (clone $quarterly)->count();
+                $open = (clone $quarterly)->whereNotIn('status', ['completed', 'not_applicable', 'cancelled'])->count();
+
+                return $open === 0 ? ['PASSED', $total === 0 ? 'Sin pagos a cuenta generados en el año.' : 'Pagos trimestrales del año presentados o sin aplicar.', '/tax/obligations']
+                    : ['WARNING', $open.' pago(s) trimestral(es) de ISR o ISO del año siguen sin presentarse; se acreditan en la anual.', '/tax/obligations'];
             });
         }
 
@@ -118,7 +147,7 @@ class FiscalObligationReadinessService
             'purchases' => DB::table('purchase_documents')->where('company_id', $companyId)->whereBetween('document_date', [$from, $to])->orderBy('id')->get(['id', 'status', 'total_cents', 'updated_at'])->toArray(),
             'fel' => DB::table('fel_documents')->where('company_id', $companyId)->whereBetween('issued_on', [$from, $to])->orderBy('id')->get(['id', 'status', 'total_cents', 'updated_at'])->toArray(),
         ];
-        if ($obligation->obligation_type === 'isr') {
+        if (in_array($obligation->obligation_type, ['isr', 'isr_annual', 'iso'], true)) {
             $parts['entries'] = DB::table('journal_entries')->join('accounting_periods', 'accounting_periods.id', '=', 'journal_entries.accounting_period_id')->where('accounting_periods.company_id', $companyId)
                 ->whereBetween('journal_entries.entry_date', [$from, $to])->whereIn('journal_entries.status', ['posted', 'reversed'])->orderBy('journal_entries.id')->get(['journal_entries.id', 'journal_entries.status', 'journal_entries.updated_at'])->toArray();
         }
@@ -138,7 +167,11 @@ class FiscalObligationReadinessService
     public function range(stdClass $obligation): array
     {
         $end = Carbon::create((int) $obligation->reference_year, (int) $obligation->reference_month, 1)->endOfMonth();
-        $start = $obligation->obligation_type === 'isr' && str_starts_with((string) $obligation->name, 'Pago trimestral') ? $end->copy()->subMonths(2)->startOfMonth() : $end->copy()->startOfMonth();
+        $start = match (true) {
+            $obligation->obligation_type === 'isr_annual' => $end->copy()->subMonths(11)->startOfMonth(),
+            $obligation->obligation_type === 'iso', $obligation->obligation_type === 'isr' && str_starts_with((string) $obligation->name, 'Pago trimestral') => $end->copy()->subMonths(2)->startOfMonth(),
+            default => $end->copy()->startOfMonth(),
+        };
 
         return [$start->toDateString(), $end->toDateString()];
     }

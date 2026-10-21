@@ -1071,7 +1071,7 @@ export default function Purchases({
                                 onChange={(key, value) =>
                                     draft.setData(key, value)
                                 }
-                                hint="Los precios incluyen IVA. El sistema separa el IVA crédito fiscal por línea; las facturas FPEQ no generan crédito."
+                                hint="Los precios incluyen IVA. El sistema separa el IVA crédito fiscal por línea; las facturas FPEQ no generan crédito. La factura especial (FESP) la emite tu empresa al comprarle a una persona sin factura: al pagarla se retienen el IVA y el ISR."
                             />
                             <label>
                                 Fecha del documento
