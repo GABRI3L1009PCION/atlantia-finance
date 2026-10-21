@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Platform;
 
 use App\Services\Tenancy\TenantDatabaseContext;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use stdClass;
 
@@ -27,7 +28,9 @@ class PublicPlanCatalog
     {
         return $this->tenancy->runAsSystem(function (): array {
             $plans = [];
-            foreach (DB::table('plans')->where('is_active', true)->orderBy('display_order')->orderBy('id')->get() as $plan) {
+            $activePlans = DB::table('plans')->where('is_active', true)->orderBy('display_order')->orderBy('id')->get();
+            $payrollFrom = $this->firstPlanWithPayroll($activePlans);
+            foreach ($activePlans as $plan) {
                 $version = DB::table('plan_versions')->where('plan_id', $plan->id)->where('status', 'published')->orderByDesc('version')->first();
                 $prices = DB::table('plan_prices')->where('plan_id', $plan->id)->where('is_active', true)->where('currency_code', 'GTQ')->pluck('amount', 'billing_period');
                 if ($version === null || ! isset($prices['monthly'], $prices['annual'])) {
@@ -49,7 +52,7 @@ class PublicPlanCatalog
                     'recommended' => (bool) $plan->is_recommended,
                     'price_prefix' => $plan->price_prefix,
                     'cta_label' => $plan->cta_label,
-                    'features' => [...$this->capacity($version), ...array_map(
+                    'features' => [...$this->capacity($version), ...$this->payrollNote($version, $payrollFrom), ...array_map(
                         fn (string $text): array => ['text' => $text, 'hint' => null],
                         array_values(array_filter((array) json_decode((string) ($plan->highlights ?? '[]'), true), 'is_string')),
                     )],
@@ -58,6 +61,37 @@ class PublicPlanCatalog
 
             return $plans;
         });
+    }
+
+    /**
+     * Name of the first plan, in display order, whose published version includes payroll.
+     *
+     * @param  Collection<int, stdClass>  $activePlans
+     */
+    private function firstPlanWithPayroll(Collection $activePlans): ?string
+    {
+        foreach ($activePlans as $plan) {
+            $version = DB::table('plan_versions')->where('plan_id', $plan->id)->where('status', 'published')->orderByDesc('version')->first();
+            if ($version !== null && in_array('payroll', (array) json_decode((string) $version->entitlements, true), true)) {
+                return (string) $plan->name;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A plan without payroll says so, with the plan that has it, so nobody buys it expecting payroll.
+     *
+     * @return list<array{text: string, hint: string|null}>
+     */
+    private function payrollNote(stdClass $version, ?string $payrollFrom): array
+    {
+        if (in_array('payroll', (array) json_decode((string) $version->entitlements, true), true)) {
+            return [];
+        }
+
+        return [['text' => $payrollFrom === null ? 'Nómina no incluida' : 'Nómina no incluida (disponible desde el plan '.$payrollFrom.')', 'hint' => null]];
     }
 
     /**
@@ -80,9 +114,9 @@ class PublicPlanCatalog
             $users = $value('users');
             $cases = $value('active_cases');
             $lines[] = match (true) {
-                $users === null => 'Usuarios y expedientes a medida',
+                $users === null => 'Usuarios y empresas cliente a medida',
                 $cases === null => $number($users).' '.($users === 1 ? 'usuario' : 'usuarios'),
-                default => $number($users).' '.($users === 1 ? 'usuario' : 'usuarios').' y '.$number($cases).' expedientes activos',
+                default => $number($users).' '.($users === 1 ? 'usuario' : 'usuarios').' y '.$number($cases).' empresas cliente',
             };
         }
         if (array_key_exists('storage_bytes', $limits)) {

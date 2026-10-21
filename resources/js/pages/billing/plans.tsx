@@ -12,6 +12,7 @@ type Plan = {
     code: string;
     name: string;
     description: string;
+    payrollNote: string | null;
     prices: Price[];
 };
 
@@ -89,6 +90,11 @@ export default function BillingPlans({
                                 <p className="mt-2 min-h-12 text-sm leading-6 text-slate-600">
                                     {plan.description}
                                 </p>
+                                {plan.payrollNote && (
+                                    <p className="mt-2 text-xs font-medium text-amber-800">
+                                        {plan.payrollNote}
+                                    </p>
+                                )}
 
                                 <div className="mt-5 space-y-3">
                                     {plan.prices.map((price) => (

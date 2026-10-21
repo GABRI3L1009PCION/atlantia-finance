@@ -26,12 +26,22 @@ type Props = {
         periodStart: string | null;
         periodEnd: string | null;
     } | null;
+    breakdown?: {
+        subtotal: number;
+        discount: number;
+        credit: number;
+    } | null;
     paymentProviderReady: boolean;
     paymentStatus?: 'processing' | 'cancelled' | null;
     planChanged?: boolean;
 };
 
-type CheckoutResponse = { checkoutUrl?: string; message?: string };
+type CheckoutResponse = {
+    checkoutUrl?: string;
+    message?: string;
+    activated?: boolean;
+    redirectUrl?: string;
+};
 type EmbedStatus =
     | 'idle'
     | 'creating'
@@ -52,6 +62,7 @@ export default function EmbeddedCheckout({
     subscription,
     plan,
     invoice = null,
+    breakdown = null,
     paymentProviderReady,
     paymentStatus,
     planChanged = false,
@@ -161,6 +172,12 @@ export default function EmbeddedCheckout({
                 body: '{}',
             });
             const data = (await response.json()) as CheckoutResponse;
+
+            if (response.ok && data.activated && data.redirectUrl) {
+                router.visit(data.redirectUrl);
+
+                return;
+            }
 
             if (!response.ok || !data.checkoutUrl) {
                 throw new Error(
@@ -294,6 +311,42 @@ export default function EmbeddedCheckout({
                                         {currency.format(Number(plan.amount))}
                                     </strong>
                                 </div>
+                                {breakdown &&
+                                    (breakdown.discount > 0 ||
+                                        breakdown.credit > 0) && (
+                                        <dl className="mt-4 space-y-1 text-sm text-slate-600">
+                                            <div className="flex justify-between">
+                                                <dt>Precio de lista</dt>
+                                                <dd>
+                                                    {currency.format(
+                                                        breakdown.subtotal,
+                                                    )}
+                                                </dd>
+                                            </div>
+                                            {breakdown.discount > 0 && (
+                                                <div className="flex justify-between">
+                                                    <dt>Descuento</dt>
+                                                    <dd>
+                                                        -
+                                                        {currency.format(
+                                                            breakdown.discount,
+                                                        )}
+                                                    </dd>
+                                                </div>
+                                            )}
+                                            {breakdown.credit > 0 && (
+                                                <div className="flex justify-between">
+                                                    <dt>Crédito aplicado</dt>
+                                                    <dd>
+                                                        -
+                                                        {currency.format(
+                                                            breakdown.credit,
+                                                        )}
+                                                    </dd>
+                                                </div>
+                                            )}
+                                        </dl>
+                                    )}
                                 <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-5">
                                     <span className="font-medium">Total</span>
                                     <strong className="text-2xl text-[#640000]">

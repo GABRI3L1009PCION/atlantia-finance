@@ -44,7 +44,7 @@ class CompanyAdministrationService
             abort_unless($officeStatus === 'active', 422, 'La oficina no está activa.');
             $all = DB::table('companies')->where('companies.organization_id', $organization->id);
             if ((clone $all)->count() >= $this->context->limit($organization, 'active_cases')) {
-                throw ValidationException::withMessages(['tax_id' => 'Alcanzaste el límite de expedientes del plan.']);
+                throw ValidationException::withMessages(['tax_id' => 'Alcanzaste el límite de empresas cliente del plan.']);
             }
             $taxId = strtoupper($data['tax_id']);
             if ((clone $all)->where('tax_id', $taxId)->exists()) {

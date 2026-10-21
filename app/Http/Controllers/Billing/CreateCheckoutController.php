@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Billing;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Payment;
+use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Services\Payments\RecurrenteClient;
 use App\Services\Platform\Billing\SaaSBillingService;
@@ -66,23 +67,30 @@ class CreateCheckoutController extends Controller
         }
 
         $price = $item->planPrice;
+        // The first payment charges what the firm owes: list price, minus the subscription discount and its credits.
+        $breakdown = app(TenantDatabaseContext::class)->runAsSystem(fn (): array => app(SaaSBillingService::class)
+            ->firstChargeBreakdown((int) $organization->id, (float) $subscription->discount_percent, (float) $price->amount));
+        if ($breakdown['total'] <= 0) {
+            return $this->activateWithoutCharge($request, $subscription, $price, $breakdown);
+        }
+
         $payment = Payment::query()->create([
             'organization_id' => $organization->id,
             'subscription_id' => $subscription->id,
             'provider' => 'recurrente',
             'provider_payment_id' => 'pending:'.Str::uuid(),
             'currency_code' => $price->currency_code,
-            'amount' => $price->amount,
+            'amount' => number_format($breakdown['total'], 2, '.', ''),
             'status' => 'pending',
             'billing_snapshot' => ['name' => $billing->name, 'nit' => $billing->nit, 'address' => $billing->address,
-                'email' => $request->user()->email, 'plan_name' => $price->plan->name, 'billing_period' => $price->billing_period],
+                'email' => $request->user()->email, 'plan_name' => $price->plan->name, 'billing_period' => $price->billing_period, 'breakdown' => $breakdown],
         ]);
 
         try {
             $checkout = $client->createCheckout([
                 'items' => [[
                     'name' => 'Atlantia Finance - '.$price->plan->name,
-                    'amount_in_cents' => (int) bcmul((string) $price->amount, '100', 0),
+                    'amount_in_cents' => (int) bcmul(number_format($breakdown['total'], 2, '.', ''), '100', 0),
                     'currency' => $price->currency_code,
                     'quantity' => 1,
                     // A single charge: every later period is invoiced by Atlantia and paid with that invoice's own
@@ -127,6 +135,31 @@ class CreateCheckoutController extends Controller
             'checkoutUrl' => (string) $checkout['checkout_url'],
             'checkoutId' => (string) $checkout['id'],
         ], 201);
+    }
+
+    /**
+     * A discount (or credits) that covers the whole first period leaves nothing to charge: the subscription starts right
+     * away and its invoice is recorded as paid, with the same amounts the firm would have seen.
+     *
+     * @param  array{subtotal: float, discount: float, credit: float, total: float}  $breakdown
+     */
+    private function activateWithoutCharge(Request $request, Subscription $subscription, PlanPrice $price, array $breakdown): JsonResponse
+    {
+        app(TenantDatabaseContext::class)->runAsSystem(function () use ($request, $subscription, $price, $breakdown): void {
+            DB::transaction(function () use ($request, $subscription, $price, $breakdown): void {
+                $start = now();
+                $end = $price->billing_period === 'annual' ? now()->addYear() : now()->addMonth();
+                $subscription->update(['provider' => 'recurrente', 'status' => 'active', 'current_period_starts_at' => $start, 'current_period_ends_at' => $end]);
+                if (! in_array($subscription->organization->status, ['suspended', 'archived'], true)) {
+                    $subscription->organization->update(['status' => 'active']);
+                }
+                $row = DB::table('subscriptions')->where('id', $subscription->id)->first() ?? abort(500);
+                app(SaaSBillingService::class)->issue($request->user(), $row, 'activation:'.$subscription->id, [['description' => 'Atlantia Finance · '.$price->plan->name.' ('.($price->billing_period === 'annual' ? 'anual' : 'mensual').')',
+                    'unit_amount' => $breakdown['subtotal']]], 'recurring', $start->toDateString(), $end->toDateString(), ['discount' => $breakdown['discount'], 'credit' => $breakdown['credit']]);
+            });
+        });
+
+        return response()->json(['activated' => true, 'redirectUrl' => route('dashboard', absolute: false)], 201);
     }
 
     private function payInvoice(Request $request, stdClass $invoice): JsonResponse

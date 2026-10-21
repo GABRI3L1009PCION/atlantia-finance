@@ -117,6 +117,24 @@ export default function Register({
                             </div>
 
                             <div className="grid gap-1.5">
+                                <Label htmlFor="organization_name">
+                                    Nombre de tu despacho o firma
+                                </Label>
+                                <Input
+                                    id="organization_name"
+                                    type="text"
+                                    required
+                                    tabIndex={2}
+                                    autoComplete="organization"
+                                    name="organization_name"
+                                    placeholder="Ej. Contadores y Consultores de Izabal"
+                                />
+                                <InputError
+                                    message={errors.organization_name}
+                                />
+                            </div>
+
+                            <div className="grid gap-1.5">
                                 <Label htmlFor="email">
                                     Correo electrónico
                                 </Label>

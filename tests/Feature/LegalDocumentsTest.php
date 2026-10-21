@@ -48,7 +48,7 @@ test('correr el seeder otra vez no pisa una versión editada', function () {
 
 test('el registro guarda la aceptación de cada documento con versión e IP', function () {
     $this->post(route('register.store'), ['name' => 'Titular Legal', 'email' => 'legal@example.com', 'password' => 'una-clave-segura-2026', 'password_confirmation' => 'una-clave-segura-2026',
-        'plan' => 'professional', 'billing_period' => 'monthly', 'terms' => true])->assertRedirect();
+        'plan' => 'professional', 'billing_period' => 'monthly', 'organization_name' => 'Despacho Contable de Prueba', 'terms' => true])->assertRedirect();
 
     $user = User::where('email', 'legal@example.com')->firstOrFail();
     $rows = DB::table('legal_acceptances')->where('user_id', $user->id)->get();

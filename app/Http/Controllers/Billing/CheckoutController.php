@@ -9,6 +9,8 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
+use App\Services\Platform\Billing\SaaSBillingService;
+use App\Services\Platform\PublicPlanCatalog;
 use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -99,6 +101,15 @@ class CheckoutController extends Controller
         abort_if($item === null, 409, 'La suscripción no tiene un plan base.');
         // A running firm pays what it owes (its oldest unpaid invoice: a renewal or an overdue period), not a fresh plan price.
         $outstanding = self::outstandingInvoice($subscription);
+        // The first payment is the list price minus the subscription discount and the firm's credits.
+        if ($outstanding === null) {
+            $breakdown = app(TenantDatabaseContext::class)->runAsSystem(fn (): array => app(SaaSBillingService::class)
+                ->firstChargeBreakdown((int) $organization->id, (float) $subscription->discount_percent, (float) $item->planPrice->amount));
+            $amount = number_format($breakdown['total'], 2, '.', '');
+        } else {
+            $breakdown = null;
+            $amount = (string) $outstanding->total;
+        }
 
         return Inertia::render('billing/embedded-checkout', [
             'organization' => [
@@ -114,8 +125,9 @@ class CheckoutController extends Controller
                 'name' => $item->planPrice->plan->name,
                 'billingPeriod' => $item->planPrice->billing_period,
                 'currencyCode' => $item->planPrice->currency_code,
-                'amount' => $outstanding === null ? $item->planPrice->amount : (string) $outstanding->total,
+                'amount' => $amount,
             ],
+            'breakdown' => $breakdown,
             'invoice' => $outstanding === null ? null : [
                 'number' => (string) $outstanding->number,
                 'periodStart' => $outstanding->period_start,
@@ -139,6 +151,9 @@ class CheckoutController extends Controller
             ->where('item_type', 'base_plan')
             ->value('plan_price_id');
 
+        $payrollNotes = collect(app(PublicPlanCatalog::class)->plans())->mapWithKeys(fn (array $plan): array => [$plan['code'] => collect($plan['features'])
+            ->pluck('text')->first(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida'))]);
+
         $plans = Plan::query()
             ->where('is_active', true)
             ->with(['prices' => fn ($query) => $query
@@ -151,6 +166,7 @@ class CheckoutController extends Controller
                 'code' => $plan->code,
                 'name' => $plan->name,
                 'description' => $plan->description,
+                'payrollNote' => $payrollNotes->get($plan->code),
                 'prices' => $plan->prices->map(fn (PlanPrice $price): array => [
                     'billingPeriod' => $price->billing_period,
                     'amount' => $price->amount,

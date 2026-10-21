@@ -207,7 +207,7 @@ test('verifying an owner email moves the organization to pending payment', funct
         'password_confirmation' => 'password',
         'plan' => 'essential',
         'billing_period' => 'monthly',
-        'terms' => true,
+        'organization_name' => 'Despacho Contable de Prueba', 'terms' => true,
     ]);
 
     $response->assertRedirect(route('verification.notice', absolute: false));
@@ -227,7 +227,7 @@ test('verifying an owner email moves the organization to pending payment', funct
     $this->assertGuest();
 
     $this->assertDatabaseHas('organizations', [
-        'name' => 'Organización de Billing Owner',
+        'name' => 'Despacho Contable de Prueba',
         'status' => 'pending_payment',
     ]);
 

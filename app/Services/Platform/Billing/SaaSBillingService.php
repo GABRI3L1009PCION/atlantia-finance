@@ -36,21 +36,28 @@ class SaaSBillingService
      * Creates (once) the invoice of a subscription for a period. Applies the subscription discount and available credits.
      *
      * @param  list<array{description: string, quantity?: float|int, unit_amount: float|string, plan_version_id?: int|null}>  $lines
+     * @param  array{discount: float, credit: float}|null  $fixed  amounts already charged to the firm (a first payment), used as they are
      */
-    public function issue(?User $actor, stdClass $subscription, string $idempotencyKey, array $lines, string $kind = 'recurring', ?string $periodStart = null, ?string $periodEnd = null): stdClass
+    public function issue(?User $actor, stdClass $subscription, string $idempotencyKey, array $lines, string $kind = 'recurring', ?string $periodStart = null, ?string $periodEnd = null, ?array $fixed = null): stdClass
     {
         $existing = DB::table('saas_invoices')->where('idempotency_key', $idempotencyKey)->first();
         if ($existing !== null) {
             return $existing;
         }
 
-        return DB::transaction(function () use ($actor, $subscription, $idempotencyKey, $lines, $kind, $periodStart, $periodEnd): stdClass {
+        return DB::transaction(function () use ($actor, $subscription, $idempotencyKey, $lines, $kind, $periodStart, $periodEnd, $fixed): stdClass {
             $subtotal = 0.0;
             foreach ($lines as $line) {
                 $subtotal += round((float) ($line['quantity'] ?? 1) * (float) $line['unit_amount'], 2);
             }
-            $discount = $kind === 'recurring' ? round($subtotal * (float) $subscription->discount_percent / 100, 2) : 0.0;
-            $credit = $this->applyCredits((int) $subscription->organization_id, max(0, $subtotal - $discount));
+            if ($fixed !== null) {
+                $discount = round((float) $fixed['discount'], 2);
+                $credit = round((float) $fixed['credit'], 2);
+                $this->applyCredits((int) $subscription->organization_id, $credit);
+            } else {
+                $discount = $kind === 'recurring' ? round($subtotal * (float) $subscription->discount_percent / 100, 2) : 0.0;
+                $credit = $this->applyCredits((int) $subscription->organization_id, max(0, $subtotal - $discount));
+            }
             $total = max(0, round($subtotal - $discount - $credit, 2));
             $id = DB::table('saas_invoices')->insertGetId([
                 'public_id' => (string) Str::uuid(), 'organization_id' => $subscription->organization_id, 'subscription_id' => $subscription->id,
@@ -110,10 +117,13 @@ class SaaSBillingService
             $subscription = DB::table('subscriptions')->where('id', $subscription->id)->first() ?? $subscription;
         }
         $snapshot = (array) json_decode((string) $payment->billing_snapshot, true);
+        // The first payment was charged with its discount and credits already applied: the invoice repeats exactly that.
+        $breakdown = isset($snapshot['breakdown']) && is_array($snapshot['breakdown']) ? $snapshot['breakdown'] : null;
         $invoice = $this->issue(null, $subscription, 'payment:'.$paymentId, [['description' => 'Atlantia Finance · '.($snapshot['plan_name'] ?? 'Suscripción').' ('.(($snapshot['billing_period'] ?? 'monthly') === 'annual' ? 'anual' : 'mensual').')',
-            'unit_amount' => (float) $payment->amount, 'plan_version_id' => $subscription->plan_version_id === null ? null : (int) $subscription->plan_version_id]], 'recurring',
+            'unit_amount' => $breakdown === null ? (float) $payment->amount : (float) $breakdown['subtotal'], 'plan_version_id' => $subscription->plan_version_id === null ? null : (int) $subscription->plan_version_id]], 'recurring',
             $subscription->current_period_starts_at === null ? null : Carbon::parse($subscription->current_period_starts_at)->toDateString(),
-            $subscription->current_period_ends_at === null ? null : Carbon::parse($subscription->current_period_ends_at)->toDateString());
+            $subscription->current_period_ends_at === null ? null : Carbon::parse($subscription->current_period_ends_at)->toDateString(),
+            $breakdown === null ? null : ['discount' => (float) $breakdown['discount'], 'credit' => (float) $breakdown['credit']]);
         if ($invoice->status !== 'paid') {
             $this->markPaid(null, (int) $invoice->id, $paymentId);
         } else {
@@ -305,6 +315,23 @@ class SaaSBillingService
             DB::table('organizations')->where('id', $organizationId)->update(['status' => 'active', 'suspended_at' => null, 'suspension_reason' => null, 'updated_at' => now()]);
             $this->audit->record($actor, 'organization.reactivated', 'organizations', $organizationId, ['status' => 'suspended'], ['status' => 'active'], 'Pago recibido: se levanta la suspensión por falta de pago.', $organizationId);
         }
+    }
+
+    /**
+     * What the first payment of a subscription costs: the list price, the subscription discount and the credits the firm has.
+     * Read only; the credits are consumed when the paid invoice is recorded. Platform rows: call it with system access.
+     *
+     * @return array{subtotal: float, discount: float, credit: float, total: float}
+     */
+    public function firstChargeBreakdown(int $organizationId, float $discountPercent, float $listPrice): array
+    {
+        $subtotal = round($listPrice, 2);
+        $discount = round($subtotal * max(0, min(100, $discountPercent)) / 100, 2);
+        $available = (float) DB::table('saas_credits')->where('organization_id', $organizationId)->where('remaining', '>', 0)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))->sum('remaining');
+        $credit = round(min($available, max(0, $subtotal - $discount)), 2);
+
+        return ['subtotal' => $subtotal, 'discount' => $discount, 'credit' => $credit, 'total' => max(0, round($subtotal - $discount - $credit, 2))];
     }
 
     private function applyCredits(int $organizationId, float $amount): float

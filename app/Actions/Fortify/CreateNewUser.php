@@ -43,6 +43,7 @@ class CreateNewUser implements CreatesNewUsers
                 'string',
                 Rule::in(['monthly', 'annual']),
             ],
+            'organization_name' => ['required', 'string', 'min:3', 'max:150'],
             'terms' => ['accepted'],
         ])->validate();
 
@@ -74,7 +75,7 @@ class CreateNewUser implements CreatesNewUsers
                 ]);
 
                 $organization = Organization::query()->create([
-                    'name' => 'Organización de '.$input['name'],
+                    'name' => trim((string) $input['organization_name']),
                     'country_code' => 'GT',
                     'currency_code' => 'GTQ',
                     'timezone' => 'America/Guatemala',

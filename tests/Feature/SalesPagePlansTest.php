@@ -20,7 +20,7 @@ test('the sales page shows the real catalog: prices, capacity of the published v
         ->where('plans.0.months_included', 2)
         ->where('plans.0.recommended', false)
         ->where('plans.0.features.0.text', '1 oficina')
-        ->where('plans.0.features.1.text', '2 usuarios y 150 expedientes activos')
+        ->where('plans.0.features.1.text', '2 usuarios y 150 empresas cliente')
         ->where('plans.0.features.2.text', '2 GB de almacenamiento')
         ->where('plans.0.features.3.text', '20 consultas de Luzma al mes')
         ->where('plans.0.features.3.hint', fn ($hint) => is_string($hint) && $hint !== '')
@@ -31,6 +31,16 @@ test('the sales page shows the real catalog: prices, capacity of the published v
         ->where('plans.4.price_prefix', 'Desde')
         ->where('plans.4.cta_label', 'Solicitar cotización')
         ->where('plans.4.features.0.text', 'Oficinas a medida'));
+});
+
+test('a plan without payroll says so and names the plan that has it', function () {
+    $catalog = collect(app(PublicPlanCatalog::class)->plans())->keyBy('code');
+    $texts = fn (string $code): array => collect($catalog[$code]['features'])->pluck('text')->all();
+
+    expect($texts('multi_office'))->toContain('Nómina no incluida (disponible desde el plan Corporativo)')
+        ->and($texts('essential'))->toContain('Nómina no incluida (disponible desde el plan Corporativo)')
+        ->and(collect($texts('corporate'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty()
+        ->and(collect($texts('enterprise'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty();
 });
 
 test('a newly published version changes what the sales page shows and retired plans disappear', function () {
@@ -49,7 +59,7 @@ test('a newly published version changes what the sales page shows and retired pl
     expect(collect($catalog)->pluck('code')->all())->toBe(['essential', 'professional', 'multi_office', 'enterprise'])
         ->and($essential['monthly_price'])->toBe(449.0)
         ->and($essential['annual_savings'])->toBe(898.0)
-        ->and($essential['features'][1]['text'])->toBe('3 usuarios y 150 expedientes activos');
+        ->and($essential['features'][1]['text'])->toBe('3 usuarios y 150 empresas cliente');
 });
 
 test('the presentation is edited from the control center with a single recommended plan and an audit trail', function () {

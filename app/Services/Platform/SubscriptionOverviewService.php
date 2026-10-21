@@ -46,7 +46,7 @@ class SubscriptionOverviewService
         $usage = [
             ['key' => 'offices', 'label' => 'Oficinas', 'used' => DB::table('offices')->where('organization_id', $organization->id)->whereNull('deleted_at')->count(), 'limit' => $limits['offices']['value'] ?? null, 'unit' => ''],
             // Counted as the invitation and company limits enforce them: client-portal users take no seat and client
-            // companies are the plan's "expedientes activos" (active_cases).
+            // companies are the plan's "empresas cliente" (active_cases).
             ['key' => 'users', 'label' => 'Usuarios', 'used' => app(OfficeInvitationService::class)->seatsInUse($organization), 'limit' => $limits['users']['value'] ?? null, 'unit' => ''],
             ['key' => 'companies', 'label' => 'Empresas cliente', 'used' => DB::table('companies')->where('organization_id', $organization->id)->count(), 'limit' => $limits['active_cases']['value'] ?? null, 'unit' => ''],
             ['key' => 'storage', 'label' => 'Almacenamiento', 'used' => round($storage / 1_073_741_824, 2), 'limit' => isset($limits['storage_bytes']['value']) ? round($limits['storage_bytes']['value'] / 1_073_741_824, 2) : null, 'unit' => 'GB'],
