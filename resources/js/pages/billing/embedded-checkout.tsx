@@ -53,9 +53,8 @@ type EmbedStatus =
     | 'processing'
     | 'paid';
 
-/** Approximate height of the provider's form at full size and the smallest scale we accept to fit it on short windows. */
-const NATURAL_FORM_HEIGHT = 780;
-const MIN_FORM_SCALE = 0.8;
+/** The provider's card-only form needs about this much height; below it the page scrolls instead of shrinking the form. */
+const MIN_FORM_HEIGHT = 640;
 
 const currency = new Intl.NumberFormat('es-GT', {
     style: 'currency',
@@ -263,8 +262,8 @@ export default function EmbeddedCheckout({
         return () => window.clearTimeout(initialization);
     }, [initializeCheckout]);
 
-    // The provider's form sets its own fixed height and is taller than most windows: it gets exactly the height left on
-    // screen and, when that is short, is scaled down a little so the whole form shows without an inner scroll bar.
+    // The provider's form sets its own fixed height (850px): it gets the height left on screen at its real size,
+    // never scaled, so the text stays sharp.
     useEffect(() => {
         const container = document.getElementById(
             'recurrente-checkout-container',
@@ -282,23 +281,15 @@ export default function EmbeddedCheckout({
                 return;
             }
 
-            const scale = Math.min(
-                1,
-                Math.max(MIN_FORM_SCALE, height / NATURAL_FORM_HEIGHT),
-            );
-            const width = `${100 / scale}%`;
-            const frameHeight = `${height / scale}px`;
-            const transform = scale < 1 ? `scale(${scale})` : '';
+            const frameHeight = `${Math.max(height, MIN_FORM_HEIGHT)}px`;
 
             if (
-                iframe.style.width !== width ||
                 iframe.style.height !== frameHeight ||
-                iframe.style.transform !== transform
+                iframe.style.transform !== ''
             ) {
-                iframe.style.transformOrigin = 'top left';
-                iframe.style.width = width;
                 iframe.style.height = frameHeight;
-                iframe.style.transform = transform;
+                iframe.style.width = '100%';
+                iframe.style.transform = '';
             }
         };
 
@@ -334,18 +325,18 @@ export default function EmbeddedCheckout({
             </Head>
 
             <div className="grid min-h-svh bg-[#faf9f8] text-slate-950 lg:h-svh lg:grid-cols-[36%_64%] lg:overflow-hidden">
-                <aside className="relative overflow-hidden bg-emerald-700 px-6 py-6 text-white lg:flex lg:h-svh lg:flex-col lg:px-9 lg:py-7">
+                <aside className="relative overflow-hidden bg-emerald-700 px-6 py-6 text-white lg:flex lg:h-svh lg:flex-col lg:items-center lg:justify-center lg:px-9 lg:py-7">
                     <div className="absolute -top-32 -left-32 size-96 rounded-full border border-white/10" />
                     <div className="absolute -top-16 -left-16 size-96 rounded-full border border-white/10" />
 
                     <Link
                         href="/"
-                        className="relative z-10 w-fit text-sm font-bold tracking-[0.24em] uppercase"
+                        className="relative z-10 w-fit text-sm font-bold tracking-[0.24em] uppercase lg:absolute lg:top-7 lg:left-9"
                     >
                         Atlantia Systems
                     </Link>
 
-                    <div className="relative z-10 my-5 lg:my-auto">
+                    <div className="relative z-10 my-5 w-full max-w-sm lg:my-0">
                         <img
                             src="/images/atlantia-finance-logo.png"
                             alt="Atlantia Finance"
