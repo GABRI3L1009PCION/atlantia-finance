@@ -193,11 +193,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/checks/{check}/clear', [CheckController::class, 'clear'])->whereNumber('check')->middleware('throttle:30,1')->name('checkClear');
         Route::post('companies/{company}/checks/{check}/void', [CheckController::class, 'void'])->whereNumber('check')->middleware('throttle:20,1')->name('checkVoid');
 
-        Route::get('companies/{company}/inventory', [InventoryController::class, 'index'])->name('inventory');
-        Route::post('companies/{company}/inventory/items', [InventoryController::class, 'storeItem'])->middleware('throttle:30,1')->name('inventoryItemStore');
-        Route::post('companies/{company}/inventory/movements', [InventoryController::class, 'storeMovement'])->middleware('throttle:60,1')->name('inventoryMovementStore');
-        Route::post('companies/{company}/inventory/costs', [InventoryController::class, 'postCosts'])->middleware('throttle:10,1')->name('inventoryPostCosts');
-        Route::get('companies/{company}/inventory/items/{item}/kardex', [InventoryController::class, 'kardex'])->whereNumber('item')->name('inventoryKardex');
+        Route::get('companies/{company}/inventory', [InventoryController::class, 'index'])->middleware('plan.feature:inventory')->name('inventory');
+        Route::post('companies/{company}/inventory/items', [InventoryController::class, 'storeItem'])->middleware('throttle:30,1')->middleware('plan.feature:inventory')->name('inventoryItemStore');
+        Route::post('companies/{company}/inventory/movements', [InventoryController::class, 'storeMovement'])->middleware('throttle:60,1')->middleware('plan.feature:inventory')->name('inventoryMovementStore');
+        Route::post('companies/{company}/inventory/costs', [InventoryController::class, 'postCosts'])->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryPostCosts');
+        Route::get('companies/{company}/inventory/items/{item}/kardex', [InventoryController::class, 'kardex'])->whereNumber('item')->middleware('plan.feature:inventory')->name('inventoryKardex');
 
         Route::get('companies/{company}/regional', [RegionalController::class, 'show'])->name('regional');
         Route::put('companies/{company}/regional', [RegionalController::class, 'update'])->middleware('throttle:20,1')->name('regionalUpdate');

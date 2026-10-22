@@ -7,6 +7,7 @@ use App\Services\Accounting\AccountingPeriodCloseChecklistService;
 use App\Services\Accounting\InventoryService;
 use App\Services\AccountingAutomationService;
 use App\Services\FiscalConfigurationService;
+use App\Services\Platform\EntitlementResolverService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -144,4 +145,15 @@ test('a sale in the kardex without its cost entry blocks the close of the period
     $check = collect(app(AccountingPeriodCloseChecklistService::class)->forPeriod($f['companyId'], $periodId))->firstWhere('key', 'inventory_kardex');
 
     expect($check['status'])->not->toBe('blocked');
+});
+
+test('un plan sin inventario no entra al módulo ni siquiera con la dirección directa', function () {
+    $f = inventoryFixture($this);
+    $essential = PlanPrice::whereHas('plan', fn ($query) => $query->where('code', 'essential'))->where('billing_period', 'monthly')->firstOrFail();
+    DB::table('subscription_items')->where('item_type', 'base_plan')->update(['plan_price_id' => $essential->id]);
+    app(EntitlementResolverService::class)->forget((int) $f['org']->id);
+
+    $this->get(route('accounting.inventory', $f['uuid']))->assertForbidden();
+    $this->post(route('accounting.inventoryItemStore', $f['uuid']), ['name' => 'Colado'])->assertForbidden();
+    expect(DB::table('inventory_items')->where('company_id', $f['companyId'])->count())->toBe(0);
 });

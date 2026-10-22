@@ -7,6 +7,7 @@ namespace App\Services\ClientPortal;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkManagement\WorkNotificationService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -160,6 +161,7 @@ class ClientDocumentService
         if (! in_array($extension, self::ALLOWED, true) || $file->getSize() > 20 * 1024 * 1024) {
             throw ValidationException::withMessages(['file' => 'Formato no permitido o archivo mayor a 20 MB.']);
         }
+        app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $file->getSize(), 'file');
         $path = $file->storeAs('client-documents/'.$organization->id.'/'.$companyId, Str::uuid().'.'.$extension, 'local');
         DB::table('client_document_versions')->insert(['organization_id' => $organization->id, 'company_id' => $companyId, 'client_document_id' => $documentId, 'version' => $version, 'file_path' => $path,
             'file_name' => mb_substr($file->getClientOriginalName(), 0, 250), 'mime' => $file->getClientMimeType(), 'size_bytes' => (int) $file->getSize(), 'file_hash' => (string) hash_file('sha256', (string) $file->getRealPath()),

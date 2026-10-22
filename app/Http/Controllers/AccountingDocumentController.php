@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\AccountingService;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkspaceContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -40,6 +41,7 @@ class AccountingDocumentController extends Controller
         }
         $this->accounting->openPeriod($companyRecord->id, $entryRecord->accounting_period_id, $entryRecord->entry_date);
 
+        app(UsageMeterService::class)->assertCanAdd((int) $org->id, 'storage_bytes', (int) $file->getSize(), 'document');
         $uuid = (string) Str::uuid();
         $extension = strtolower($file->guessExtension() ?: $file->extension() ?: 'bin');
         $path = "accounting/{$companyRecord->public_id}/{$entry}/{$uuid}.{$extension}";

@@ -69,9 +69,9 @@ class UsageMeterService
 
     /**
      * Blocks only the new action related to a hard limit (e.g. a new upload when storage is full). Closings, entries or
-     * existing obligations are never blocked by an unrelated limit.
+     * existing obligations are never blocked by an unrelated limit. `$field` is the form field that shows the message.
      */
-    public function assertCanAdd(int $organizationId, string $metric, int $increment = 1): void
+    public function assertCanAdd(int $organizationId, string $metric, int $increment = 1, ?string $field = null): void
     {
         $limit = $this->entitlements->resolve($organizationId)['limits'][$metric] ?? null;
         if ($limit === null || $limit['value'] === null || $limit['enforcement'] !== 'hard') {
@@ -79,7 +79,7 @@ class UsageMeterService
         }
         $current = $this->measure($organizationId)[$metric] ?? 0;
         if ($current + $increment > $limit['value']) {
-            throw ValidationException::withMessages([$metric => 'Se alcanzó el límite de '.mb_strtolower(self::LABELS[$metric] ?? $metric).' del plan. Los datos existentes se conservan; usa «Cambiar plan» en Plan y suscripción para ampliar el plan.']);
+            throw ValidationException::withMessages([$field ?? $metric => 'Se alcanzó el límite de '.mb_strtolower(self::LABELS[$metric] ?? $metric).' del plan. Los datos existentes se conservan; usa «Cambiar plan» en Plan y suscripción para ampliar el plan.']);
         }
     }
 
