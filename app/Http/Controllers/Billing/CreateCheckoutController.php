@@ -133,7 +133,7 @@ class CreateCheckoutController extends Controller
                 'code' => $code,
                 'reference' => CorrelationId::current(),
                 'message' => match ($code) {
-                    'provider_timeout' => 'El proveedor de pagos tardó demasiado en responder. No se realizó ningún cobro; puedes intentarlo nuevamente.',
+                    'provider_timeout' => 'No pudimos comunicarnos con el proveedor de pagos. Revisa tu conexión a internet e inténtalo de nuevo.',
                     'provider_unavailable' => 'Nuestro equipo ya fue avisado y lo está resolviendo. Vuelve a intentarlo más tarde.',
                     default => 'No pudimos iniciar el pago. Inténtalo nuevamente en unos minutos.',
                 },
