@@ -72,6 +72,19 @@ test('un pago sin descuento ni créditos sigue cobrando el precio de lista', fun
     Http::assertSent(fn ($request) => $request['items'][0]['amount_in_cents'] === 39900);
 });
 
+test('el checkout se crea solo para pago con tarjeta, sin Clave ni campos de teléfono, dirección o NIT', function () {
+    Http::fake(['https://app.recurrente.com/api/checkouts' => Http::response(['id' => 'ch_tarjeta', 'checkout_url' => 'https://app.recurrente.com/checkout-session/ch_tarjeta'], 201)]);
+    [$user] = firstPaymentFixture();
+
+    $this->actingAs($user)->postJson(route('billing.checkout.store'))->assertCreated();
+
+    Http::assertSent(fn ($request) => $request['clave_enabled'] === false
+        && $request['items'][0]['payment_method_types'] === ['card']
+        && $request['items'][0]['phone_requirement'] === 'none'
+        && $request['items'][0]['address_requirement'] === 'none'
+        && $request['items'][0]['billing_info_requirement'] === 'none');
+});
+
 test('un descuento total activa la suscripción sin cobrar y deja la factura pagada', function () {
     Http::fake();
     [$user, $organization, $subscription] = firstPaymentFixture(discount: 100);

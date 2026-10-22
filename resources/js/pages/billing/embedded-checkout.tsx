@@ -54,8 +54,8 @@ type EmbedStatus =
     | 'paid';
 
 /** Approximate height of the provider's form at full size and the smallest scale we accept to fit it on short windows. */
-const NATURAL_FORM_HEIGHT = 1220;
-const MIN_FORM_SCALE = 0.62;
+const NATURAL_FORM_HEIGHT = 780;
+const MIN_FORM_SCALE = 0.8;
 
 const currency = new Intl.NumberFormat('es-GT', {
     style: 'currency',

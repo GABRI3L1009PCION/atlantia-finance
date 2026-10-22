@@ -18,7 +18,7 @@ class RecurrenteClient
      */
     public function createCheckout(array $payload): array
     {
-        $response = $this->request()->post('checkouts', $payload);
+        $response = $this->request()->post('checkouts', $this->cardOnly($payload));
 
         if ($response->failed()) {
             // The provider's own reason helps support; request headers (the secret key) are never logged.
@@ -39,6 +39,23 @@ class RecurrenteClient
         }
 
         return $data;
+    }
+
+    /**
+     * Atlantia charges by card only: no Clave button, no bank transfer or Recurrente balance, and no phone, address or tax
+     * ID fields (the billing data was already given to Atlantia). What the caller sets explicitly is kept.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function cardOnly(array $payload): array
+    {
+        $items = [];
+        foreach ((array) ($payload['items'] ?? []) as $item) {
+            $items[] = is_array($item) ? $item + ['payment_method_types' => ['card'], 'phone_requirement' => 'none', 'address_requirement' => 'none', 'billing_info_requirement' => 'none'] : $item;
+        }
+
+        return [...$payload, 'items' => $items, 'clave_enabled' => $payload['clave_enabled'] ?? false];
     }
 
     private function request(): PendingRequest
