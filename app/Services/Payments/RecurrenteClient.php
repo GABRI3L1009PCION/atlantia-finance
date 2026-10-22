@@ -6,6 +6,8 @@ namespace App\Services\Payments;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 class RecurrenteClient
@@ -19,7 +21,10 @@ class RecurrenteClient
         $response = $this->request()->post('checkouts', $payload);
 
         if ($response->failed()) {
-            throw new RuntimeException('Recurrente rechazó la creación del checkout.');
+            // The provider's own reason helps support; request headers (the secret key) are never logged.
+            Log::warning('Recurrente rechazó la creación del checkout', ['status' => $response->status(), 'response' => Str::limit($response->body(), 500)]);
+
+            throw new PaymentProviderException('Recurrente rechazó la creación del checkout (HTTP '.$response->status().').', $response->status());
         }
 
         /** @var array<string, mixed> $data */

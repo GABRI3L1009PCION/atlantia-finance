@@ -41,6 +41,8 @@ type CheckoutResponse = {
     message?: string;
     activated?: boolean;
     redirectUrl?: string;
+    code?: string;
+    reference?: string;
 };
 type EmbedStatus =
     | 'idle'
@@ -71,6 +73,8 @@ export default function EmbeddedCheckout({
         paymentProviderReady ? 'creating' : 'idle',
     );
     const [error, setError] = useState<string | null>(null);
+    const [errorTitle, setErrorTitle] = useState('No pudimos cargar el pago');
+    const [reference, setReference] = useState<string | null>(null);
     const initialized = useRef(false);
     const [confirmationTimedOut, setConfirmationTimedOut] = useState(false);
     const [confirmationRound, setConfirmationRound] = useState(0);
@@ -180,9 +184,20 @@ export default function EmbeddedCheckout({
             }
 
             if (!response.ok || !data.checkoutUrl) {
+                setReference(data.reference ?? null);
+                setErrorTitle(
+                    data.code === 'provider_unavailable'
+                        ? 'El pago en línea no está disponible por ahora'
+                        : 'No pudimos cargar el pago',
+                );
+
+                // Only messages written for the customer are shown; a technical answer (for example an expired session) is not.
                 throw new Error(
-                    data.message ??
-                        'No pudimos preparar el formulario de pago.',
+                    data.code && data.message
+                        ? data.message
+                        : response.status === 419
+                          ? 'Tu sesión se actualizó. Recarga la página e inténtalo de nuevo.'
+                          : 'No pudimos preparar el formulario de pago. Inténtalo de nuevo en unos minutos.',
                 );
             }
 
@@ -194,6 +209,7 @@ export default function EmbeddedCheckout({
                     setStatus('paid');
                 },
                 onFailure: () => {
+                    setErrorTitle('El pago no pudo completarse');
                     setStatus('failed');
                     setError(
                         'El pago no pudo completarse. Revisa los datos de la tarjeta e inténtalo nuevamente.',
@@ -458,31 +474,61 @@ export default function EmbeddedCheckout({
                             )}
 
                             {status === 'failed' && (
-                                <div className="mx-auto mt-20 max-w-md rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
-                                    <AlertCircle className="mx-auto size-9 text-red-700" />
-                                    <h3 className="mt-3 text-lg font-bold">
-                                        No pudimos cargar el pago
-                                    </h3>
-                                    <p className="mt-2 text-sm leading-6 text-red-800">
-                                        {error}
-                                    </p>
-                                    <button
-                                        type="button"
-                                        onClick={retry}
-                                        className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#640000] px-5 py-3 font-bold text-white hover:bg-[#420001]"
-                                    >
-                                        <RefreshCw className="size-4" />{' '}
-                                        Reintentar
-                                    </button>
-                                    <Link
-                                        href="/billing/plans"
-                                        className="mt-3 inline-flex px-5 py-3 text-sm font-semibold text-[#640000] underline"
-                                    >
-                                        Elegir otro plan
-                                    </Link>
+                                <div className="mx-auto mt-16 max-w-lg rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+                                    <div className="flex items-start gap-4">
+                                        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
+                                            <AlertCircle className="size-6" />
+                                        </span>
+                                        <div>
+                                            <h3 className="text-xl font-bold text-slate-950">
+                                                {errorTitle}
+                                            </h3>
+                                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                                                {error}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <ul className="mt-6 space-y-2 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+                                        <li className="flex items-center gap-2">
+                                            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                                            No se realizó ningún cobro.
+                                        </li>
+                                        <li className="flex items-center gap-2">
+                                            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                                            Tu plan y tus datos de factura
+                                            quedan guardados.
+                                        </li>
+                                    </ul>
+
+                                    <div className="mt-6 flex flex-wrap items-center gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={retry}
+                                            className="inline-flex items-center gap-2 rounded-xl bg-[#640000] px-5 py-3 font-bold text-white hover:bg-[#420001]"
+                                        >
+                                            <RefreshCw className="size-4" />{' '}
+                                            Reintentar
+                                        </button>
+                                        <Link
+                                            href="/billing/plans"
+                                            className="inline-flex rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-[#640000] hover:bg-slate-50"
+                                        >
+                                            Elegir otro plan
+                                        </Link>
+                                    </div>
+
+                                    {reference && (
+                                        <p className="mt-6 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">
+                                            Si el problema continúa, escríbenos
+                                            e indica esta referencia:{' '}
+                                            <span className="font-mono text-slate-700 select-all">
+                                                {reference}
+                                            </span>
+                                        </p>
+                                    )}
                                 </div>
                             )}
-
                             {(status === 'processing' || status === 'paid') && (
                                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/95 p-6 text-center">
                                     <div>

@@ -9,8 +9,10 @@ use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
+use App\Services\Payments\PaymentProviderException;
 use App\Services\Payments\RecurrenteClient;
 use App\Services\Platform\Billing\SaaSBillingService;
+use App\Services\Platform\CorrelationId;
 use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -113,21 +115,28 @@ class CreateCheckoutController extends Controller
             ]);
         } catch (Throwable $exception) {
             $isConnectionFailure = $exception instanceof ConnectionException;
+            // The provider does not accept Atlantia's credentials: retrying will not help and the team must fix it.
+            $isConfiguration = $exception instanceof PaymentProviderException && $exception->isConfiguration();
+            $code = $isConnectionFailure ? 'provider_timeout' : ($isConfiguration ? 'provider_unavailable' : 'checkout_creation_failed');
             $payment->attempts()->create([
                 'status' => 'failed',
-                'failure_code' => $isConnectionFailure ? 'provider_timeout' : 'checkout_creation_failed',
+                'failure_code' => $isConfiguration ? 'provider_credentials' : ($isConnectionFailure ? 'provider_timeout' : 'checkout_creation_failed'),
                 'failure_message' => $isConnectionFailure
                     ? 'Recurrente no respondió dentro del tiempo esperado.'
-                    : 'No fue posible iniciar el checkout.',
+                    : ($isConfiguration ? 'Recurrente no aceptó las credenciales de Atlantia.' : 'No fue posible iniciar el checkout.'),
                 'attempted_at' => now(),
             ]);
             $payment->update(['status' => 'failed', 'failed_at' => now()]);
             report($exception);
 
             return response()->json([
-                'message' => $isConnectionFailure
-                    ? 'Recurrente tardó demasiado en responder. No se realizó ningún cobro; puedes intentarlo nuevamente.'
-                    : 'No pudimos crear el checkout. No se realizó ningún cobro; inténtalo nuevamente.',
+                'code' => $code,
+                'reference' => CorrelationId::current(),
+                'message' => match ($code) {
+                    'provider_timeout' => 'El proveedor de pagos tardó demasiado en responder. No se realizó ningún cobro; puedes intentarlo nuevamente.',
+                    'provider_unavailable' => 'Nuestro equipo ya fue avisado y lo está resolviendo. Vuelve a intentarlo más tarde.',
+                    default => 'No pudimos iniciar el pago. Inténtalo nuevamente en unos minutos.',
+                },
             ], 503);
         }
 

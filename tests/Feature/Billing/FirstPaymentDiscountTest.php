@@ -85,3 +85,22 @@ test('un descuento total activa la suscripción sin cobrar y deja la factura pag
     $invoice = app(TenantDatabaseContext::class)->runAsSystem(fn () => DB::table('saas_invoices')->where('organization_id', $organization->id)->first());
     expect((float) $invoice->total)->toBe(0.0)->and($invoice->status)->toBe('paid')->and((float) $invoice->discount)->toBe(399.0);
 });
+
+test('si el proveedor no acepta las credenciales de Atlantia el cliente ve un aviso claro con referencia y no se cobra nada', function () {
+    Http::fake(['https://app.recurrente.com/api/checkouts' => Http::response(['message' => 'Autenticación Errónea'], 401)]);
+    [$user] = firstPaymentFixture();
+
+    $response = $this->actingAs($user)->postJson(route('billing.checkout.store'))->assertStatus(503)
+        ->assertJsonPath('code', 'provider_unavailable')
+        ->assertJsonPath('message', 'Nuestro equipo ya fue avisado y lo está resolviendo. Vuelve a intentarlo más tarde.');
+
+    expect($response->json('reference'))->toBeString()->not->toBe('')
+        ->and(Payment::query()->firstOrFail()->status)->toBe('failed');
+});
+
+test('un fallo pasajero del proveedor sugiere reintentar', function () {
+    Http::fake(['https://app.recurrente.com/api/checkouts' => Http::response(['message' => 'Error'], 500)]);
+    [$user] = firstPaymentFixture();
+
+    $this->actingAs($user)->postJson(route('billing.checkout.store'))->assertStatus(503)->assertJsonPath('code', 'checkout_creation_failed');
+});
