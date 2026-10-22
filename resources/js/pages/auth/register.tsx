@@ -1,13 +1,16 @@
 import { Form, Head } from '@inertiajs/react';
 import { Check } from 'lucide-react';
+import { useState } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
+import PasswordRequirements from '@/components/password-requirements';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { meetsPasswordRules } from '@/lib/password-rules';
 import { home, login } from '@/routes';
 import { store } from '@/routes/register';
 
@@ -29,6 +32,10 @@ export default function Register({
     selectedPlan,
     billingPeriod,
 }: Props) {
+    const [password, setPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
+    const passwordReady =
+        meetsPasswordRules(password) && password === confirmation;
     const selectedPrice =
         billingPeriod === 'monthly'
             ? selectedPlan.monthly_price
@@ -160,6 +167,9 @@ export default function Register({
                                         name="password"
                                         placeholder="Contraseña"
                                         passwordrules={passwordRules}
+                                        onChange={(event) =>
+                                            setPassword(event.target.value)
+                                        }
                                     />
                                     <InputError message={errors.password} />
                                 </div>
@@ -176,12 +186,21 @@ export default function Register({
                                         name="password_confirmation"
                                         placeholder="Repítela"
                                         passwordrules={passwordRules}
+                                        onChange={(event) =>
+                                            setConfirmation(event.target.value)
+                                        }
                                     />
                                     <InputError
                                         message={errors.password_confirmation}
                                     />
                                 </div>
                             </div>
+
+                            <PasswordRequirements
+                                password={password}
+                                confirmation={confirmation}
+                                className="-mt-1"
+                            />
 
                             <div>
                                 <div className="flex items-start gap-2.5">
@@ -219,6 +238,7 @@ export default function Register({
                                 type="submit"
                                 className="w-full bg-emerald-700 font-bold text-white hover:bg-emerald-800"
                                 tabIndex={7}
+                                disabled={!passwordReady}
                                 data-test="register-user-button"
                             >
                                 {processing && <Spinner />}

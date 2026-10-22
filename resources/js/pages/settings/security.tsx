@@ -1,6 +1,6 @@
 import { Form, Head, Link, usePage } from '@inertiajs/react';
 import { Lock } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import InputError from '@/components/input-error';
 import type { Props as ManagePasskeysProps } from '@/components/manage-passkeys';
@@ -8,9 +8,11 @@ import ManagePasskeys from '@/components/manage-passkeys';
 import type { Props as ManageTwoFactorProps } from '@/components/manage-two-factor';
 import ManageTwoFactor from '@/components/manage-two-factor';
 import PasswordInput from '@/components/password-input';
+import PasswordRequirements from '@/components/password-requirements';
 import { SettingsCard } from '@/components/settings-card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { meetsPasswordRules } from '@/lib/password-rules';
 import { edit } from '@/routes/security';
 
 type Props = {
@@ -23,6 +25,10 @@ export default function Security(props: Props) {
     const passwordInput = useRef<HTMLInputElement>(null);
     const currentPasswordInput = useRef<HTMLInputElement>(null);
     const isPlatformStaff = usePage().props.isPlatformStaff === true;
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
+    const passwordReady =
+        meetsPasswordRules(newPassword) && newPassword === confirmation;
 
     return (
         <>
@@ -129,6 +135,9 @@ export default function Security(props: Props) {
                                     autoComplete="new-password"
                                     placeholder="Nueva contraseña"
                                     passwordrules={props.passwordRules}
+                                    onChange={(event) =>
+                                        setNewPassword(event.target.value)
+                                    }
                                 />
 
                                 <InputError message={errors.password} />
@@ -146,16 +155,23 @@ export default function Security(props: Props) {
                                     autoComplete="new-password"
                                     placeholder="Confirmar contraseña"
                                     passwordrules={props.passwordRules}
+                                    onChange={(event) =>
+                                        setConfirmation(event.target.value)
+                                    }
                                 />
 
                                 <InputError
                                     message={errors.password_confirmation}
                                 />
+                                <PasswordRequirements
+                                    password={newPassword}
+                                    confirmation={confirmation}
+                                />
                             </div>
 
                             <div className="flex items-center gap-4">
                                 <Button
-                                    disabled={processing}
+                                    disabled={processing || !passwordReady}
                                     data-test="update-password-button"
                                 >
                                     Guardar contraseña

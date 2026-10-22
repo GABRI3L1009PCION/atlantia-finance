@@ -1,10 +1,13 @@
 import { Form, Head } from '@inertiajs/react';
+import { useState } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
+import PasswordRequirements from '@/components/password-requirements';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { meetsPasswordRules } from '@/lib/password-rules';
 import { update } from '@/routes/password';
 
 type Props = {
@@ -14,6 +17,10 @@ type Props = {
 };
 
 export default function ResetPassword({ token, email, passwordRules }: Props) {
+    const [password, setPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
+    const ready = meetsPasswordRules(password) && password === confirmation;
+
     return (
         <>
             <Head title="Crear contraseña nueva" />
@@ -49,6 +56,9 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                 autoFocus
                                 placeholder="Contraseña nueva"
                                 passwordrules={passwordRules}
+                                onChange={(event) =>
+                                    setPassword(event.target.value)
+                                }
                             />
                             <InputError message={errors.password} />
                         </div>
@@ -63,16 +73,24 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                 autoComplete="new-password"
                                 placeholder="Repite la contraseña"
                                 passwordrules={passwordRules}
+                                onChange={(event) =>
+                                    setConfirmation(event.target.value)
+                                }
                             />
                             <InputError
                                 message={errors.password_confirmation}
                             />
                         </div>
 
+                        <PasswordRequirements
+                            password={password}
+                            confirmation={confirmation}
+                        />
+
                         <Button
                             type="submit"
                             className="w-full bg-emerald-700 font-bold tracking-wide text-white hover:bg-emerald-800"
-                            disabled={processing}
+                            disabled={processing || !ready}
                             data-test="reset-password-button"
                         >
                             {processing && <Spinner />}

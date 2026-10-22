@@ -194,14 +194,15 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : null,
-        );
+        // The same strong rule everywhere (what the sign-up screen lists); only the automated tests keep the lenient default,
+        // and the check against known leaked passwords needs the real service, so it runs in production only.
+        Password::defaults(function (): ?Password {
+            if (app()->environment('testing')) {
+                return null;
+            }
+            $rule = Password::min(12)->mixedCase()->letters()->numbers()->symbols();
+
+            return app()->isProduction() ? $rule->uncompromised() : $rule;
+        });
     }
 }
