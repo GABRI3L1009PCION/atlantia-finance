@@ -39,6 +39,7 @@ type FelRequest = {
     status: string;
     error_code: string | null;
     created: string;
+    document_url: string | null;
 };
 const FEL_STATUS: Record<string, string> = {
     pending: 'Pendiente',
@@ -187,6 +188,7 @@ export default function Payments({
                             'Estado',
                             'Motivo',
                             'Desde',
+                            'Acción',
                         ]}
                         empty={
                             fel_requests.length === 0 &&
@@ -228,6 +230,20 @@ export default function Payments({
                                 </td>
                                 <td className="px-2 py-2 whitespace-nowrap">
                                     {date(request.created, true)}
+                                </td>
+                                <td className="px-2 py-2 whitespace-nowrap">
+                                    {request.document_url ? (
+                                        <a
+                                            href={request.document_url}
+                                            className="font-semibold text-[#fca5a5] underline"
+                                        >
+                                            Emitir en la SAT
+                                        </a>
+                                    ) : (
+                                        <span className="text-slate-500">
+                                            Sin documento aún
+                                        </span>
+                                    )}
                                 </td>
                             </tr>
                         ))}

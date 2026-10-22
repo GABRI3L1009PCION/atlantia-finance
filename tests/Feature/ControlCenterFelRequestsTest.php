@@ -34,6 +34,7 @@ test('el Centro de Control lista las facturas FEL de suscripción pendientes o c
         ->has('fel_requests', 2)
         ->where('fel_requests.0.payment_id', $pending)
         ->where('fel_requests.0.status', 'pending')
+        ->where('fel_requests.0.document_url', null)
         ->where('fel_requests.1.payment_id', $needsConfiguration)
         ->where('fel_requests.1.error_code', 'issuer_not_configured')
         ->where('fel_requests.1.organization', 'Firma Con FEL'));
