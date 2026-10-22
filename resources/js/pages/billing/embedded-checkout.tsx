@@ -54,8 +54,8 @@ type EmbedStatus =
     | 'paid';
 
 /** Approximate height of the provider's form at full size and the smallest scale we accept to fit it on short windows. */
-const NATURAL_FORM_HEIGHT = 1000;
-const MIN_FORM_SCALE = 0.78;
+const NATURAL_FORM_HEIGHT = 1220;
+const MIN_FORM_SCALE = 0.62;
 
 const currency = new Intl.NumberFormat('es-GT', {
     style: 'currency',
@@ -352,7 +352,21 @@ export default function EmbeddedCheckout({
                             className="mx-auto hidden w-52 drop-shadow-2xl lg:block"
                         />
 
-                        <div className="mt-5 rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
+                        <div className="mt-4 text-center lg:mt-5">
+                            <h1 className="text-2xl font-bold tracking-tight">
+                                Finaliza tu suscripción
+                            </h1>
+                            <p className="mt-1 text-sm text-white/70">
+                                Un último paso: paga de forma segura para
+                                activar tu plan.
+                            </p>
+                            <span className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">
+                                <LockKeyhole className="size-3.5" /> Pago
+                                protegido por Recurrente
+                            </span>
+                        </div>
+
+                        <div className="mt-4 rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0">
                                     <p className="text-[10px] font-extrabold tracking-widest text-white/70 uppercase">
@@ -468,23 +482,7 @@ export default function EmbeddedCheckout({
                     </div>
                 </aside>
 
-                <main className="flex flex-col px-4 py-4 sm:px-8 lg:h-svh lg:px-10 lg:py-5">
-                    <header className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">
-                                Finaliza tu suscripción
-                            </h1>
-                            <p className="text-sm text-slate-600">
-                                Un último paso: paga de forma segura para
-                                activar tu plan.
-                            </p>
-                        </div>
-                        <span className="inline-flex items-center gap-2 rounded-full bg-[#640000]/10 px-3 py-1.5 text-xs font-semibold text-[#640000]">
-                            <LockKeyhole className="size-3.5" /> Pago protegido
-                            por Recurrente
-                        </span>
-                    </header>
-
+                <main className="flex flex-col px-4 py-4 sm:px-8 lg:h-svh lg:px-8 lg:py-3">
                     {planChanged && (
                         <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm font-medium text-emerald-800">
                             Plan actualizado. Revisa el nuevo resumen antes de
@@ -503,7 +501,7 @@ export default function EmbeddedCheckout({
                         </p>
                     )}
 
-                    <section className="relative mt-3 flex min-h-[640px] flex-1 flex-col lg:min-h-0">
+                    <section className="relative flex min-h-[640px] flex-1 flex-col lg:min-h-0">
                         {!paymentProviderReady && (
                             <div className="mx-auto mt-10 max-w-md rounded-xl bg-amber-50 p-5 text-center text-sm text-amber-900">
                                 El servicio de pagos está temporalmente no
