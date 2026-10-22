@@ -328,4 +328,4 @@ Atlantia puede modificar estos Términos para reflejar cambios legales, del serv
 
 - Domicilio para notificaciones: Colonia La Repegua, Santo Tomás de Castilla, Puerto Barrios, Izabal, Guatemala
 
-*Versión 1.0, vigente desde 22 de octubre de 2026.*
+_Versión 1.0, vigente desde 22 de octubre de 2026._
