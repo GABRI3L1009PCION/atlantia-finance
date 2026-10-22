@@ -10,6 +10,7 @@ use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\AtlantiaAiConnectionController;
 use App\Http\Controllers\AuditorController;
 use App\Http\Controllers\AuditRequestsController;
+use App\Http\Controllers\Auth\EmailVerificationCodeController;
 use App\Http\Controllers\BankController;
 use App\Http\Controllers\Billing\BillingDetailsController;
 use App\Http\Controllers\Billing\CheckoutController;
@@ -81,6 +82,7 @@ Route::middleware('auth')->prefix('legal')->name('legal.')->group(function () {
     Route::post('aceptar', [LegalController::class, 'store'])->middleware('throttle:10,1')->name('store');
 });
 Route::middleware('auth')->group(function () {
+    Route::post('email/verify-code', EmailVerificationCodeController::class)->middleware('throttle:10,1')->name('verification.code');
     Route::get('password/change', [ForcedPasswordController::class, 'show'])->name('password.force');
     Route::put('password/change', [ForcedPasswordController::class, 'update'])->middleware('throttle:10,1')->name('password.force.update');
 });

@@ -22,7 +22,7 @@ test('sends verification notification', function () {
         $user,
         VerifyEmailNotification::class,
         fn (VerifyEmailNotification $notification) => $notification->toMail($user)->subject
-            === 'Verifica tu correo electrónico | Atlantia Finance',
+            === 'Tu código de verificación | Atlantia Finance',
     );
 });
 

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Services\Auth\EmailVerificationCodeService;
 use App\Services\Platform\PublicPlanCatalog;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -97,6 +98,8 @@ class FortifyServiceProvider extends ServiceProvider
             return Inertia::render('auth/verify-email', [
                 'status' => $request->session()->get('status'),
                 'email' => $request->user()?->email,
+                'resendIn' => $request->user() === null ? 0 : app(EmailVerificationCodeService::class)->resendIn($request->user()),
+                'codeMinutes' => EmailVerificationCodeService::VALID_MINUTES,
                 'selectedPlan' => $planCode && isset($catalog[$planCode])
                     ? [
                         'name' => $catalog[$planCode]['name'],
