@@ -22,9 +22,9 @@ createInertiaApp({
                 return null;
             case name === 'billing/checkout':
             case name === 'billing/plans':
+            case name === 'billing/embedded-checkout':
                 return null;
             case name === 'billing/details':
-            case name === 'billing/embedded-checkout':
                 return AuthLayout;
             case name.startsWith('auth/'):
                 return AuthLayout;

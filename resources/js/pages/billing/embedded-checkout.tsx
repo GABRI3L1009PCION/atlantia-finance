@@ -53,6 +53,10 @@ type EmbedStatus =
     | 'processing'
     | 'paid';
 
+/** Approximate height of the provider's form at full size and the smallest scale we accept to fit it on short windows. */
+const NATURAL_FORM_HEIGHT = 1000;
+const MIN_FORM_SCALE = 0.78;
+
 const currency = new Intl.NumberFormat('es-GT', {
     style: 'currency',
     currency: 'GTQ',
@@ -259,6 +263,61 @@ export default function EmbeddedCheckout({
         return () => window.clearTimeout(initialization);
     }, [initializeCheckout]);
 
+    // The provider's form sets its own fixed height and is taller than most windows: it gets exactly the height left on
+    // screen and, when that is short, is scaled down a little so the whole form shows without an inner scroll bar.
+    useEffect(() => {
+        const container = document.getElementById(
+            'recurrente-checkout-container',
+        );
+
+        if (!container) {
+            return;
+        }
+
+        const fit = () => {
+            const iframe = container.querySelector('iframe');
+            const height = container.clientHeight;
+
+            if (!iframe || height === 0) {
+                return;
+            }
+
+            const scale = Math.min(
+                1,
+                Math.max(MIN_FORM_SCALE, height / NATURAL_FORM_HEIGHT),
+            );
+            const width = `${100 / scale}%`;
+            const frameHeight = `${height / scale}px`;
+            const transform = scale < 1 ? `scale(${scale})` : '';
+
+            if (
+                iframe.style.width !== width ||
+                iframe.style.height !== frameHeight ||
+                iframe.style.transform !== transform
+            ) {
+                iframe.style.transformOrigin = 'top left';
+                iframe.style.width = width;
+                iframe.style.height = frameHeight;
+                iframe.style.transform = transform;
+            }
+        };
+
+        const resize = new ResizeObserver(fit);
+        resize.observe(container);
+        const mutation = new MutationObserver(fit);
+        mutation.observe(container, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style'],
+        });
+        fit();
+
+        return () => {
+            resize.disconnect();
+            mutation.disconnect();
+        };
+    }, [status]);
     const retry = () => window.location.reload();
 
     const isPreparing = status === 'creating' || status === 'loading';
@@ -274,260 +333,315 @@ export default function EmbeddedCheckout({
                 <link rel="dns-prefetch" href="https://app.recurrente.com" />
             </Head>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                        <p className="text-[10px] font-extrabold tracking-widest text-[#640000] uppercase">
-                            Resumen de compra
-                        </p>
-                        <p className="text-base font-bold text-slate-950">
-                            Plan {plan.name} ·{' '}
-                            {plan.billingPeriod === 'annual'
-                                ? 'Anual'
-                                : 'Mensual'}
-                        </p>
-                        <p className="truncate text-xs text-slate-500">
-                            {organization.name}
-                        </p>
-                        {invoice && (
-                            <p className="truncate text-xs text-slate-500">
-                                Factura {invoice.number}
-                                {invoice.periodStart &&
-                                    invoice.periodEnd &&
-                                    ` · del ${invoice.periodStart} al ${invoice.periodEnd}`}
-                            </p>
-                        )}
-                    </div>
-                    <div className="shrink-0 text-right">
-                        <p className="text-[10px] font-medium text-slate-500 uppercase">
-                            Total a pagar
-                        </p>
-                        <strong className="text-2xl text-[#640000]">
-                            {currency.format(Number(plan.amount))}
-                        </strong>
-                    </div>
-                </div>
-                {breakdown &&
-                    (breakdown.discount > 0 || breakdown.credit > 0) && (
-                        <dl className="mt-2 space-y-0.5 border-t border-slate-200 pt-2 text-xs text-slate-600">
-                            <div className="flex justify-between">
-                                <dt>Precio de lista</dt>
-                                <dd>{currency.format(breakdown.subtotal)}</dd>
-                            </div>
-                            {breakdown.discount > 0 && (
-                                <div className="flex justify-between">
-                                    <dt>Descuento</dt>
-                                    <dd>
-                                        -{currency.format(breakdown.discount)}
-                                    </dd>
+            <div className="grid min-h-svh bg-[#faf9f8] text-slate-950 lg:h-svh lg:grid-cols-[36%_64%] lg:overflow-hidden">
+                <aside className="relative overflow-hidden bg-emerald-700 px-6 py-6 text-white lg:flex lg:h-svh lg:flex-col lg:px-9 lg:py-7">
+                    <div className="absolute -top-32 -left-32 size-96 rounded-full border border-white/10" />
+                    <div className="absolute -top-16 -left-16 size-96 rounded-full border border-white/10" />
+
+                    <Link
+                        href="/"
+                        className="relative z-10 w-fit text-sm font-bold tracking-[0.24em] uppercase"
+                    >
+                        Atlantia Systems
+                    </Link>
+
+                    <div className="relative z-10 my-5 lg:my-auto">
+                        <img
+                            src="/images/atlantia-finance-logo.png"
+                            alt="Atlantia Finance"
+                            className="mx-auto hidden w-52 drop-shadow-2xl lg:block"
+                        />
+
+                        <div className="mt-5 rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-extrabold tracking-widest text-white/70 uppercase">
+                                        Resumen de compra
+                                    </p>
+                                    <p className="mt-1 text-lg font-bold">
+                                        Plan {plan.name} ·{' '}
+                                        {plan.billingPeriod === 'annual'
+                                            ? 'Anual'
+                                            : 'Mensual'}
+                                    </p>
+                                    <p className="truncate text-xs text-white/70">
+                                        {organization.name}
+                                    </p>
+                                    {invoice && (
+                                        <p className="mt-0.5 text-xs text-white/70">
+                                            Factura {invoice.number}
+                                            {invoice.periodStart &&
+                                                invoice.periodEnd &&
+                                                ` · del ${invoice.periodStart} al ${invoice.periodEnd}`}
+                                        </p>
+                                    )}
                                 </div>
-                            )}
-                            {breakdown.credit > 0 && (
-                                <div className="flex justify-between">
-                                    <dt>Crédito aplicado</dt>
-                                    <dd>
-                                        -{currency.format(breakdown.credit)}
-                                    </dd>
-                                </div>
-                            )}
-                        </dl>
-                    )}
-            </div>
-            {planChanged && (
-                <p className="mt-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm font-medium text-emerald-800">
-                    Plan actualizado. Revisa el nuevo resumen antes de
-                    continuar.
-                </p>
-            )}
-            {paymentStatus === 'processing' && (
-                <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm text-emerald-800">
-                    Estamos confirmando tu pago de forma segura.
-                </p>
-            )}
-            {paymentStatus === 'cancelled' && (
-                <p className="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-center text-sm text-amber-800">
-                    El checkout fue cancelado. No se realizó ningún cobro.
-                </p>
-            )}
-
-            <section className="relative mt-4">
-                {!paymentProviderReady && (
-                    <div className="rounded-xl bg-amber-50 p-5 text-center text-sm text-amber-900">
-                        El servicio de pagos está temporalmente no disponible.
-                        No se iniciará un nuevo cobro hasta completar su
-                        configuración.
-                    </div>
-                )}
-
-                {isPreparing && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white">
-                        <div className="max-w-xs px-6 text-center">
-                            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#640000] text-white shadow-lg shadow-[#640000]/20">
-                                <LoaderCircle className="size-7 animate-spin" />
                             </div>
-                            <h3 className="mt-4 text-lg font-bold">
-                                {status === 'creating'
-                                    ? 'Preparando tu pago'
-                                    : 'Cargando formulario seguro'}
-                            </h3>
-                            <p className="mt-1.5 text-sm leading-6 text-slate-600">
-                                Esto normalmente toma solo unos segundos.
-                            </p>
-                            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                <div className="h-full w-2/3 animate-pulse rounded-full bg-[#640000]" />
-                            </div>
-                        </div>
-                    </div>
-                )}
 
-                {status === 'failed' && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div className="flex items-start gap-3">
-                            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
-                                <AlertCircle className="size-5" />
-                            </span>
-                            <div>
-                                <h3 className="text-base leading-5 font-bold text-slate-950">
-                                    {errorTitle}
-                                </h3>
-                                <p className="mt-1 text-sm leading-5 text-slate-600">
-                                    {error}
-                                </p>
+                            {breakdown &&
+                                (breakdown.discount > 0 ||
+                                    breakdown.credit > 0) && (
+                                    <dl className="mt-3 space-y-1 border-t border-white/15 pt-3 text-xs text-white/80">
+                                        <div className="flex justify-between">
+                                            <dt>Precio de lista</dt>
+                                            <dd>
+                                                {currency.format(
+                                                    breakdown.subtotal,
+                                                )}
+                                            </dd>
+                                        </div>
+                                        {breakdown.discount > 0 && (
+                                            <div className="flex justify-between">
+                                                <dt>Descuento</dt>
+                                                <dd>
+                                                    -
+                                                    {currency.format(
+                                                        breakdown.discount,
+                                                    )}
+                                                </dd>
+                                            </div>
+                                        )}
+                                        {breakdown.credit > 0 && (
+                                            <div className="flex justify-between">
+                                                <dt>Crédito aplicado</dt>
+                                                <dd>
+                                                    -
+                                                    {currency.format(
+                                                        breakdown.credit,
+                                                    )}
+                                                </dd>
+                                            </div>
+                                        )}
+                                    </dl>
+                                )}
+
+                            <div className="mt-4 flex items-end justify-between border-t border-white/15 pt-4">
+                                <span className="text-sm text-white/80">
+                                    Total a pagar
+                                </span>
+                                <strong className="text-3xl">
+                                    {currency.format(Number(plan.amount))}
+                                </strong>
                             </div>
                         </div>
 
-                        <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                            <span className="flex items-center gap-1.5">
-                                <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
-                                No se realizó ningún cobro
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
-                                Tus datos quedan guardados
-                            </span>
-                        </p>
+                        <ul className="mt-5 space-y-2 text-sm text-white/85">
+                            <li className="flex items-center gap-2.5">
+                                <CheckCircle2 className="size-4 shrink-0 text-emerald-300" />
+                                Correo verificado
+                            </li>
+                            <li className="flex items-center gap-2.5">
+                                <ShieldCheck className="size-4 shrink-0 text-emerald-300" />
+                                Precio validado por Atlantia
+                            </li>
+                            <li className="flex items-center gap-2.5">
+                                <LockKeyhole className="size-4 shrink-0 text-emerald-300" />
+                                Datos de tarjeta aislados: Atlantia no los
+                                recibe
+                            </li>
+                        </ul>
 
-                        <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                            <button
-                                type="button"
-                                onClick={retry}
-                                className="inline-flex items-center gap-2 rounded-xl bg-[#640000] px-4 py-2 text-sm font-bold text-white hover:bg-[#420001]"
+                        <p className="mt-4 text-xs leading-5 text-white/60">
+                            Es un cargo único
+                            {invoice
+                                ? ': el pago se aplica a esta factura.'
+                                : '; cada renovación se paga con su propia factura.'}{' '}
+                            Al pagar aceptas los{' '}
+                            <a
+                                href="/terminos"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-semibold text-white underline"
                             >
-                                <RefreshCw className="size-4" /> Reintentar
-                            </button>
+                                Términos y Condiciones
+                            </a>
+                            .
+                        </p>
+                        {!invoice && (
                             <Link
                                 href="/billing/plans"
-                                className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-[#640000] hover:bg-slate-50"
+                                className="mt-3 inline-flex text-sm font-semibold text-white underline underline-offset-4"
                             >
-                                Elegir otro plan
+                                Cambiar plan
                             </Link>
-                        </div>
-
-                        {reference && (
-                            <p className="mt-3 text-[11px] leading-4 text-slate-500">
-                                Si continúa, escríbenos con esta referencia:{' '}
-                                <span className="font-mono break-all text-slate-700 select-all">
-                                    {reference}
-                                </span>
-                            </p>
                         )}
                     </div>
-                )}
-                {(status === 'processing' || status === 'paid') && (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-6 text-center">
-                        <CheckCircle2 className="mx-auto size-12 text-emerald-600" />
-                        <h3 className="mt-3 text-xl font-bold">
-                            {status === 'paid'
-                                ? 'Confirmación del pago'
-                                : 'Pago en proceso'}
-                        </h3>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                            {confirmationTimedOut
-                                ? 'La confirmación está pendiente. No vuelvas a pagar. Puedes salir de esta pantalla y regresar más tarde.'
-                                : 'Comprobando la confirmación segura. Entrarás automáticamente cuando el servidor valide tu suscripción.'}
+                </aside>
+
+                <main className="flex flex-col px-4 py-4 sm:px-8 lg:h-svh lg:px-10 lg:py-5">
+                    <header className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h1 className="text-2xl font-bold tracking-tight">
+                                Finaliza tu suscripción
+                            </h1>
+                            <p className="text-sm text-slate-600">
+                                Un último paso: paga de forma segura para
+                                activar tu plan.
+                            </p>
+                        </div>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-[#640000]/10 px-3 py-1.5 text-xs font-semibold text-[#640000]">
+                            <LockKeyhole className="size-3.5" /> Pago protegido
+                            por Recurrente
+                        </span>
+                    </header>
+
+                    {planChanged && (
+                        <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm font-medium text-emerald-800">
+                            Plan actualizado. Revisa el nuevo resumen antes de
+                            continuar.
                         </p>
-                        {confirmationTimedOut && (
-                            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                                <button
-                                    type="button"
-                                    className="rounded-xl bg-[#640000] px-4 py-2.5 text-sm font-semibold text-white"
-                                    onClick={() => {
-                                        setConfirmationTimedOut(false);
-                                        setConfirmationRound(
-                                            (round) => round + 1,
-                                        );
-                                    }}
-                                >
-                                    Comprobar estado sin volver a pagar
-                                </button>
-                                <Link
-                                    href="/"
-                                    className="px-3 py-2.5 text-sm text-[#640000] underline"
-                                >
-                                    Volver al inicio
-                                </Link>
+                    )}
+                    {paymentStatus === 'processing' && (
+                        <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm text-emerald-800">
+                            Estamos confirmando tu pago de forma segura.
+                        </p>
+                    )}
+                    {paymentStatus === 'cancelled' && (
+                        <p className="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-center text-sm text-amber-800">
+                            El checkout fue cancelado. No se realizó ningún
+                            cobro.
+                        </p>
+                    )}
+
+                    <section className="relative mt-3 flex min-h-[640px] flex-1 flex-col lg:min-h-0">
+                        {!paymentProviderReady && (
+                            <div className="mx-auto mt-10 max-w-md rounded-xl bg-amber-50 p-5 text-center text-sm text-amber-900">
+                                El servicio de pagos está temporalmente no
+                                disponible. No se iniciará un nuevo cobro hasta
+                                completar su configuración.
                             </div>
                         )}
-                    </div>
-                )}
 
-                <div
-                    id="recurrente-checkout-container"
-                    className={
-                        status === 'failed' ||
-                        status === 'processing' ||
-                        status === 'paid' ||
-                        !paymentProviderReady
-                            ? 'hidden'
-                            : 'h-[calc(100svh-330px)] max-h-[640px] min-h-[430px] overflow-hidden rounded-xl'
-                    }
-                />
-            </section>
+                        {isPreparing && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white">
+                                <div className="max-w-xs px-6 text-center">
+                                    <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#640000] text-white shadow-lg shadow-[#640000]/20">
+                                        <LoaderCircle className="size-7 animate-spin" />
+                                    </div>
+                                    <h3 className="mt-4 text-lg font-bold">
+                                        {status === 'creating'
+                                            ? 'Preparando tu pago'
+                                            : 'Cargando formulario seguro'}
+                                    </h3>
+                                    <p className="mt-1.5 text-sm leading-6 text-slate-600">
+                                        Esto normalmente toma solo unos
+                                        segundos.
+                                    </p>
+                                    <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                        <div className="h-full w-2/3 animate-pulse rounded-full bg-[#640000]" />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
-            <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
-                <li className="flex items-center gap-1.5">
-                    <CheckCircle2 className="size-3.5 shrink-0 text-[#640000]" />
-                    Correo verificado
-                </li>
-                <li className="flex items-center gap-1.5">
-                    <ShieldCheck className="size-3.5 shrink-0 text-[#640000]" />
-                    Precio validado
-                </li>
-                <li className="flex items-center gap-1.5">
-                    <LockKeyhole className="size-3.5 shrink-0 text-[#640000]" />
-                    Pago protegido por Recurrente
-                </li>
-            </ul>
+                        {status === 'failed' && (
+                            <div className="mx-auto mt-6 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5">
+                                <div className="flex items-start gap-3">
+                                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
+                                        <AlertCircle className="size-5" />
+                                    </span>
+                                    <div>
+                                        <h3 className="text-base leading-5 font-bold text-slate-950">
+                                            {errorTitle}
+                                        </h3>
+                                        <p className="mt-1 text-sm leading-5 text-slate-600">
+                                            {error}
+                                        </p>
+                                    </div>
+                                </div>
 
-            <p className="mt-2 text-[10.5px] leading-4 text-slate-500">
-                Atlantia no recibe ni guarda el número de tu tarjeta. Es un
-                cargo único
-                {invoice
-                    ? ': el pago se aplica a esta factura.'
-                    : '; cada renovación se paga con su propia factura.'}{' '}
-                Al pagar aceptas los{' '}
-                <a
-                    href="/terminos"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-semibold text-[#640000] underline"
-                >
-                    Términos y Condiciones
-                </a>
-                .{' '}
-                {!invoice && (
-                    <Link
-                        href="/billing/plans"
-                        className="font-semibold text-[#640000] underline underline-offset-2"
-                    >
-                        Cambiar plan
-                    </Link>
-                )}
-            </p>
+                                <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                                    <span className="flex items-center gap-1.5">
+                                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                                        No se realizó ningún cobro
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                                        Tus datos quedan guardados
+                                    </span>
+                                </p>
+
+                                <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={retry}
+                                        className="inline-flex items-center gap-2 rounded-xl bg-[#640000] px-4 py-2 text-sm font-bold text-white hover:bg-[#420001]"
+                                    >
+                                        <RefreshCw className="size-4" />{' '}
+                                        Reintentar
+                                    </button>
+                                    <Link
+                                        href="/billing/plans"
+                                        className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-[#640000] hover:bg-slate-50"
+                                    >
+                                        Elegir otro plan
+                                    </Link>
+                                </div>
+
+                                {reference && (
+                                    <p className="mt-3 text-[11px] leading-4 text-slate-500">
+                                        Si continúa, escríbenos con esta
+                                        referencia:{' '}
+                                        <span className="font-mono break-all text-slate-700 select-all">
+                                            {reference}
+                                        </span>
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {(status === 'processing' || status === 'paid') && (
+                            <div className="mx-auto mt-8 w-full max-w-lg rounded-2xl border border-emerald-200 bg-emerald-50/50 p-6 text-center">
+                                <CheckCircle2 className="mx-auto size-12 text-emerald-600" />
+                                <h3 className="mt-3 text-xl font-bold">
+                                    {status === 'paid'
+                                        ? 'Confirmación del pago'
+                                        : 'Pago en proceso'}
+                                </h3>
+                                <p className="mt-2 text-sm leading-6 text-slate-600">
+                                    {confirmationTimedOut
+                                        ? 'La confirmación está pendiente. No vuelvas a pagar. Puedes salir de esta pantalla y regresar más tarde.'
+                                        : 'Comprobando la confirmación segura. Entrarás automáticamente cuando el servidor valide tu suscripción.'}
+                                </p>
+                                {confirmationTimedOut && (
+                                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                                        <button
+                                            type="button"
+                                            className="rounded-xl bg-[#640000] px-4 py-2.5 text-sm font-semibold text-white"
+                                            onClick={() => {
+                                                setConfirmationTimedOut(false);
+                                                setConfirmationRound(
+                                                    (round) => round + 1,
+                                                );
+                                            }}
+                                        >
+                                            Comprobar estado sin volver a pagar
+                                        </button>
+                                        <Link
+                                            href="/"
+                                            className="px-3 py-2.5 text-sm text-[#640000] underline"
+                                        >
+                                            Volver al inicio
+                                        </Link>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div
+                            id="recurrente-checkout-container"
+                            className={
+                                status === 'failed' ||
+                                status === 'processing' ||
+                                status === 'paid' ||
+                                !paymentProviderReady
+                                    ? 'hidden'
+                                    : 'h-full min-h-[600px] flex-1 overflow-hidden rounded-xl lg:min-h-0'
+                            }
+                        />
+                    </section>
+                </main>
+            </div>
         </>
     );
 }
-EmbeddedCheckout.layout = {
-    title: 'Finaliza tu suscripción',
-    description: 'Un último paso: paga de forma segura para activar tu plan.',
-};
