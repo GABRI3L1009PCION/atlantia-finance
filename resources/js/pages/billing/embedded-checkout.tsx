@@ -324,7 +324,7 @@ export default function EmbeddedCheckout({
                 <link rel="dns-prefetch" href="https://app.recurrente.com" />
             </Head>
 
-            <div className="grid min-h-svh bg-[#faf9f8] text-slate-950 lg:h-svh lg:grid-cols-[36%_64%] lg:overflow-hidden">
+            <div className="grid min-h-svh bg-[#faf9f8] text-slate-950 lg:h-svh lg:grid-cols-2 lg:overflow-hidden">
                 <aside className="relative overflow-hidden bg-emerald-700 px-6 py-6 text-white lg:flex lg:h-svh lg:flex-col lg:items-center lg:justify-center lg:px-9 lg:py-7">
                     <div className="absolute -top-32 -left-32 size-96 rounded-full border border-white/10" />
                     <div className="absolute -top-16 -left-16 size-96 rounded-full border border-white/10" />
