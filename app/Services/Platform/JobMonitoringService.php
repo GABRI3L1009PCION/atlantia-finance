@@ -40,7 +40,7 @@ class JobMonitoringService
 
     public const SCHEDULE_LABELS = ['fel:recover' => 'Recuperación de FEL', 'luzma:run' => 'Recordatorios e insights de Luzma', 'backup:create' => 'Respaldos',
         'webhooks:deliver' => 'Entrega de webhooks', 'platform:health' => 'Chequeos de salud', 'billing:run' => 'Renovaciones y cobranza', 'support:expire-access' => 'Vencimiento de accesos de soporte',
-        'usage:snapshot' => 'Fotografía de consumo'];
+        'usage:snapshot' => 'Fotografía de consumo', 'plans:limit-alerts' => 'Avisos de límite del plan'];
 
     /** @return array{pending: int, reserved: int, oldest_seconds: int|null, failed_24h: int, failed_total: int, processed_1h: int, completed_1h: int, failed_rate: float|null, workers_active: bool, by_queue: list<array{queue: string, pending: int}>} */
     public function queueHealth(): array

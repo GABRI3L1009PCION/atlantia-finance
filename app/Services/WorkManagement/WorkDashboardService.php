@@ -248,7 +248,7 @@ class WorkDashboardService
         ])->values()->all();
         $growth = array_values($growth);
 
-        $limit = app(WorkspaceContext::class)->limit($organization, 'companies');
+        $limit = app(WorkspaceContext::class)->limit($organization, 'active_cases');
         $limit = $limit > 0 && $limit !== PHP_INT_MAX ? $limit : null;
 
         return [

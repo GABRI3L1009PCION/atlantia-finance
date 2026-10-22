@@ -15,12 +15,16 @@ use RuntimeException;
 
 class AtlantiaProductionDemoSeeder extends Seeder
 {
+    use RefusesProduction;
+
     private const ORGANIZATION_ID = 2;
 
     private const COMPANY_ID = 2;
 
     public function run(): void
     {
+        $this->refuseInProduction();
+
         DB::transaction(function (): void {
             $company = DB::table('companies')->where('id', self::COMPANY_ID)->first();
             if ($company === null) {

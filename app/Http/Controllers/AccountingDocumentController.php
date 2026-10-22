@@ -81,6 +81,7 @@ class AccountingDocumentController extends Controller
     {
         $org = $this->context->organization($request->user());
         $companyRecord = $this->accounting->company($org, $request->user(), $company);
+        abort_unless($this->accounting->canJournal($org, $companyRecord->id, $request->user(), 'view'), 403);
         $entryRecord = $this->entry($companyRecord->id, $entry);
         $record = $this->row(DB::table('journal_entry_documents')->where('journal_entry_id', $entryRecord->id)->where('public_id', $document));
         abort_unless(Storage::disk('local')->exists($record->storage_path), 404);

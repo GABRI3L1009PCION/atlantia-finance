@@ -9,6 +9,7 @@ use App\Services\Notifications\AlertDispatchService;
 use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\Billing\SubscriptionService;
 use App\Services\Platform\GlobalConfigurationService;
+use App\Services\Platform\LimitAlertService;
 use App\Services\Platform\PlatformHealthService;
 use App\Services\Platform\SupportAccessService;
 use App\Services\Platform\UsageMeterService;
@@ -87,6 +88,12 @@ Artisan::command('usage:snapshot', function (UsageMeterService $usage) {
 })->purpose('Fotografía diaria del consumo de cada organización');
 
 Schedule::command('usage:snapshot')->dailyAt('01:15')->withoutOverlapping();
+
+Artisan::command('plans:limit-alerts', function (LimitAlertService $alerts) {
+    $this->info('Avisos de límite enviados: '.$alerts->run());
+})->purpose('Avisa a los dueños de firma al llegar al 80 % y al 95 % de un límite del plan');
+
+Schedule::command('plans:limit-alerts')->dailyAt('01:45')->withoutOverlapping()->onOneServer();
 
 Artisan::command('normative:sync', function () {
     $this->call('db:seed', ['--class' => NormativeLibrarySeeder::class, '--force' => true]);

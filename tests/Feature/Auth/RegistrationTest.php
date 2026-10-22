@@ -36,7 +36,7 @@ test('new users can register', function () {
         'password_confirmation' => 'password',
         'plan' => 'professional',
         'billing_period' => 'annual',
-        'terms' => true,
+        'organization_name' => 'Despacho Contable de Prueba', 'terms' => true,
     ]);
 
     $this->assertAuthenticated();
@@ -64,7 +64,7 @@ test('new users can register', function () {
     ]);
 
     $this->assertDatabaseHas('organizations', [
-        'name' => 'Organización de Test User',
+        'name' => 'Despacho Contable de Prueba',
         'country_code' => 'GT',
         'currency_code' => 'GTQ',
         'timezone' => 'America/Guatemala',
@@ -72,7 +72,7 @@ test('new users can register', function () {
     ]);
 
     $organizationId = DB::table('organizations')
-        ->where('name', 'Organización de Test User')
+        ->where('name', 'Despacho Contable de Prueba')
         ->value('id');
 
     expect($organizationId)->not->toBeNull();
@@ -146,7 +146,7 @@ test('registration rejects an unknown plan', function () {
             'password_confirmation' => 'password',
             'plan' => 'forged_plan',
             'billing_period' => 'monthly',
-            'terms' => true,
+            'organization_name' => 'Despacho Contable de Prueba', 'terms' => true,
         ]);
 
     $response
@@ -162,4 +162,19 @@ test('registration rejects an unknown plan', function () {
     $this->assertDatabaseCount('organizations', 0);
     $this->assertDatabaseCount('subscriptions', 0);
     $this->assertDatabaseCount('subscription_items', 0);
+});
+
+test('el registro pide el nombre del despacho y lo usa como nombre de la organización', function () {
+    $this->post(route('register.store'), [
+        'name' => 'Persona Titular',
+        'email' => 'sin-despacho@example.com',
+        'password' => 'una-clave-segura-2026',
+        'password_confirmation' => 'una-clave-segura-2026',
+        'plan' => 'professional',
+        'billing_period' => 'monthly',
+        'terms' => true,
+    ])->assertSessionHasErrors('organization_name');
+
+    $this->assertGuest();
+    $this->assertDatabaseMissing('users', ['email' => 'sin-despacho@example.com']);
 });

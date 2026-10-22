@@ -151,6 +151,8 @@ class FelDocumentController extends Controller
                 ->get(['action', 'user_id', 'occurred_at']),
             'entry' => DB::table('accounting_source_entries')->where('company_id', $record->id)->where('source_type', 'fel_document')
                 ->where('source_id', $doc->id)->where('event', 'origin')->value('journal_entry_id'),
+            'entryPublicId' => DB::table('accounting_source_entries as s')->join('journal_entries as e', 'e.id', '=', 's.journal_entry_id')
+                ->where('s.company_id', $record->id)->where('s.source_type', 'fel_document')->where('s.source_id', $doc->id)->where('s.event', 'origin')->value('e.public_id'),
         ]);
     }
 

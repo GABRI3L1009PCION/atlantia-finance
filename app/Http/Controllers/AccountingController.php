@@ -136,6 +136,15 @@ class AccountingController extends Controller
                 ?? $periods->first();
             $periodId = (int) $defaultPeriod->id;
         }
+        // A link from a source document carries the entry to show: its period decides what the journal lists.
+        $linkedEntry = (string) $request->query('entry', '');
+        if (Str::isUuid($linkedEntry)) {
+            $linkedPeriod = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
+                ->where('p.company_id', $record->id)->where('e.public_id', $linkedEntry)->value('e.accounting_period_id');
+            $periodId = $linkedPeriod === null ? $periodId : (int) $linkedPeriod;
+        } else {
+            $linkedEntry = '';
+        }
         $accountId = $request->integer('account');
         $journalSearch = trim((string) $request->query('journal_search', ''));
         $journalStatus = (string) $request->query('journal_status', '');
@@ -316,6 +325,7 @@ class AccountingController extends Controller
                 ->get(['request.*', 'requester.name as requester_name', 'approver.name as approver_name']),
             'members' => $members, 'journalCreators' => $journalCreators, 'filters' => [
                 'period' => $periodId,
+                'entry' => $linkedEntry,
                 'account' => $accountId,
                 'journal_search' => $journalSearch,
                 'journal_status' => $journalStatus,

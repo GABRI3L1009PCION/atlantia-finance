@@ -1,6 +1,9 @@
 import { Form, Head, Link } from '@inertiajs/react';
 import { Users } from 'lucide-react';
+import { useState } from 'react';
 import InputError from '@/components/input-error';
+import PasswordRequirements from '@/components/password-requirements';
+import { meetsPasswordRules } from '@/lib/password-rules';
 import { login } from '@/routes';
 
 export default function AcceptInvitation({
@@ -16,6 +19,11 @@ export default function AcceptInvitation({
     signedIn: boolean;
     acceptUrl: string;
 }) {
+    const [password, setPassword] = useState('');
+    const [confirmation, setConfirmation] = useState('');
+    const ready =
+        existingAccount ||
+        (meetsPasswordRules(password) && password === confirmation);
     const input =
         'mt-2 h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-slate-900 focus:outline-[#640000]';
 
@@ -74,6 +82,11 @@ export default function AcceptInvitation({
                                                 required
                                                 autoComplete="new-password"
                                                 className={input}
+                                                onChange={(event) =>
+                                                    setPassword(
+                                                        event.target.value,
+                                                    )
+                                                }
                                             />
                                             <InputError
                                                 message={errors.password}
@@ -87,8 +100,17 @@ export default function AcceptInvitation({
                                                 required
                                                 autoComplete="new-password"
                                                 className={input}
+                                                onChange={(event) =>
+                                                    setConfirmation(
+                                                        event.target.value,
+                                                    )
+                                                }
                                             />
                                         </label>
+                                        <PasswordRequirements
+                                            password={password}
+                                            confirmation={confirmation}
+                                        />
                                         <label className="flex gap-3 text-sm">
                                             <input
                                                 type="checkbox"
@@ -96,16 +118,28 @@ export default function AcceptInvitation({
                                                 value="1"
                                                 required
                                             />
-                                            Acepto los términos del servicio y
-                                            la política de privacidad de
-                                            Atlantia Finance.
+                                            <span>
+                                                Acepto los{' '}
+                                                <a
+                                                    href="/terminos"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="font-semibold underline"
+                                                >
+                                                    Términos y Condiciones
+                                                </a>{' '}
+                                                de Atlantia Finance, que
+                                                incluyen la Política de
+                                                Privacidad y el Tratamiento de
+                                                datos personales.
+                                            </span>
                                         </label>
                                         <InputError message={errors.terms} />
                                     </>
                                 )}
                                 <InputError message={errors.invitation} />
                                 <button
-                                    disabled={processing}
+                                    disabled={processing || !ready}
                                     className="w-full rounded-xl bg-[#640000] px-5 py-3 font-semibold text-white disabled:opacity-50"
                                 >
                                     {processing

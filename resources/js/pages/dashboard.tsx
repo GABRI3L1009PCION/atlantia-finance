@@ -971,8 +971,7 @@ export default function Dashboard({
                                                         catalog.limits
                                                             .active_cases,
                                                     )}{' '}
-                                                    expedientes activos
-                                                    incluidos
+                                                    empresas cliente incluidas
                                                 </p>
                                             </div>
                                         </section>

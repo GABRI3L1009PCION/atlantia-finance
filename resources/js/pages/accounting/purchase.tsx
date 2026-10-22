@@ -24,6 +24,7 @@ import {
     primary,
     secondary,
 } from '@/components/accounting-ui';
+import { statusLabel as translateStatus } from '@/lib/status-labels';
 import * as routes from '@/routes/accounting';
 
 type PurchaseDocument = {
@@ -120,6 +121,7 @@ export default function Purchase({
     today,
     notice,
     suggestedRates,
+    fespWithholdings = null,
 }: {
     company: Company;
     document: PurchaseDocument;
@@ -136,7 +138,19 @@ export default function Purchase({
     today: string;
     notice?: string;
     suggestedRates?: { isr: number; iva: number };
+    fespWithholdings?:
+        | {
+              kind: 'isr' | 'iva';
+              base_cents: number;
+              rate_bp: number;
+              amount_cents: number;
+          }[]
+        | null;
 }) {
+    const fespWithheld = (fespWithholdings ?? []).reduce(
+        (sum, item) => sum + item.amount_cents,
+        0,
+    );
     const balance =
         document.status === 'void'
             ? 0
@@ -581,128 +595,189 @@ export default function Purchase({
                                             placeholder="Transferencia o cheque"
                                         />
                                     </label>
-                                    <div className="space-y-3 rounded-xl border border-dashed border-slate-300 bg-white p-4 sm:col-span-3">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <strong className="text-sm">
-                                                Retenciones sobre este pago
+                                    {fespWithholdings ? (
+                                        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm sm:col-span-3">
+                                            <strong>
+                                                Retenciones de la factura
+                                                especial (automáticas)
                                             </strong>
-                                            <span className="flex gap-2">
-                                                <button
-                                                    type="button"
-                                                    className={secondary}
-                                                    onClick={() =>
-                                                        addWithholding('isr')
-                                                    }
-                                                >
-                                                    + ISR retenido
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={secondary}
-                                                    onClick={() =>
-                                                        addWithholding('iva')
-                                                    }
-                                                >
-                                                    + IVA retenido
-                                                </button>
-                                            </span>
-                                        </div>
-                                        {payment.data.withholdings.map(
-                                            (item) => (
-                                                <div
-                                                    key={item.kind}
-                                                    className="grid gap-2 sm:grid-cols-5"
-                                                >
-                                                    <strong className="self-end pb-2 text-sm">
-                                                        {item.kind === 'isr'
-                                                            ? 'ISR'
-                                                            : 'IVA'}
+                                            {fespWithholdings.map((item) => (
+                                                <p key={item.kind}>
+                                                    {item.kind === 'iva'
+                                                        ? 'IVA retenido (100 % del IVA)'
+                                                        : `ISR retenido (${(item.rate_bp / 100).toFixed(2)} % sobre ${money(item.base_cents)} sin IVA)`}
+                                                    :{' '}
+                                                    <strong>
+                                                        {money(
+                                                            item.amount_cents,
+                                                        )}
                                                     </strong>
-                                                    <label className="text-xs">
-                                                        Base (Q)
-                                                        <input
-                                                            inputMode="decimal"
-                                                            className={field}
-                                                            value={item.base}
-                                                            onChange={(event) =>
-                                                                updateWithholding(
-                                                                    item.kind,
-                                                                    {
-                                                                        base: event
-                                                                            .target
-                                                                            .value,
-                                                                    },
-                                                                )
-                                                            }
-                                                        />
-                                                    </label>
-                                                    <label className="text-xs">
-                                                        Tasa (%)
-                                                        <input
-                                                            inputMode="decimal"
-                                                            className={field}
-                                                            value={item.rate}
-                                                            onChange={(event) =>
-                                                                updateWithholding(
-                                                                    item.kind,
-                                                                    {
-                                                                        rate: event
-                                                                            .target
-                                                                            .value,
-                                                                    },
-                                                                )
-                                                            }
-                                                        />
-                                                    </label>
-                                                    <label className="text-xs sm:col-span-2">
-                                                        Constancia de retención
-                                                        <input
-                                                            className={field}
-                                                            value={
-                                                                item.certificate_number
-                                                            }
-                                                            onChange={(event) =>
-                                                                updateWithholding(
-                                                                    item.kind,
-                                                                    {
-                                                                        certificate_number:
-                                                                            event
-                                                                                .target
-                                                                                .value,
-                                                                    },
-                                                                )
-                                                            }
-                                                        />
-                                                    </label>
-                                                </div>
-                                            ),
-                                        )}
-                                        {payment.data.withholdings.length >
-                                            0 && (
-                                            <p className="text-sm text-slate-700">
-                                                Se retienen{' '}
-                                                <strong>
-                                                    {money(withheldCents)}
-                                                </strong>
-                                                ; al proveedor se le paga{' '}
+                                                </p>
+                                            ))}
+                                            <p>
+                                                Se paga completa en un solo pago
+                                                por {money(balance)}: al
+                                                proveedor se le entregan{' '}
                                                 <strong>
                                                     {money(
                                                         Math.max(
                                                             0,
-                                                            Math.round(
-                                                                Number(
-                                                                    payment.data
-                                                                        .amount ||
-                                                                        0,
-                                                                ) * 100,
-                                                            ) - withheldCents,
+                                                            balance -
+                                                                fespWithheld,
                                                         ),
                                                     )}
-                                                </strong>
-                                                .
+                                                </strong>{' '}
+                                                y las retenciones quedan por
+                                                pagar a la SAT.
                                             </p>
-                                        )}
-                                    </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3 rounded-xl border border-dashed border-slate-300 bg-white p-4 sm:col-span-3">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <strong className="text-sm">
+                                                    Retenciones sobre este pago
+                                                </strong>
+                                                <span className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        className={secondary}
+                                                        onClick={() =>
+                                                            addWithholding(
+                                                                'isr',
+                                                            )
+                                                        }
+                                                    >
+                                                        + ISR retenido
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={secondary}
+                                                        onClick={() =>
+                                                            addWithholding(
+                                                                'iva',
+                                                            )
+                                                        }
+                                                    >
+                                                        + IVA retenido
+                                                    </button>
+                                                </span>
+                                            </div>
+                                            {payment.data.withholdings.map(
+                                                (item) => (
+                                                    <div
+                                                        key={item.kind}
+                                                        className="grid gap-2 sm:grid-cols-5"
+                                                    >
+                                                        <strong className="self-end pb-2 text-sm">
+                                                            {item.kind === 'isr'
+                                                                ? 'ISR'
+                                                                : 'IVA'}
+                                                        </strong>
+                                                        <label className="text-xs">
+                                                            Base (Q)
+                                                            <input
+                                                                inputMode="decimal"
+                                                                className={
+                                                                    field
+                                                                }
+                                                                value={
+                                                                    item.base
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    updateWithholding(
+                                                                        item.kind,
+                                                                        {
+                                                                            base: event
+                                                                                .target
+                                                                                .value,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            />
+                                                        </label>
+                                                        <label className="text-xs">
+                                                            Tasa (%)
+                                                            <input
+                                                                inputMode="decimal"
+                                                                className={
+                                                                    field
+                                                                }
+                                                                value={
+                                                                    item.rate
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    updateWithholding(
+                                                                        item.kind,
+                                                                        {
+                                                                            rate: event
+                                                                                .target
+                                                                                .value,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            />
+                                                        </label>
+                                                        <label className="text-xs sm:col-span-2">
+                                                            Constancia de
+                                                            retención
+                                                            <input
+                                                                className={
+                                                                    field
+                                                                }
+                                                                value={
+                                                                    item.certificate_number
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    updateWithholding(
+                                                                        item.kind,
+                                                                        {
+                                                                            certificate_number:
+                                                                                event
+                                                                                    .target
+                                                                                    .value,
+                                                                        },
+                                                                    )
+                                                                }
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                ),
+                                            )}
+                                            {payment.data.withholdings.length >
+                                                0 && (
+                                                <p className="text-sm text-slate-700">
+                                                    Se retienen{' '}
+                                                    <strong>
+                                                        {money(withheldCents)}
+                                                    </strong>
+                                                    ; al proveedor se le paga{' '}
+                                                    <strong>
+                                                        {money(
+                                                            Math.max(
+                                                                0,
+                                                                Math.round(
+                                                                    Number(
+                                                                        payment
+                                                                            .data
+                                                                            .amount ||
+                                                                            0,
+                                                                    ) * 100,
+                                                                ) -
+                                                                    withheldCents,
+                                                            ),
+                                                        )}
+                                                    </strong>
+                                                    .
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                     <div className="sm:col-span-3">
                                         <Errors errors={payment.errors} />
                                         <button
@@ -973,15 +1048,25 @@ export default function Purchase({
                                                 {entry.entry_number
                                                     ? `#${entry.entry_number}`
                                                     : 'sin numerar'}{' '}
-                                                · {entry.entry_status}
+                                                ·{' '}
+                                                {translateStatus(
+                                                    entry.entry_status,
+                                                )}
                                             </small>
                                         </span>
                                     </span>
                                     <Link
-                                        href={routes.show(company.public_id)}
+                                        href={`${routes.show.url(
+                                            company.public_id,
+                                            {
+                                                query: {
+                                                    entry: entry.entry_public_id,
+                                                },
+                                            },
+                                        )}#libro-diario`}
                                         className="font-semibold text-[#7d0808]"
                                     >
-                                        Abrir libros
+                                        Abrir asiento
                                     </Link>
                                 </div>
                             ))}

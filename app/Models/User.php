@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Notifications\Auth\VerifyEmailNotification;
+use App\Services\Auth\EmailVerificationCodeService;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -61,7 +61,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 
     public function sendEmailVerificationNotification(): void
     {
-        $this->notify(new VerifyEmailNotification);
+        app(EmailVerificationCodeService::class)->issue($this);
     }
 
     /** @return BelongsToMany<Organization, $this, OrganizationUser> */

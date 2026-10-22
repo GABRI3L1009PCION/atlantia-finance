@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\ControlCenter;
 
 use App\Models\User;
+use App\Services\Fel\FelIssuerSettings;
 use App\Services\Platform\Billing\BillingMetricsService;
 use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\Billing\SubscriptionService;
@@ -209,8 +210,29 @@ class CommercialController extends ControlCenterController
                     'amount' => (float) $row->amount, 'currency' => (string) $row->currency_code, 'status' => (string) $row->status, 'attempt' => max(1, (int) $row->attempt_count),
                     'created' => Carbon::parse($row->created_at)->toIso8601String(), 'paid_at' => $row->paid_at === null ? null : Carbon::parse($row->paid_at)->toIso8601String(),
                     'attempts' => DB::table('payment_attempts')->where('payment_id', $row->id)->orderBy('id')->get(['status', 'failure_code', 'failure_message', 'attempted_at'])->all()])->all()),
+            // Subscription invoices (FEL) that did not come out on their own, for support to attend.
+            'fel_requests' => $this->felRequests(),
             'webhook_events' => DB::table('webhook_events')->orderByDesc('id')->limit(50)->get(['provider', 'provider_event_id', 'event_type', 'status', 'received_at', 'processed_at', 'error_message'])->all(),
         ]);
+    }
+
+    /**
+     * Subscription invoices (FEL) that did not come out on their own. Each one links to the document of the platform issuer,
+     * where the copy sheet for the SAT portal and the registration of the result are.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function felRequests(): array
+    {
+        $rows = DB::table('fel_subscription_requests as r')->join('payments', 'payments.id', '=', 'r.payment_id')->join('organizations', 'organizations.id', '=', 'payments.organization_id')
+            ->where('r.status', '!=', 'generated')->orderBy('r.created_at')->limit(100)
+            ->get(['r.payment_id', 'r.status', 'r.error_code', 'r.created_at', 'payments.amount', 'payments.currency_code', 'organizations.id as organization_id', 'organizations.name as organization']);
+        $documents = DB::table('fel_documents')->whereIn('payment_id', $rows->pluck('payment_id')->all())->pluck('public_id', 'payment_id');
+        $issuer = app(FelIssuerSettings::class)->platformCompanyUuid();
+
+        return array_values($rows->map(fn (stdClass $row): array => ['payment_id' => (int) $row->payment_id, 'organization_id' => (int) $row->organization_id, 'organization' => (string) $row->organization, 'amount' => (float) $row->amount,
+            'currency' => (string) $row->currency_code, 'status' => (string) $row->status, 'error_code' => $row->error_code, 'created' => Carbon::parse($row->created_at)->toIso8601String(),
+            'document_url' => is_string($issuer) && isset($documents[$row->payment_id]) ? route('accounting.fel.show', [$issuer, $documents[$row->payment_id]]) : null])->all());
     }
 
     private function cancel(Request $request, User $user, int $subscription, SubscriptionService $subscriptions): string

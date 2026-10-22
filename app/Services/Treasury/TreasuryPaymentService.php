@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
+use App\Services\Fiscal\FacturaEspecialService;
 use App\Services\Operations\OperationalIncidentService;
 use App\Services\Payables\PayableService;
 use App\Services\Payables\PaymentProposalService;
@@ -111,9 +112,12 @@ class TreasuryPaymentService
                 $data['items'] = [];
             }
             foreach ($data['items'] as $item) {
-                $document = DB::table('purchase_documents')->where('id', $item['purchase_document_id'])->where('company_id', $companyId)->lockForUpdate()->first(['id', 'status', 'total_cents', 'supplier_name', 'number']);
+                $document = DB::table('purchase_documents')->where('id', $item['purchase_document_id'])->where('company_id', $companyId)->lockForUpdate()->first(['id', 'status', 'total_cents', 'supplier_name', 'number', 'fiscal_document_type']);
                 if ($document === null || $document->status !== 'approved') {
                     throw ValidationException::withMessages(['items' => 'Solo se pagan facturas aprobadas de la empresa.']);
+                }
+                if (FacturaEspecialService::is($document)) {
+                    throw ValidationException::withMessages(['items' => FacturaEspecialService::SINGLE_PAYMENT]);
                 }
                 $available = app(PayableService::class)->outstanding((int) $document->id) - $this->committed((int) $document->id);
                 if ($item['amount_cents'] <= 0 || $item['amount_cents'] > $available) {

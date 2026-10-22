@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  */
 class DocumentVatCalculator
 {
-    public const PURCHASE_TYPES = ['FACT', 'FCAM', 'FPEQ'];
+    public const PURCHASE_TYPES = ['FACT', 'FCAM', 'FPEQ', 'FESP'];
 
     public const SALE_TYPES = ['FACT', 'FCAM', 'FPEQ'];
 
@@ -33,6 +33,10 @@ class DocumentVatCalculator
         if ($documentType === 'FPEQ') {
             // Small-taxpayer invoices never carry a recoverable VAT credit.
             return $this->smallTaxpayer($lines);
+        }
+        if ($documentType === FacturaEspecialService::TYPE) {
+            // A factura especial is issued by the buyer, which must be in the general regime; its VAT is a credit like an invoice.
+            app(FacturaEspecialService::class)->assertIssuer($companyId);
         }
 
         $rule = $this->fiscal->purchaseVatRule($companyId, $date);

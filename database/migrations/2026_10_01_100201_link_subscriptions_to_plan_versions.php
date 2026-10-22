@@ -13,6 +13,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Restores the caller's tenant context afterwards: forcing it "off" left later migrations and the rest of the process without access.
+        $previous = (string) (DB::selectOne("SELECT current_setting('atlantia.system', true) AS value")->value ?? '');
         DB::statement("SELECT set_config('atlantia.system', 'on', false)");
         foreach (DB::table('plans')->get() as $plan) {
             if (DB::table('plan_versions')->where('plan_id', $plan->id)->exists()) {
@@ -37,7 +39,7 @@ return new class extends Migration
         foreach (DB::table('organizations')->whereNull('code')->get(['id', 'name']) as $organization) {
             DB::table('organizations')->where('id', $organization->id)->update(['code' => 'ORG-'.str_pad((string) $organization->id, 5, '0', STR_PAD_LEFT)]);
         }
-        DB::statement("SELECT set_config('atlantia.system', 'off', false)");
+        DB::statement("SELECT set_config('atlantia.system', ?, false)", [$previous === 'on' ? 'on' : 'off']);
     }
 
     public function down(): void

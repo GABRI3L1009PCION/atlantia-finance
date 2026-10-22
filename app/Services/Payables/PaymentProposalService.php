@@ -8,6 +8,7 @@ use App\Events\Work\SourceChanged;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\Fiscal\FacturaEspecialService;
 use App\Services\Treasury\TreasuryPaymentService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkManagement\WorkNotificationService;
@@ -279,6 +280,9 @@ class PaymentProposalService
             $document = $this->payables->find((int) ($item['purchase_document_id'] ?? 0));
             if ($document === null || $document['company_id'] !== $companyId || $document['outstanding_cents'] <= 0) {
                 throw ValidationException::withMessages(['items' => 'Solo se proponen documentos abiertos de la empresa.']);
+            }
+            if (DB::table('purchase_documents')->where('id', $document['id'])->value('fiscal_document_type') === FacturaEspecialService::TYPE) {
+                throw ValidationException::withMessages(['items' => FacturaEspecialService::SINGLE_PAYMENT]);
             }
             $proposed = (int) DB::table('payment_proposal_items')->join('payment_proposals', 'payment_proposals.id', '=', 'payment_proposal_items.payment_proposal_id')
                 ->where('payment_proposal_items.purchase_document_id', $document['id'])->whereIn('payment_proposals.status', self::ACTIVE)

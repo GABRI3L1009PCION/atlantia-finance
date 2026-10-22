@@ -21,7 +21,7 @@ class FiscalConfigurationService
     /** Legal start of the defaults (Ley de Actualización Tributaria, Decreto 10-2012). */
     private const DEFAULTS_VALID_FROM = '2013-01-01';
 
-    /** @var list<array{code: string, name: string, tax_type: string, regime: string, applies_to: string, price_includes_tax: bool, recoverable: bool, legal_basis: string, sat_form: string, accounts: array{recoverable: string|null, payable: string|null}, rate_basis_points: int, threshold_cents: int|null, calculation_note: string}> */
+    /** @var list<array{code: string, name: string, tax_type: string, regime: string, applies_to: string, price_includes_tax: bool, recoverable: bool, legal_basis: string, sat_form: string, accounts: array{recoverable: string|null, payable: string|null}, rate_basis_points: int, threshold_cents: int|null, calculation_note: string, valid_from?: string}> */
     private const GUATEMALA_TAXES = [
         [
             'code' => 'IVA_GENERAL', 'name' => 'IVA régimen general', 'tax_type' => 'vat', 'regime' => 'general',
@@ -57,6 +57,23 @@ class FiscalConfigurationService
             'legal_basis' => 'Decreto 10-2012, Ley de Actualización Tributaria', 'sat_form' => 'SAT-1311',
             'accounts' => ['recoverable' => null, 'payable' => null],
             'rate_basis_points' => 700, 'threshold_cents' => 3000000, 'calculation_note' => 'progressive_excess',
+        ],
+        [
+            // Quarterly, on the larger of a quarter of the net assets or of the gross income of the previous year; creditable to ISR.
+            'code' => 'ISO', 'name' => 'Impuesto de Solidaridad (ISO)', 'tax_type' => 'other', 'regime' => 'utilities',
+            'applies_to' => 'income', 'price_includes_tax' => false, 'recoverable' => false,
+            'legal_basis' => 'Decreto 73-2008, Ley del Impuesto de Solidaridad', 'sat_form' => 'SAT-1608',
+            'accounts' => ['recoverable' => null, 'payable' => null],
+            'rate_basis_points' => 100, 'threshold_cents' => null, 'calculation_note' => 'iso_quarterly', 'valid_from' => '2009-01-01',
+        ],
+        [
+            // The buyer that issues a factura especial withholds ISR on the amount without VAT (flat rate since Decreto 4-2019).
+            // It is not a "withholding" catalog entry so it never opens a monthly withholding return on its own.
+            'code' => 'RET_ISR_FESP', 'name' => 'Retención de ISR en factura especial', 'tax_type' => 'other', 'regime' => 'general',
+            'applies_to' => 'purchases', 'price_includes_tax' => false, 'recoverable' => false,
+            'legal_basis' => 'Decreto 10-2012, art. 16, reformado por el Decreto 4-2019', 'sat_form' => 'SAT-1331',
+            'accounts' => ['recoverable' => null, 'payable' => '2203'],
+            'rate_basis_points' => 500, 'threshold_cents' => null, 'calculation_note' => 'fesp_withholding', 'valid_from' => '2019-06-01',
         ],
     ];
 
@@ -110,7 +127,7 @@ class FiscalConfigurationService
                         'rate_basis_points' => $tax['rate_basis_points'],
                         'threshold_cents' => $tax['threshold_cents'],
                         'recoverable' => $tax['recoverable'],
-                        'valid_from' => self::DEFAULTS_VALID_FROM,
+                        'valid_from' => $tax['valid_from'] ?? self::DEFAULTS_VALID_FROM,
                         'is_active' => true,
                         'legal_reference' => $tax['legal_basis'],
                         'created_by' => $userId,

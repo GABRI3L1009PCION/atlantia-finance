@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Services\Fel;
 
 use App\Models\FelDocument;
+use BaconQrCode\Renderer\Image\SvgImageBackEnd;
+use BaconQrCode\Renderer\ImageRenderer;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
+use BaconQrCode\Writer;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Illuminate\Support\Facades\DB;
@@ -49,6 +53,24 @@ class FelPdfService
     public static function money(int $cents): string
     {
         return 'GTQ '.intdiv($cents, 100).'.'.str_pad((string) ($cents % 100), 2, '0', STR_PAD_LEFT);
+    }
+
+    /** Same total in words, ending in "EXACTOS" when there are no cents (the wording of Atlantia's invoice layout). */
+    public static function amountInWordsExact(int $cents): string
+    {
+        if ($cents % 100 !== 0) {
+            return self::amountInWords($cents);
+        }
+
+        return Str::before(self::amountInWords($cents), ' CON ').' EXACTOS';
+    }
+
+    /** A QR code as an inline SVG image the PDF can embed. */
+    public static function qrDataUri(string $content): string
+    {
+        $svg = (new Writer(new ImageRenderer(new RendererStyle(200, 1), new SvgImageBackEnd)))->writeString($content);
+
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     public static function amountInWords(int $cents): string

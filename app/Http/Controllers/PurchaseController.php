@@ -8,6 +8,7 @@ use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
 use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
+use App\Services\Fiscal\FacturaEspecialService;
 use App\Services\Fiscal\VatBookService;
 use App\Services\Fiscal\WithholdingService;
 use App\Services\FiscalConfigurationService;
@@ -457,6 +458,7 @@ class PurchaseController extends Controller
                 ->where('l.purchase_document_id', $row->id)->select('l.*', 'a.code as account_code', 'a.name as account_name')->orderBy('l.position')->get(),
             'payments' => $this->paymentsWithWithholdings($row->id),
             'suggestedRates' => WithholdingService::SUGGESTED_RATES,
+            'fespWithholdings' => FacturaEspecialService::is($row) && $row->status !== 'draft' ? app(FacturaEspecialService::class)->withholdings($row) : null,
             'creditNotes' => DB::table('purchase_credit_notes')->where('purchase_document_id', $row->id)->orderByDesc('id')->get(['id', 'fiscal_series', 'fiscal_number', 'issued_on', 'amount_cents', 'vat_cents', 'reason', 'status', 'void_reason']),
             'payable' => app(PayableService::class)->find($row->id),
             'canCredit' => $this->accounting->canModule($org, $record->id, $request->user(), 'purchases.approve'),
@@ -527,6 +529,11 @@ class PurchaseController extends Controller
             $this->ensure($row->status === 'approved' && $data['paid_on'] >= $row->document_date, 'El pago requiere un documento aprobado y fecha válida.');
             $payable = app(PayableService::class)->find($row->id);
             $this->ensure($amount > 0 && $amount <= ($payable['outstanding_cents'] ?? 0) - ($payable['committed_cents'] ?? 0), 'El pago no puede superar el saldo pendiente no comprometido en Tesorería.');
+            if (FacturaEspecialService::is($row)) {
+                // The withholdings of a factura especial are fixed by law: they replace whatever the form sent.
+                $this->ensure($amount === (int) ($payable['outstanding_cents'] ?? 0) && ! DB::table('purchase_payments')->where('purchase_document_id', $row->id)->whereNull('voided_at')->exists(), FacturaEspecialService::SINGLE_PAYMENT);
+                $data['withholdings'] = app(FacturaEspecialService::class)->paymentInput($row);
+            }
             $mapping = $this->automation->ensureMapping($record->id);
             $this->ensure($mapping !== null, 'Configura el mapeo contable antes de registrar pagos.');
             $id = DB::table('purchase_payments')->insertGetId(['public_id' => $data['request_id'], 'purchase_document_id' => $row->id,

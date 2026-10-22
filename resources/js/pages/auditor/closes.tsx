@@ -4,6 +4,7 @@ import { ReviewFilter, amount } from '@/components/auditor/kit';
 import type { AuditorContext } from '@/components/auditor/kit';
 import { PageHeader, Shell, formatDate } from '@/components/office-admin/kit';
 import { Card, Table, toneBadge } from '@/components/supervisor/kit';
+import { statusLabel as translateStatus } from '@/lib/status-labels';
 
 type Period = {
     id: number;
@@ -237,7 +238,9 @@ export default function AuditorCloses({
                                                                 r.requested_at,
                                                             )}{' '}
                                                             · «{r.reason}» ·{' '}
-                                                            {r.status}
+                                                            {translateStatus(
+                                                                r.status,
+                                                            )}
                                                             {r.approved_by &&
                                                                 ` · aprobó ${r.approved_by}`}
                                                             {r.reopened_at &&

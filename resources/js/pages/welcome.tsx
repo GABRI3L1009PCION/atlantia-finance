@@ -368,7 +368,7 @@ export default function Welcome({ plans }: { plans: PublicPlan[] | null }) {
                                     style={heroItem(heroVisible, 320)}
                                 >
                                     {[
-                                        'Sin tarjeta para comenzar',
+                                        'Pago seguro en quetzales',
                                         'Configuración guiada',
                                         'Soporte en español',
                                     ].map((item) => (
@@ -487,6 +487,24 @@ export default function Welcome({ plans }: { plans: PublicPlan[] | null }) {
                                     >
                                         Asistente de ayuda
                                     </button>
+                                    <a
+                                        href="/terminos"
+                                        className="transition hover:text-white"
+                                    >
+                                        Términos y Condiciones
+                                    </a>
+                                    <a
+                                        href="/privacidad"
+                                        className="transition hover:text-white"
+                                    >
+                                        Política de Privacidad
+                                    </a>
+                                    <a
+                                        href="/tratamiento-de-datos"
+                                        className="transition hover:text-white"
+                                    >
+                                        Tratamiento de datos personales
+                                    </a>
                                     <span>Guatemala · GTQ</span>
                                 </nav>
                             </div>

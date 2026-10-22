@@ -21,12 +21,29 @@ type Props = {
         currencyCode: string;
         amount: string;
     };
+    invoice?: {
+        number: string;
+        periodStart: string | null;
+        periodEnd: string | null;
+    } | null;
+    breakdown?: {
+        subtotal: number;
+        discount: number;
+        credit: number;
+    } | null;
     paymentProviderReady: boolean;
     paymentStatus?: 'processing' | 'cancelled' | null;
     planChanged?: boolean;
 };
 
-type CheckoutResponse = { checkoutUrl?: string; message?: string };
+type CheckoutResponse = {
+    checkoutUrl?: string;
+    message?: string;
+    activated?: boolean;
+    redirectUrl?: string;
+    code?: string;
+    reference?: string;
+};
 type EmbedStatus =
     | 'idle'
     | 'creating'
@@ -35,6 +52,9 @@ type EmbedStatus =
     | 'failed'
     | 'processing'
     | 'paid';
+
+/** The provider's card-only form needs about this much height; below it the page scrolls instead of shrinking the form. */
+const MIN_FORM_HEIGHT = 640;
 
 const currency = new Intl.NumberFormat('es-GT', {
     style: 'currency',
@@ -46,6 +66,8 @@ export default function EmbeddedCheckout({
     organization,
     subscription,
     plan,
+    invoice = null,
+    breakdown = null,
     paymentProviderReady,
     paymentStatus,
     planChanged = false,
@@ -54,6 +76,8 @@ export default function EmbeddedCheckout({
         paymentProviderReady ? 'creating' : 'idle',
     );
     const [error, setError] = useState<string | null>(null);
+    const [errorTitle, setErrorTitle] = useState('No pudimos cargar el pago');
+    const [reference, setReference] = useState<string | null>(null);
     const initialized = useRef(false);
     const [confirmationTimedOut, setConfirmationTimedOut] = useState(false);
     const [confirmationRound, setConfirmationRound] = useState(0);
@@ -156,10 +180,27 @@ export default function EmbeddedCheckout({
             });
             const data = (await response.json()) as CheckoutResponse;
 
+            if (response.ok && data.activated && data.redirectUrl) {
+                router.visit(data.redirectUrl);
+
+                return;
+            }
+
             if (!response.ok || !data.checkoutUrl) {
+                setReference(data.reference ?? null);
+                setErrorTitle(
+                    data.code === 'provider_unavailable'
+                        ? 'El pago en línea no está disponible por ahora'
+                        : 'No pudimos cargar el pago',
+                );
+
+                // Only messages written for the customer are shown; a technical answer (for example an expired session) is not.
                 throw new Error(
-                    data.message ??
-                        'No pudimos preparar el formulario de pago.',
+                    data.code && data.message
+                        ? data.message
+                        : response.status === 419
+                          ? 'Tu sesión se actualizó. Recarga la página e inténtalo de nuevo.'
+                          : 'No pudimos preparar el formulario de pago. Inténtalo de nuevo en unos minutos.',
                 );
             }
 
@@ -171,6 +212,7 @@ export default function EmbeddedCheckout({
                     setStatus('paid');
                 },
                 onFailure: () => {
+                    setErrorTitle('El pago no pudo completarse');
                     setStatus('failed');
                     setError(
                         'El pago no pudo completarse. Revisa los datos de la tarjeta e inténtalo nuevamente.',
@@ -220,6 +262,53 @@ export default function EmbeddedCheckout({
         return () => window.clearTimeout(initialization);
     }, [initializeCheckout]);
 
+    // The provider's form sets its own fixed height (850px): it gets the height left on screen at its real size,
+    // never scaled, so the text stays sharp.
+    useEffect(() => {
+        const container = document.getElementById(
+            'recurrente-checkout-container',
+        );
+
+        if (!container) {
+            return;
+        }
+
+        const fit = () => {
+            const iframe = container.querySelector('iframe');
+            const height = container.clientHeight;
+
+            if (!iframe || height === 0) {
+                return;
+            }
+
+            const frameHeight = `${Math.max(height, MIN_FORM_HEIGHT)}px`;
+
+            if (
+                iframe.style.height !== frameHeight ||
+                iframe.style.transform !== ''
+            ) {
+                iframe.style.height = frameHeight;
+                iframe.style.width = '100%';
+                iframe.style.transform = '';
+            }
+        };
+
+        const resize = new ResizeObserver(fit);
+        resize.observe(container);
+        const mutation = new MutationObserver(fit);
+        mutation.observe(container, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style'],
+        });
+        fit();
+
+        return () => {
+            resize.disconnect();
+            mutation.disconnect();
+        };
+    }, [status]);
     const retry = () => window.location.reload();
 
     const isPreparing = status === 'creating' || status === 'loading';
@@ -234,219 +323,314 @@ export default function EmbeddedCheckout({
                 />
                 <link rel="dns-prefetch" href="https://app.recurrente.com" />
             </Head>
-            <main className="min-h-screen bg-[#f8f6f5] px-4 py-6 text-slate-950 lg:px-6">
-                <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
-                    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-[#640000] px-6 py-5 text-white lg:px-10">
-                        <div>
-                            <p className="text-xs font-bold tracking-[0.24em] text-rose-100 uppercase">
-                                Atlantia Systems
-                            </p>
-                            <h1 className="mt-1 text-xl font-bold">
+
+            <div className="grid min-h-svh bg-[#faf9f8] text-slate-950 lg:h-svh lg:grid-cols-2 lg:overflow-hidden">
+                <aside className="relative overflow-hidden bg-emerald-700 px-6 py-6 text-white lg:flex lg:h-svh lg:flex-col lg:items-center lg:justify-center lg:px-9 lg:py-7">
+                    <div className="absolute -top-32 -left-32 size-96 rounded-full border border-white/10" />
+                    <div className="absolute -top-16 -left-16 size-96 rounded-full border border-white/10" />
+
+                    <Link
+                        href="/"
+                        className="relative z-10 w-fit text-sm font-bold tracking-[0.24em] uppercase lg:absolute lg:top-7 lg:left-9"
+                    >
+                        Atlantia Systems
+                    </Link>
+
+                    <div className="relative z-10 my-5 w-full max-w-sm lg:my-0">
+                        <img
+                            src="/images/atlantia-finance-logo.png"
+                            alt="Atlantia Finance"
+                            className="mx-auto hidden w-52 drop-shadow-2xl lg:block"
+                        />
+
+                        <div className="mt-4 text-center lg:mt-5">
+                            <h1 className="text-2xl font-bold tracking-tight">
                                 Finaliza tu suscripción
                             </h1>
+                            <p className="mt-1 text-sm text-white/70">
+                                Un último paso: paga de forma segura para
+                                activar tu plan.
+                            </p>
+                            <span className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold">
+                                <LockKeyhole className="size-3.5" /> Pago
+                                protegido por Recurrente
+                            </span>
                         </div>
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-semibold">
-                            <LockKeyhole className="size-4" /> Pago protegido
-                            por Recurrente
-                        </span>
-                    </header>
 
-                    <div className="grid lg:grid-cols-[.72fr_1.28fr]">
-                        <aside className="border-b border-slate-200 bg-slate-50 p-6 lg:border-r lg:border-b-0 lg:p-10">
-                            <p className="text-xs font-bold tracking-wider text-[#640000] uppercase">
-                                Resumen de compra
-                            </p>
-                            <h2 className="mt-3 text-3xl font-bold">
-                                {plan.name}
-                            </h2>
-                            <p className="mt-2 text-sm text-slate-600">
-                                {organization.name}
-                            </p>
-
-                            <div className="mt-8 rounded-2xl border border-rose-200 bg-white p-5">
-                                <div className="flex items-start justify-between gap-5">
-                                    <div>
-                                        <p className="font-semibold">
-                                            Atlantia Finance
+                        <div className="mt-4 rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-extrabold tracking-widest text-white/70 uppercase">
+                                        Resumen de compra
+                                    </p>
+                                    <p className="mt-1 text-lg font-bold">
+                                        Plan {plan.name} ·{' '}
+                                        {plan.billingPeriod === 'annual'
+                                            ? 'Anual'
+                                            : 'Mensual'}
+                                    </p>
+                                    <p className="truncate text-xs text-white/70">
+                                        {organization.name}
+                                    </p>
+                                    {invoice && (
+                                        <p className="mt-0.5 text-xs text-white/70">
+                                            Factura {invoice.number}
+                                            {invoice.periodStart &&
+                                                invoice.periodEnd &&
+                                                ` · del ${invoice.periodStart} al ${invoice.periodEnd}`}
                                         </p>
-                                        <p className="mt-1 text-sm text-slate-500">
-                                            Facturación{' '}
-                                            {plan.billingPeriod === 'annual'
-                                                ? 'anual'
-                                                : 'mensual'}
-                                        </p>
-                                    </div>
-                                    <strong className="text-xl text-[#640000]">
-                                        {currency.format(Number(plan.amount))}
-                                    </strong>
-                                </div>
-                                <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-5">
-                                    <span className="font-medium">Total</span>
-                                    <strong className="text-2xl text-[#640000]">
-                                        {currency.format(Number(plan.amount))}
-                                    </strong>
+                                    )}
                                 </div>
                             </div>
 
-                            <div className="mt-7 space-y-4 text-sm text-slate-700">
-                                <div className="flex items-center gap-3">
-                                    <CheckCircle2 className="size-5 text-[#640000]" />
-                                    Correo verificado
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <ShieldCheck className="size-5 text-[#640000]" />
-                                    Precio validado por Atlantia
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <LockKeyhole className="size-5 text-[#640000]" />
-                                    Datos de tarjeta aislados
-                                </div>
-                            </div>
+                            {breakdown &&
+                                (breakdown.discount > 0 ||
+                                    breakdown.credit > 0) && (
+                                    <dl className="mt-3 space-y-1 border-t border-white/15 pt-3 text-xs text-white/80">
+                                        <div className="flex justify-between">
+                                            <dt>Precio de lista</dt>
+                                            <dd>
+                                                {currency.format(
+                                                    breakdown.subtotal,
+                                                )}
+                                            </dd>
+                                        </div>
+                                        {breakdown.discount > 0 && (
+                                            <div className="flex justify-between">
+                                                <dt>Descuento</dt>
+                                                <dd>
+                                                    -
+                                                    {currency.format(
+                                                        breakdown.discount,
+                                                    )}
+                                                </dd>
+                                            </div>
+                                        )}
+                                        {breakdown.credit > 0 && (
+                                            <div className="flex justify-between">
+                                                <dt>Crédito aplicado</dt>
+                                                <dd>
+                                                    -
+                                                    {currency.format(
+                                                        breakdown.credit,
+                                                    )}
+                                                </dd>
+                                            </div>
+                                        )}
+                                    </dl>
+                                )}
 
-                            <p className="mt-8 text-xs leading-5 text-slate-500">
-                                Atlantia nunca recibe ni almacena el número de
-                                tu tarjeta. La cuenta se activa únicamente al
-                                confirmar el webhook firmado.
-                            </p>
+                            <div className="mt-4 flex items-end justify-between border-t border-white/15 pt-4">
+                                <span className="text-sm text-white/80">
+                                    Total a pagar
+                                </span>
+                                <strong className="text-3xl">
+                                    {currency.format(Number(plan.amount))}
+                                </strong>
+                            </div>
+                        </div>
+
+                        <ul className="mt-5 space-y-2 text-sm text-white/85">
+                            <li className="flex items-center gap-2.5">
+                                <CheckCircle2 className="size-4 shrink-0 text-emerald-300" />
+                                Correo verificado
+                            </li>
+                            <li className="flex items-center gap-2.5">
+                                <ShieldCheck className="size-4 shrink-0 text-emerald-300" />
+                                Precio validado por Atlantia
+                            </li>
+                            <li className="flex items-center gap-2.5">
+                                <LockKeyhole className="size-4 shrink-0 text-emerald-300" />
+                                Datos de tarjeta aislados: Atlantia no los
+                                recibe
+                            </li>
+                        </ul>
+
+                        <p className="mt-4 text-xs leading-5 text-white/60">
+                            Es un cargo único
+                            {invoice
+                                ? ': el pago se aplica a esta factura.'
+                                : '; cada renovación se paga con su propia factura.'}{' '}
+                            Al pagar aceptas los{' '}
+                            <a
+                                href="/terminos"
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-semibold text-white underline"
+                            >
+                                Términos y Condiciones
+                            </a>
+                            .
+                        </p>
+                        {!invoice && (
                             <Link
                                 href="/billing/plans"
-                                className="mt-5 inline-flex items-center rounded-xl border border-[#640000]/20 bg-white px-4 py-2.5 text-sm font-semibold text-[#640000] hover:bg-rose-50"
+                                className="mt-3 inline-flex text-sm font-semibold text-white underline underline-offset-4"
                             >
                                 Cambiar plan
                             </Link>
-                        </aside>
+                        )}
+                    </div>
+                </aside>
 
-                        <section className="relative min-h-[760px] bg-white p-3 sm:p-6 lg:p-8">
-                            {planChanged && (
-                                <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm font-medium text-emerald-800">
-                                    Plan actualizado. Revisa el nuevo resumen
-                                    antes de continuar.
-                                </p>
-                            )}
-                            {paymentStatus === 'processing' && (
-                                <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-800">
-                                    Estamos confirmando tu pago de forma segura.
-                                </p>
-                            )}
-                            {paymentStatus === 'cancelled' && (
-                                <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-center text-sm text-amber-800">
-                                    El checkout fue cancelado. No se realizó
-                                    ningún cobro.
-                                </p>
-                            )}
+                <main className="flex flex-col px-4 py-4 sm:px-8 lg:h-svh lg:px-8 lg:py-3">
+                    {planChanged && (
+                        <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm font-medium text-emerald-800">
+                            Plan actualizado. Revisa el nuevo resumen antes de
+                            continuar.
+                        </p>
+                    )}
+                    {paymentStatus === 'processing' && (
+                        <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm text-emerald-800">
+                            Estamos confirmando tu pago de forma segura.
+                        </p>
+                    )}
+                    {paymentStatus === 'cancelled' && (
+                        <p className="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-center text-sm text-amber-800">
+                            El checkout fue cancelado. No se realizó ningún
+                            cobro.
+                        </p>
+                    )}
 
-                            {!paymentProviderReady && (
-                                <div className="mx-auto mt-20 max-w-md rounded-2xl bg-amber-50 p-6 text-center text-sm text-amber-900">
-                                    El servicio de pagos está temporalmente no
-                                    disponible. No se iniciará un nuevo cobro
-                                    hasta completar su configuración.
-                                </div>
-                            )}
+                    <section className="relative flex min-h-[640px] flex-1 flex-col lg:min-h-0">
+                        {!paymentProviderReady && (
+                            <div className="mx-auto mt-10 max-w-md rounded-xl bg-amber-50 p-5 text-center text-sm text-amber-900">
+                                El servicio de pagos está temporalmente no
+                                disponible. No se iniciará un nuevo cobro hasta
+                                completar su configuración.
+                            </div>
+                        )}
 
-                            {isPreparing && (
-                                <div className="absolute inset-x-3 top-3 z-10 flex min-h-[680px] items-center justify-center rounded-2xl bg-white sm:inset-x-6 sm:top-6 lg:inset-x-8 lg:top-8">
-                                    <div className="max-w-sm px-6 text-center">
-                                        <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-[#640000] text-white shadow-lg shadow-[#640000]/20">
-                                            <LoaderCircle className="size-8 animate-spin" />
-                                        </div>
-                                        <h3 className="mt-5 text-xl font-bold">
-                                            {status === 'creating'
-                                                ? 'Preparando tu pago'
-                                                : 'Cargando formulario seguro'}
-                                        </h3>
-                                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                                            Esto normalmente toma solo unos
-                                            segundos.
-                                        </p>
-                                        <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                            <div className="h-full w-2/3 animate-pulse rounded-full bg-[#640000]" />
-                                        </div>
+                        {isPreparing && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white">
+                                <div className="max-w-xs px-6 text-center">
+                                    <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#640000] text-white shadow-lg shadow-[#640000]/20">
+                                        <LoaderCircle className="size-7 animate-spin" />
+                                    </div>
+                                    <h3 className="mt-4 text-lg font-bold">
+                                        {status === 'creating'
+                                            ? 'Preparando tu pago'
+                                            : 'Cargando formulario seguro'}
+                                    </h3>
+                                    <p className="mt-1.5 text-sm leading-6 text-slate-600">
+                                        Esto normalmente toma solo unos
+                                        segundos.
+                                    </p>
+                                    <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                        <div className="h-full w-2/3 animate-pulse rounded-full bg-[#640000]" />
                                     </div>
                                 </div>
-                            )}
+                            </div>
+                        )}
 
-                            {status === 'failed' && (
-                                <div className="mx-auto mt-20 max-w-md rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
-                                    <AlertCircle className="mx-auto size-9 text-red-700" />
-                                    <h3 className="mt-3 text-lg font-bold">
-                                        No pudimos cargar el pago
-                                    </h3>
-                                    <p className="mt-2 text-sm leading-6 text-red-800">
-                                        {error}
-                                    </p>
+                        {status === 'failed' && (
+                            <div className="mx-auto mt-6 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5">
+                                <div className="flex items-start gap-3">
+                                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
+                                        <AlertCircle className="size-5" />
+                                    </span>
+                                    <div>
+                                        <h3 className="text-base leading-5 font-bold text-slate-950">
+                                            {errorTitle}
+                                        </h3>
+                                        <p className="mt-1 text-sm leading-5 text-slate-600">
+                                            {error}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                                    <span className="flex items-center gap-1.5">
+                                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                                        No se realizó ningún cobro
+                                    </span>
+                                    <span className="flex items-center gap-1.5">
+                                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                                        Tus datos quedan guardados
+                                    </span>
+                                </p>
+
+                                <div className="mt-3 flex flex-wrap items-center gap-2.5">
                                     <button
                                         type="button"
                                         onClick={retry}
-                                        className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#640000] px-5 py-3 font-bold text-white hover:bg-[#420001]"
+                                        className="inline-flex items-center gap-2 rounded-xl bg-[#640000] px-4 py-2 text-sm font-bold text-white hover:bg-[#420001]"
                                     >
                                         <RefreshCw className="size-4" />{' '}
                                         Reintentar
                                     </button>
                                     <Link
                                         href="/billing/plans"
-                                        className="mt-3 inline-flex px-5 py-3 text-sm font-semibold text-[#640000] underline"
+                                        className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-[#640000] hover:bg-slate-50"
                                     >
                                         Elegir otro plan
                                     </Link>
                                 </div>
-                            )}
 
-                            {(status === 'processing' || status === 'paid') && (
-                                <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/95 p-6 text-center">
-                                    <div>
-                                        <CheckCircle2 className="mx-auto size-14 text-emerald-600" />
-                                        <h3 className="mt-4 text-2xl font-bold">
-                                            {status === 'paid'
-                                                ? 'Confirmación del pago'
-                                                : 'Pago en proceso'}
-                                        </h3>
-                                        <p className="mt-2 text-sm text-slate-600">
-                                            {confirmationTimedOut
-                                                ? 'La confirmación está pendiente. No vuelvas a pagar. Puedes salir de esta pantalla y regresar más tarde.'
-                                                : 'Comprobando la confirmación segura. Entrarás automáticamente cuando el servidor valide tu suscripción.'}
-                                        </p>
-                                        {confirmationTimedOut && (
-                                            <div className="mt-6 flex flex-wrap justify-center gap-4">
-                                                <button
-                                                    type="button"
-                                                    className="rounded-xl bg-[#640000] px-5 py-3 font-semibold text-white"
-                                                    onClick={() => {
-                                                        setConfirmationTimedOut(
-                                                            false,
-                                                        );
-                                                        setConfirmationRound(
-                                                            (round) =>
-                                                                round + 1,
-                                                        );
-                                                    }}
-                                                >
-                                                    Comprobar estado sin volver
-                                                    a pagar
-                                                </button>
-                                                <Link
-                                                    href="/"
-                                                    className="px-4 py-3 text-[#640000] underline"
-                                                >
-                                                    Volver al inicio
-                                                </Link>
-                                            </div>
-                                        )}
+                                {reference && (
+                                    <p className="mt-3 text-[11px] leading-4 text-slate-500">
+                                        Si continúa, escríbenos con esta
+                                        referencia:{' '}
+                                        <span className="font-mono break-all text-slate-700 select-all">
+                                            {reference}
+                                        </span>
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {(status === 'processing' || status === 'paid') && (
+                            <div className="mx-auto mt-8 w-full max-w-lg rounded-2xl border border-emerald-200 bg-emerald-50/50 p-6 text-center">
+                                <CheckCircle2 className="mx-auto size-12 text-emerald-600" />
+                                <h3 className="mt-3 text-xl font-bold">
+                                    {status === 'paid'
+                                        ? 'Confirmación del pago'
+                                        : 'Pago en proceso'}
+                                </h3>
+                                <p className="mt-2 text-sm leading-6 text-slate-600">
+                                    {confirmationTimedOut
+                                        ? 'La confirmación está pendiente. No vuelvas a pagar. Puedes salir de esta pantalla y regresar más tarde.'
+                                        : 'Comprobando la confirmación segura. Entrarás automáticamente cuando el servidor valide tu suscripción.'}
+                                </p>
+                                {confirmationTimedOut && (
+                                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                                        <button
+                                            type="button"
+                                            className="rounded-xl bg-[#640000] px-4 py-2.5 text-sm font-semibold text-white"
+                                            onClick={() => {
+                                                setConfirmationTimedOut(false);
+                                                setConfirmationRound(
+                                                    (round) => round + 1,
+                                                );
+                                            }}
+                                        >
+                                            Comprobar estado sin volver a pagar
+                                        </button>
+                                        <Link
+                                            href="/"
+                                            className="px-3 py-2.5 text-sm text-[#640000] underline"
+                                        >
+                                            Volver al inicio
+                                        </Link>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
+                        )}
 
-                            <div
-                                id="recurrente-checkout-container"
-                                className={
-                                    status === 'failed' || !paymentProviderReady
-                                        ? 'hidden'
-                                        : 'min-h-[700px] overflow-hidden rounded-2xl'
-                                }
-                            />
-                        </section>
-                    </div>
-                </div>
-            </main>
+                        <div
+                            id="recurrente-checkout-container"
+                            className={
+                                status === 'failed' ||
+                                status === 'processing' ||
+                                status === 'paid' ||
+                                !paymentProviderReady
+                                    ? 'hidden'
+                                    : 'h-full min-h-[600px] flex-1 overflow-hidden rounded-xl lg:min-h-0'
+                            }
+                        />
+                    </section>
+                </main>
+            </div>
         </>
     );
 }

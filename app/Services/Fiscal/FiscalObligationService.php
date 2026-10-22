@@ -14,8 +14,13 @@ use stdClass;
  * - IVA (general or pequeño contribuyente): monthly, due the last day of the following month.
  * - ISR sobre utilidades: quarterly payments, due within the 10 business days after the quarter.
  * - ISR opcional simplificado: monthly, due within the 10 business days of the following month.
- * - Retenciones: monthly, due within the 10 business days of the following month, only when the company has an active
- *   withholding tax whose rule is in force that month (Parámetros fiscales).
+ * - Retenciones: monthly, due within the 10 business days of the following month, when the company has an active
+ *   withholding tax whose rule is in force that month (Parámetros fiscales) or withheld taxes when paying suppliers that
+ *   month (for example on a factura especial).
+ * - ISO (Impuesto de Solidaridad, Decreto 73-2008): quarterly for the utilities regime, due the last day of the month after
+ *   the quarter. Firms in their first four quarters of operations mark it "No aplica".
+ * - Declaración anual de ISR: for the utilities regime, and the annual informative return for the optional simplified
+ *   regime, due on March 31 of the following year.
  * Exempt regimes generate no obligation. When the obligation was generated (fiscal_obligations) its workflow status is
  * the source of truth: a filed obligation is completed; otherwise the legacy signals apply (closed VAT book, ISR task).
  *
@@ -50,6 +55,9 @@ class FiscalObligationService
             ->whereIn('fiscal_tax_rules.company_id', $companyIds)->where('fiscal_taxes.tax_type', 'withholding')->where('fiscal_taxes.status', 'active')->where('fiscal_tax_rules.is_active', true)
             ->get(['fiscal_tax_rules.id', 'fiscal_tax_rules.company_id', 'fiscal_tax_rules.valid_from', 'fiscal_tax_rules.valid_to'])->groupBy('company_id');
         $persisted = DB::table('fiscal_obligations')->whereIn('company_id', $companyIds)->get(['id', 'generation_key', 'status'])->keyBy('generation_key');
+        $withheldMonths = DB::table('purchase_payment_withholdings as w')->join('purchase_payments as p', 'p.id', '=', 'w.purchase_payment_id')
+            ->whereIn('w.company_id', $companyIds)->whereNull('p.voided_at')->selectRaw("w.company_id, TO_CHAR(p.paid_on, 'YYYY-MM') as month")->distinct()->get()
+            ->map(fn (stdClass $row): string => $row->company_id.':'.$row->month)->all();
 
         $obligations = [];
         foreach ($companies as $company) {
@@ -70,15 +78,21 @@ class FiscalObligationService
                 if ($regime === 'utilities' && $month % 3 === 0) {
                     $key = "obligation:isr:{$company->id}:{$year}-".sprintf('%02d', $month);
                     $obligations[] = $this->row($company, 'isr', 'Pago trimestral ISR', 'Trimestre '.intdiv($month, 3).' '.$year, $this->businessDays($cursor->copy()->endOfMonth(), 10), in_array($key, $isrDone, true), $responsible, $year, $month);
+                    $obligations[] = $this->row($company, 'iso', 'ISO trimestral', 'Trimestre '.intdiv($month, 3).' '.$year, $cursor->copy()->addMonth()->endOfMonth(), false, $responsible, $year, $month);
                 } elseif ($regime === 'optional_simplified') {
                     $key = "obligation:isr:{$company->id}:{$year}-".sprintf('%02d', $month);
                     $obligations[] = $this->row($company, 'isr', 'Declaración ISR mensual', $label, $this->businessDays($cursor->copy()->endOfMonth(), 10), in_array($key, $isrDone, true), $responsible, $year, $month);
                 }
 
+                if ($month === 12 && in_array($regime, ['utilities', 'optional_simplified'], true)) {
+                    $annual = $regime === 'utilities' ? 'Declaración anual ISR' : 'Declaración anual informativa ISR';
+                    $obligations[] = $this->row($company, 'isr_annual', $annual, 'Año '.$year, Carbon::create($year + 1, 3, 31), false, $responsible, $year, $month);
+                }
+
                 $monthStart = $cursor->copy()->startOfMonth()->toDateString();
                 $monthEnd = $cursor->copy()->endOfMonth()->toDateString();
                 $rulesInForce = collect($withholdingRules->get($company->id, collect()))->filter(fn (stdClass $rule): bool => (string) $rule->valid_from <= $monthEnd && ($rule->valid_to === null || (string) $rule->valid_to >= $monthStart));
-                if ($rulesInForce->isNotEmpty()) {
+                if ($rulesInForce->isNotEmpty() || in_array($company->id.':'.$cursor->format('Y-m'), $withheldMonths, true)) {
                     $obligations[] = $this->row($company, 'withholding', 'Declaración de retenciones', $label, $this->businessDays($cursor->copy()->endOfMonth(), 10), false, $responsible, $year, $month, 'rules:'.$rulesInForce->pluck('id')->sort()->implode(','));
                 }
 

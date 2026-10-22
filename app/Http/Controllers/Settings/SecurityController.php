@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
+use App\Services\Auth\SignOutElsewhere;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -59,6 +60,9 @@ class SecurityController extends Controller
         $request->user()->update([
             'password' => $request->password,
         ]);
+        $request->user()->forceFill(['password_changed_at' => now()])->save();
+        $request->session()->regenerate();
+        SignOutElsewhere::after($request->user(), $request->session()->getId());
 
         session()->flash('workspace_notice', 'Tu contraseña se actualizó correctamente.');
 

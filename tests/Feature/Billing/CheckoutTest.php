@@ -18,7 +18,7 @@ beforeEach(function () {
     config()->set('services.recurrente.webhook_secret', 'test-signing-secret');
 });
 
-test('checkout is created server side using the stored recurring price', function () {
+test('checkout is created server side as a single charge of the stored price', function () {
     config()->set('services.recurrente.secret', 'sk_test_example');
     Http::fake([
         'https://app.recurrente.com/api/checkouts' => Http::response([
@@ -43,8 +43,8 @@ test('checkout is created server side using the stored recurring price', functio
 
     Http::assertSent(fn ($request) => $request['items'][0]['amount_in_cents'] === 39900
         && $request['items'][0]['currency'] === 'GTQ'
-        && $request['items'][0]['charge_type'] === 'recurring'
-        && $request['items'][0]['billing_interval'] === 'month');
+        && $request['items'][0]['charge_type'] === 'one_time'
+        && ! isset($request['items'][0]['billing_interval']));
     $this->assertDatabaseHas('payment_attempts', ['provider_attempt_id' => 'ch_test_123', 'status' => 'created']);
     $snapshot = Payment::firstOrFail()->billing_snapshot;
     expect($snapshot['name'])->toBe('Comprador de prueba')
@@ -207,7 +207,7 @@ test('verifying an owner email moves the organization to pending payment', funct
         'password_confirmation' => 'password',
         'plan' => 'essential',
         'billing_period' => 'monthly',
-        'terms' => true,
+        'organization_name' => 'Despacho Contable de Prueba', 'terms' => true,
     ]);
 
     $response->assertRedirect(route('verification.notice', absolute: false));
@@ -227,7 +227,7 @@ test('verifying an owner email moves the organization to pending payment', funct
     $this->assertGuest();
 
     $this->assertDatabaseHas('organizations', [
-        'name' => 'Organización de Billing Owner',
+        'name' => 'Despacho Contable de Prueba',
         'status' => 'pending_payment',
     ]);
 

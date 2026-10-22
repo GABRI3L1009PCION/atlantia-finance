@@ -61,7 +61,7 @@ class IntegrationOAuthService
     }
 
     /** Exchanges the code the vendor sent back for tokens and marks the connection as connected. */
-    public function complete(User $actor, string $provider, string $code, string $state): Organization
+    public function complete(User $actor, Organization $current, string $provider, string $code, string $state): Organization
     {
         try {
             $payload = json_decode(Crypt::decryptString($state), true);
@@ -70,6 +70,8 @@ class IntegrationOAuthService
         }
 
         abort_unless(is_array($payload) && ($payload['provider'] ?? null) === $provider && (int) ($payload['user'] ?? 0) === $actor->id && ($payload['exp'] ?? 0) >= now()->timestamp, 403, 'La autorización expiró o no corresponde a tu sesión.');
+        // The firm is checked before exchanging the code, so tokens are never stored in a firm other than the current one.
+        abort_unless((int) ($payload['org'] ?? 0) === $current->id, 403, 'La autorización no corresponde a la firma activa.');
         $organization = Organization::query()->findOrFail((int) $payload['org']);
         $config = $this->connections->config($organization, $provider) ?? abort(404);
         $tokens = $this->exchange($provider, $config, ['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => $this->redirectUri($provider)]);

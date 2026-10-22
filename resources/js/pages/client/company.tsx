@@ -7,6 +7,7 @@ import {
     formatDate,
 } from '@/components/client-portal/kit';
 import { input, primaryButton } from '@/components/office-admin/kit';
+import { statusLabel } from '@/lib/status-labels';
 
 type Company = {
     id: number;
@@ -191,7 +192,9 @@ export default function ClientCompany({
                             <td className="px-2 py-2 font-bold">
                                 {change.value}
                             </td>
-                            <td className="px-2 py-2">{change.status}</td>
+                            <td className="px-2 py-2">
+                                {statusLabel(change.status)}
+                            </td>
                             <td className="px-2 py-2">{change.note ?? '—'}</td>
                             <td className="px-2 py-2">
                                 {formatDate(change.at)}

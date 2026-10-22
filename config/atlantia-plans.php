@@ -10,7 +10,7 @@ return [
             'annual_price' => 3990,
             'features' => [
                 '1 oficina y 2 usuarios',
-                '150 expedientes activos',
+                '150 empresas cliente',
                 '2 GB de almacenamiento',
                 '20 consultas de IA al mes',
             ],
@@ -21,7 +21,7 @@ return [
             'annual_price' => 7990,
             'features' => [
                 '1 oficina y 8 usuarios',
-                '500 expedientes activos',
+                '500 empresas cliente',
                 '10 GB de almacenamiento',
                 '120 consultas de IA al mes',
             ],
@@ -32,7 +32,7 @@ return [
             'annual_price' => 14990,
             'features' => [
                 'Hasta 5 oficinas y 25 usuarios',
-                '1,500 expedientes activos',
+                '1,500 empresas cliente',
                 '40 GB de almacenamiento',
                 '500 consultas de IA al mes',
             ],
@@ -43,7 +43,7 @@ return [
             'annual_price' => 29990,
             'features' => [
                 'Hasta 10 oficinas y 60 usuarios',
-                '5,000 expedientes activos',
+                '5,000 empresas cliente',
                 '120 GB de almacenamiento',
                 '1,500 consultas de IA al mes',
             ],

@@ -852,7 +852,11 @@ function PayablePanel({
                     {payable.source_entry ? (
                         <Link
                             className={secondary}
-                            href={`${routes.show.url(company.public_id)}#libro-diario`}
+                            href={`${routes.show.url(company.public_id, {
+                                query: {
+                                    entry: payable.source_entry.public_id,
+                                },
+                            })}#libro-diario`}
                         >
                             <Landmark className="size-4" /> Ver asiento
                         </Link>

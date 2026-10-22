@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\ControlCenter;
 
 use App\Services\Platform\GlobalConfigurationService;
+use App\Services\Platform\LegalDocumentService;
 use App\Services\Platform\NotificationTemplateService;
 use App\Services\Platform\PlatformLogReader;
 use Illuminate\Http\RedirectResponse;
@@ -70,6 +71,23 @@ class ControlController extends ControlCenterController
         $settings->set($user, (string) $data['key'], $data['value'] ?? '');
 
         return back()->with('workspace_notice', 'Configuración actualizada.');
+    }
+
+    public function legal(Request $request, LegalDocumentService $legal): Response
+    {
+        $user = $this->staff($request, 'saas.settings.view');
+
+        return $this->render($request, 'legal', ['documents' => $legal->overview(), 'can_manage' => $this->authorization->can($user, 'saas.settings.manage')]);
+    }
+
+    public function publishLegal(Request $request, string $slug, LegalDocumentService $legal): RedirectResponse
+    {
+        $user = $this->staff($request, 'saas.settings.manage');
+        abort_unless(isset(LegalDocumentService::DOCUMENTS[$slug]), 404);
+        $data = $request->validate(['title' => 'required|string|max:200', 'body' => 'required|string|min:50|max:200000']);
+        $version = $legal->publish($user, $slug, (string) $data['title'], (string) $data['body']);
+
+        return back()->with('workspace_notice', 'Publicada la versión '.$version.'. Los dueños de firma deberán aceptarla en su siguiente ingreso.');
     }
 
     public function updateTemplate(Request $request, string $template, NotificationTemplateService $templates): RedirectResponse

@@ -38,6 +38,18 @@ class EnsureActiveSubscription
             return redirect()->route('billing.checkout.show');
         }
 
+        // A firm suspended for non-payment keeps its data: the owner is taken to pay the overdue invoice (which lifts the
+        // suspension) instead of meeting a "forbidden" page; the rest of the team is told why.
+        $suspendedForBilling = $currentOrganizationId !== null && $this->context->runAsSystem(fn (): bool => DB::table('organizations')
+            ->where('id', $currentOrganizationId)->where('status', 'suspended')->where('suspension_reason', 'like', '[billing]%')->exists());
+        if ($suspendedForBilling) {
+            $isOwner = $this->context->runAsSystem(fn (): bool => DB::table('organization_user')->where('organization_id', $currentOrganizationId)
+                ->where('user_id', $request->user()?->id)->where('role', 'owner')->where('status', 'active')->exists());
+            abort_unless($isOwner, 403, 'La firma está suspendida por falta de pago. El propietario puede regularizarla desde la pantalla de pago.');
+
+            return redirect()->route('billing.checkout.show');
+        }
+
         return $next($request);
     }
 }

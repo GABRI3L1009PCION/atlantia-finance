@@ -7,14 +7,20 @@ namespace App\Http\Controllers\Billing;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Payment;
+use App\Models\PlanPrice;
 use App\Models\Subscription;
+use App\Services\Payments\PaymentProviderException;
 use App\Services\Payments\RecurrenteClient;
+use App\Services\Platform\Billing\SaaSBillingService;
+use App\Services\Platform\CorrelationId;
+use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use stdClass;
 use Throwable;
 
 class CreateCheckoutController extends Controller
@@ -32,11 +38,17 @@ class CreateCheckoutController extends Controller
             throw ValidationException::withMessages(['billing' => 'Completa tus datos fiscales antes de iniciar el pago.']);
         }
 
-        /** @var Subscription $subscription */
-        $subscription = $organization->subscriptions()->whereIn('status', ['incomplete', 'past_due'])
-            ->with(['items.planPrice.plan'])->latest()->firstOrFail();
+        $subscription = CheckoutController::payableSubscription($organization);
+        abort_if($subscription === null, 404);
         $item = $subscription->items->firstWhere('item_type', 'base_plan');
         abort_if($item === null || ! $item->planPrice->is_active, 409, 'El plan seleccionado no está disponible.');
+
+        // A running subscription pays its open invoice (renewal, end of trial or overdue period) with a single charge, and
+        // the webhook settles that invoice, which also restores the firm's standing when it was behind.
+        $outstanding = CheckoutController::outstandingInvoice($subscription);
+        if ($outstanding !== null) {
+            return $this->payInvoice($request, $outstanding);
+        }
 
         $recentAttempt = $subscription->payments()
             ->where('provider', 'recurrente')
@@ -57,28 +69,35 @@ class CreateCheckoutController extends Controller
         }
 
         $price = $item->planPrice;
+        // The first payment charges what the firm owes: list price, minus the subscription discount and its credits.
+        $breakdown = app(TenantDatabaseContext::class)->runAsSystem(fn (): array => app(SaaSBillingService::class)
+            ->firstChargeBreakdown((int) $organization->id, (float) $subscription->discount_percent, (float) $price->amount));
+        if ($breakdown['total'] <= 0) {
+            return $this->activateWithoutCharge($request, $subscription, $price, $breakdown);
+        }
+
         $payment = Payment::query()->create([
             'organization_id' => $organization->id,
             'subscription_id' => $subscription->id,
             'provider' => 'recurrente',
             'provider_payment_id' => 'pending:'.Str::uuid(),
             'currency_code' => $price->currency_code,
-            'amount' => $price->amount,
+            'amount' => number_format($breakdown['total'], 2, '.', ''),
             'status' => 'pending',
             'billing_snapshot' => ['name' => $billing->name, 'nit' => $billing->nit, 'address' => $billing->address,
-                'email' => $request->user()->email, 'plan_name' => $price->plan->name, 'billing_period' => $price->billing_period],
+                'email' => $request->user()->email, 'plan_name' => $price->plan->name, 'billing_period' => $price->billing_period, 'breakdown' => $breakdown],
         ]);
 
         try {
             $checkout = $client->createCheckout([
                 'items' => [[
                     'name' => 'Atlantia Finance - '.$price->plan->name,
-                    'amount_in_cents' => (int) bcmul((string) $price->amount, '100', 0),
+                    'amount_in_cents' => (int) bcmul(number_format($breakdown['total'], 2, '.', ''), '100', 0),
                     'currency' => $price->currency_code,
                     'quantity' => 1,
-                    'charge_type' => 'recurring',
-                    'billing_interval' => $price->billing_period === 'annual' ? 'year' : 'month',
-                    'billing_interval_count' => 1,
+                    // A single charge: every later period is invoiced by Atlantia and paid with that invoice's own
+                    // checkout, so the provider never charges on its own and the books always match the bank.
+                    'charge_type' => 'one_time',
                 ]],
                 'metadata' => [
                     'payment_public_id' => $payment->public_id,
@@ -96,21 +115,28 @@ class CreateCheckoutController extends Controller
             ]);
         } catch (Throwable $exception) {
             $isConnectionFailure = $exception instanceof ConnectionException;
+            // The provider does not accept Atlantia's credentials: retrying will not help and the team must fix it.
+            $isConfiguration = $exception instanceof PaymentProviderException && $exception->isConfiguration();
+            $code = $isConnectionFailure ? 'provider_timeout' : ($isConfiguration ? 'provider_unavailable' : 'checkout_creation_failed');
             $payment->attempts()->create([
                 'status' => 'failed',
-                'failure_code' => $isConnectionFailure ? 'provider_timeout' : 'checkout_creation_failed',
+                'failure_code' => $isConfiguration ? 'provider_credentials' : ($isConnectionFailure ? 'provider_timeout' : 'checkout_creation_failed'),
                 'failure_message' => $isConnectionFailure
                     ? 'Recurrente no respondió dentro del tiempo esperado.'
-                    : 'No fue posible iniciar el checkout.',
+                    : ($isConfiguration ? 'Recurrente no aceptó las credenciales de Atlantia.' : 'No fue posible iniciar el checkout.'),
                 'attempted_at' => now(),
             ]);
             $payment->update(['status' => 'failed', 'failed_at' => now()]);
             report($exception);
 
             return response()->json([
-                'message' => $isConnectionFailure
-                    ? 'Recurrente tardó demasiado en responder. No se realizó ningún cobro; puedes intentarlo nuevamente.'
-                    : 'No pudimos crear el checkout. No se realizó ningún cobro; inténtalo nuevamente.',
+                'code' => $code,
+                'reference' => CorrelationId::current(),
+                'message' => match ($code) {
+                    'provider_timeout' => 'No pudimos comunicarnos con el proveedor de pagos. Revisa tu conexión a internet e inténtalo de nuevo.',
+                    'provider_unavailable' => 'Nuestro equipo ya fue avisado y lo está resolviendo. Vuelve a intentarlo más tarde.',
+                    default => 'No pudimos iniciar el pago. Inténtalo nuevamente en unos minutos.',
+                },
             ], 503);
         }
 
@@ -118,5 +144,55 @@ class CreateCheckoutController extends Controller
             'checkoutUrl' => (string) $checkout['checkout_url'],
             'checkoutId' => (string) $checkout['id'],
         ], 201);
+    }
+
+    /**
+     * A discount (or credits) that covers the whole first period leaves nothing to charge: the subscription starts right
+     * away and its invoice is recorded as paid, with the same amounts the firm would have seen.
+     *
+     * @param  array{subtotal: float, discount: float, credit: float, total: float}  $breakdown
+     */
+    private function activateWithoutCharge(Request $request, Subscription $subscription, PlanPrice $price, array $breakdown): JsonResponse
+    {
+        app(TenantDatabaseContext::class)->runAsSystem(function () use ($request, $subscription, $price, $breakdown): void {
+            DB::transaction(function () use ($request, $subscription, $price, $breakdown): void {
+                $start = now();
+                $end = $price->billing_period === 'annual' ? now()->addYear() : now()->addMonth();
+                $subscription->update(['provider' => 'recurrente', 'status' => 'active', 'current_period_starts_at' => $start, 'current_period_ends_at' => $end]);
+                if (! in_array($subscription->organization->status, ['suspended', 'archived'], true)) {
+                    $subscription->organization->update(['status' => 'active']);
+                }
+                $row = DB::table('subscriptions')->where('id', $subscription->id)->first() ?? abort(500);
+                app(SaaSBillingService::class)->issue($request->user(), $row, 'activation:'.$subscription->id, [['description' => 'Atlantia Finance · '.$price->plan->name.' ('.($price->billing_period === 'annual' ? 'anual' : 'mensual').')',
+                    'unit_amount' => $breakdown['subtotal']]], 'recurring', $start->toDateString(), $end->toDateString(), ['discount' => $breakdown['discount'], 'credit' => $breakdown['credit']]);
+            });
+        });
+
+        return response()->json(['activated' => true, 'redirectUrl' => route('dashboard', absolute: false)], 201);
+    }
+
+    private function payInvoice(Request $request, stdClass $invoice): JsonResponse
+    {
+        // The invoice and its payments are platform rows; the invoice was already resolved from the owner's subscription.
+        return app(TenantDatabaseContext::class)->runAsSystem(fn (): JsonResponse => $this->payInvoiceAsPlatform($request, $invoice));
+    }
+
+    private function payInvoiceAsPlatform(Request $request, stdClass $invoice): JsonResponse
+    {
+        $recent = DB::table('payment_attempts')->join('payments', 'payments.id', '=', 'payment_attempts.payment_id')
+            ->where('payments.saas_invoice_id', $invoice->id)->where('payments.status', 'pending')->where('payment_attempts.status', 'created')
+            ->where('payment_attempts.attempted_at', '>=', now()->subMinutes(25))->orderByDesc('payment_attempts.id')->value('payment_attempts.provider_attempt_id');
+        if ($recent !== null) {
+            return response()->json(['checkoutUrl' => 'https://app.recurrente.com/checkout-session/'.$recent, 'checkoutId' => (string) $recent, 'reused' => true]);
+        }
+
+        try {
+            $link = app(SaaSBillingService::class)->paymentLink($request->user(), (int) $invoice->id);
+        } catch (ValidationException $exception) {
+            return response()->json(['message' => collect($exception->errors())->flatten()->first() ?? 'No pudimos crear el pago. No se realizó ningún cobro.'], 503);
+        }
+        $checkoutId = (string) DB::table('payment_attempts')->where('payment_id', $link['payment_id'])->orderByDesc('id')->value('provider_attempt_id');
+
+        return response()->json(['checkoutUrl' => $link['url'], 'checkoutId' => $checkoutId], 201);
     }
 }

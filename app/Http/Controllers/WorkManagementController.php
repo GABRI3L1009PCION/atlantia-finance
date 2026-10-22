@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Office;
+use App\Models\Organization;
 use App\Services\AccountingService;
 use App\Services\ReportExportService;
 use App\Services\WorkManagement\AuditOverviewService;
@@ -569,6 +570,7 @@ class WorkManagementController extends Controller
             'permission_ids' => 'nullable|array',
             'permission_ids.*' => 'integer',
         ]);
+        $this->assertCanGrantRolePermissions($organization, $request, $data['permission_ids'] ?? []);
         $code = $this->roleCode($organization->id, $data['code'] ?? $data['name']);
 
         $roleId = DB::transaction(function () use ($organization, $request, $data, $code): int {
@@ -609,6 +611,7 @@ class WorkManagementController extends Controller
             'permission_ids' => 'nullable|array',
             'permission_ids.*' => 'integer',
         ]);
+        $this->assertCanGrantRolePermissions($organization, $request, $data['permission_ids'] ?? [], (string) $existing->code);
 
         DB::transaction(function () use ($organization, $request, $role, $data): void {
             $before = DB::table('workspace_role_permissions')
@@ -646,6 +649,7 @@ class WorkManagementController extends Controller
         abort_unless($this->authorization->can($organization, $request->user(), 'office.roles.manage'), 403);
         $existing = DB::table('workspace_roles')->where('workspace_roles.organization_id', $organization->id)->where('id', $role)->whereNull('deleted_at')->firstOrFail();
         abort_if((bool) $existing->is_system, 422, 'Los roles del sistema no pueden desactivarse.');
+        $this->assertCanGrantRolePermissions($organization, $request, [], (string) $existing->code);
         $data = $request->validate([
             'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
@@ -948,6 +952,23 @@ class WorkManagementController extends Controller
             ] : null,
             'admin' => $this->admin->payload($organization, $screen, $detailId, $supervising ? null : $this->authorization->officesWithPermission($organization, $request->user(), $permission)),
         ]);
+    }
+
+    /**
+     * A custom role that carries direction or administration permissions is a high-privilege role, so only whoever
+     * can assign those roles may create it, give it those permissions or change it afterwards.
+     *
+     * @param  array<int, mixed>  $permissionIds
+     */
+    private function assertCanGrantRolePermissions(Organization $organization, Request $request, array $permissionIds, ?string $existingCode = null): void
+    {
+        if ($this->authorization->can($organization, $request->user(), 'roles.assign_high_privilege')) {
+            return;
+        }
+
+        $touchesHigh = $this->authorization->grantsHighPrivilege(array_values(array_map('intval', $permissionIds)))
+            || ($existingCode !== null && $this->authorization->isHighPrivilegeRole($organization, $existingCode));
+        abort_if($touchesHigh, 403, 'Solo la dirección puede crear o modificar roles con permisos de dirección o administración.');
     }
 
     /** @param list<int> $permissionIds */

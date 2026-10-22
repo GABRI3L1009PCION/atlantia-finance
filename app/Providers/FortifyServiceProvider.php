@@ -4,9 +4,12 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Services\Auth\EmailVerificationCodeService;
+use App\Services\Platform\PublicPlanCatalog;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -32,6 +35,28 @@ class FortifyServiceProvider extends ServiceProvider
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+        $this->app->booted(fn () => $this->throttleUnlimitedFortifyRoutes());
+    }
+
+    /**
+     * Fortify only throttles login, two-factor challenge and passkeys. The other routes that take a password, a
+     * code or create an account get their own limiter, attached once (cached routes already carry it).
+     */
+    private function throttleUnlimitedFortifyRoutes(): void
+    {
+        $limiters = [
+            'register.store' => 'throttle:register',
+            'password.update' => 'throttle:password-reset',
+            'password.confirm.store' => 'throttle:password-confirm',
+            'two-factor.confirm' => 'throttle:two-factor-confirm',
+        ];
+
+        foreach (Route::getRoutes()->getRoutes() as $route) {
+            $limiter = $limiters[(string) $route->getName()] ?? null;
+            if ($limiter !== null && ! in_array($limiter, $route->middleware(), true)) {
+                $route->middleware($limiter);
+            }
+        }
     }
 
     /**
@@ -73,6 +98,8 @@ class FortifyServiceProvider extends ServiceProvider
             return Inertia::render('auth/verify-email', [
                 'status' => $request->session()->get('status'),
                 'email' => $request->user()?->email,
+                'resendIn' => $request->user() === null ? 0 : app(EmailVerificationCodeService::class)->resendIn($request->user()),
+                'codeMinutes' => EmailVerificationCodeService::VALID_MINUTES,
                 'selectedPlan' => $planCode && isset($catalog[$planCode])
                     ? [
                         'name' => $catalog[$planCode]['name'],
@@ -98,11 +125,22 @@ class FortifyServiceProvider extends ServiceProvider
                 ? $requestedBillingPeriod
                 : 'monthly';
 
+            // The plan summary shows the live catalog (the prices checkout charges); the config copy is only a fallback
+            // while the catalog cannot be read.
+            $live = collect(rescue(fn (): array => app(PublicPlanCatalog::class)->plans(), [], report: false))->firstWhere('code', $planCode);
+
             return Inertia::render('auth/register', [
                 'passwordRules' => Password::defaults()->toPasswordRulesString(),
-                'selectedPlan' => [
+                'selectedPlan' => $live === null ? [
                     'code' => $planCode,
                     ...$catalog[$planCode],
+                ] : [
+                    'code' => $live['code'],
+                    'name' => $live['name'],
+                    'monthly_price' => $live['monthly_price'],
+                    'annual_price' => $live['annual_price'],
+                    'price_prefix' => $live['price_prefix'],
+                    'features' => array_column($live['features'], 'text'),
                 ],
                 'billingPeriod' => $billingPeriod,
             ]);
@@ -123,10 +161,25 @@ class FortifyServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('login', function (Request $request) {
-            $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
+            $email = Str::transliterate(Str::lower((string) $request->input(Fortify::username())));
 
-            return Limit::perMinute(5)->by($throttleKey);
+            // Per address and IP, plus a per-account ceiling so guessing from many IPs is slowed down too.
+            return [
+                Limit::perMinute(5)->by($email.'|'.$request->ip()),
+                Limit::perMinutes(15, 20)->by('login-account|'.$email),
+            ];
         });
+
+        RateLimiter::for('register', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
+
+        RateLimiter::for('password-reset', fn (Request $request) => [
+            Limit::perMinute(5)->by(Str::lower((string) $request->input('email')).'|'.$request->ip()),
+            Limit::perMinute(20)->by($request->ip()),
+        ]);
+
+        RateLimiter::for('password-confirm', fn (Request $request) => Limit::perMinute(5)->by('confirm|'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+
+        RateLimiter::for('two-factor-confirm', fn (Request $request) => Limit::perMinute(5)->by('2fa-confirm|'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
 
         RateLimiter::for('passkeys', function (Request $request) {
             return Limit::perMinute(10)->by(

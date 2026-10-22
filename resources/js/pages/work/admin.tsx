@@ -403,7 +403,7 @@ export default function WorkAdmin(props: Props) {
                                 href="/office/subscription"
                                 className={button}
                             >
-                                Ver mi plan
+                                Cambiar plan
                             </Link>
                             <button
                                 type="button"
@@ -674,7 +674,7 @@ function NewOfficeButton({
                     </DialogDescription>
                     <div className="flex flex-wrap justify-center gap-2 pt-2">
                         <Link href="/office/subscription" className={button}>
-                            Ver mi plan
+                            Cambiar plan
                         </Link>
                         <button
                             type="button"

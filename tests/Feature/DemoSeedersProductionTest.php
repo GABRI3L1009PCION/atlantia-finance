@@ -1,6 +1,7 @@
 <?php
 
 use Database\Seeders\AtlantiaDemoSeeder;
+use Database\Seeders\AtlantiaProductionDemoSeeder;
 use Database\Seeders\CrmDemoSeeder;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\EnterprisePlanDemoUsersSeeder;
@@ -16,6 +17,7 @@ test('los seeders de demostración se niegan a correr en producción', function 
     expect(DB::table('users')->count())->toBe($users);
 })->with([
     AtlantiaDemoSeeder::class,
+    AtlantiaProductionDemoSeeder::class,
     CrmDemoSeeder::class,
     EnterprisePlanDemoUsersSeeder::class,
     EssentialPlanDemoSeeder::class,

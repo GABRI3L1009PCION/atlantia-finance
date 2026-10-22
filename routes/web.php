@@ -10,6 +10,7 @@ use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\AtlantiaAiConnectionController;
 use App\Http\Controllers\AuditorController;
 use App\Http\Controllers\AuditRequestsController;
+use App\Http\Controllers\Auth\EmailVerificationCodeController;
 use App\Http\Controllers\BankController;
 use App\Http\Controllers\Billing\BillingDetailsController;
 use App\Http\Controllers\Billing\CheckoutController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\ForcedPasswordController;
 use App\Http\Controllers\IntegrationsController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LuzmaController;
 use App\Http\Controllers\NormativeLibraryController;
 use App\Http\Controllers\ObservationRedirectController;
@@ -64,14 +66,23 @@ use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\WorkManagementController;
 use App\Http\Controllers\WorkspaceController;
 use App\Services\Audit\AuditEngagementService;
+use App\Services\Platform\LegalDocumentService;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', WelcomeController::class)->name('home');
 
-Route::post('webhooks/recurrente', RecurrenteWebhookController::class)->middleware('tenancy.system')->name('webhooks.recurrente');
+Route::post('webhooks/recurrente', RecurrenteWebhookController::class)->middleware(['throttle:120,1', 'tenancy.system'])->name('webhooks.recurrente');
 Route::get('calendar/{token}.ics', [CalendarFeedController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware(['throttle:60,1', 'tenancy.system'])->name('calendar.feed');
 Route::post('forgot-password', [PasswordHelpController::class, 'store'])->middleware(['guest', 'throttle:5,1', 'tenancy.system'])->name('password.email');
+foreach (LegalDocumentService::DOCUMENTS as $legalSlug => $legalDocument) {
+    Route::get($legalDocument['path'], [LegalController::class, 'show'])->defaults('slug', $legalSlug)->middleware('throttle:60,1')->name('legal.'.$legalSlug);
+}
+Route::middleware('auth')->prefix('legal')->name('legal.')->group(function () {
+    Route::get('aceptar', [LegalController::class, 'accept'])->name('accept');
+    Route::post('aceptar', [LegalController::class, 'store'])->middleware('throttle:10,1')->name('store');
+});
 Route::middleware('auth')->group(function () {
+    Route::post('email/verify-code', EmailVerificationCodeController::class)->middleware('throttle:10,1')->name('verification.code');
     Route::get('password/change', [ForcedPasswordController::class, 'show'])->name('password.force');
     Route::put('password/change', [ForcedPasswordController::class, 'update'])->middleware('throttle:10,1')->name('password.force.update');
 });
@@ -110,14 +121,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/customers', [SalesController::class, 'customers'])->name('salesCustomers');
         Route::get('companies/{company}/receivables', [SalesController::class, 'receivables'])->name('receivables');
         Route::post('companies/{company}/sales/customers', [SalesController::class, 'customer'])->middleware('throttle:30,1')->name('salesCustomer');
-        Route::get('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerShow'])->name('salesCustomerShow');
-        Route::patch('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerUpdate'])->middleware('throttle:30,1')->name('salesCustomerUpdate');
+        Route::get('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerShow'])->whereNumber('customer')->name('salesCustomerShow');
+        Route::patch('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerUpdate'])->whereNumber('customer')->middleware('throttle:30,1')->name('salesCustomerUpdate');
         Route::post('companies/{company}/sales/invoices', [SalesController::class, 'store'])->middleware('throttle:30,1')->name('salesStore');
         Route::get('companies/{company}/sales/invoices/{invoice}', [SalesController::class, 'show'])->name('invoice');
         Route::get('companies/{company}/sales/invoices/{invoice}/pdf', [SalesController::class, 'pdf'])->middleware('throttle:10,1')->name('invoicePdf');
         Route::post('companies/{company}/sales/invoices/{invoice}/process', [SalesController::class, 'process'])->middleware('throttle:30,1')->name('invoiceProcess');
         Route::post('companies/{company}/sales/invoices/{invoice}/receipts', [SalesController::class, 'receipt'])->middleware('throttle:30,1')->name('receipt');
-        Route::post('companies/{company}/sales/invoices/{invoice}/receipts/{receipt}/void', [SalesController::class, 'voidReceipt'])->middleware('throttle:30,1')->name('voidReceipt');
+        Route::post('companies/{company}/sales/invoices/{invoice}/receipts/{receipt}/void', [SalesController::class, 'voidReceipt'])->whereNumber('receipt')->middleware('throttle:30,1')->name('voidReceipt');
         Route::post('companies/{company}/sales/invoices/{invoice}/credit-notes', [SalesController::class, 'creditNote'])->middleware('throttle:30,1')->name('creditNote');
         Route::post('companies/{company}/sales/invoices/{invoice}/credit-notes/{creditNote}/void', [SalesController::class, 'voidCreditNote'])->whereNumber('creditNote')->middleware('throttle:30,1')->name('voidCreditNote');
         Route::get('companies/{company}/purchases', [PurchaseController::class, 'index'])->name('purchases');
@@ -193,7 +204,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/regional/template', [RegionalController::class, 'installTemplate'])->middleware('throttle:10,1')->name('regionalTemplate');
         Route::post('companies/{company}/regional/taxes', [RegionalController::class, 'syncTaxes'])->middleware('throttle:10,1')->name('regionalTaxes');
         Route::post('companies/{company}/purchases/suppliers', [PurchaseController::class, 'supplier'])->middleware('throttle:30,1')->name('purchaseSupplier');
-        Route::patch('companies/{company}/purchases/suppliers/{supplier}', [PurchaseController::class, 'supplierUpdate'])->middleware('throttle:30,1')->name('purchaseSupplierUpdate');
+        Route::patch('companies/{company}/purchases/suppliers/{supplier}', [PurchaseController::class, 'supplierUpdate'])->whereNumber('supplier')->middleware('throttle:30,1')->name('purchaseSupplierUpdate');
         Route::patch('companies/{company}/accounting-mapping', [PurchaseController::class, 'mapping'])->middleware('throttle:20,1')->name('accountingMapping');
         Route::post('companies/{company}/purchases/documents', [PurchaseController::class, 'store'])->middleware('throttle:30,1')->name('purchaseStore');
         Route::get('companies/{company}/purchases/documents/{document}', [PurchaseController::class, 'show'])->name('purchaseShow');
@@ -202,20 +213,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/purchases/documents/{document}/payments', [PurchaseController::class, 'payment'])->middleware('throttle:30,1')->name('purchasePayment');
         Route::post('companies/{company}/purchases/documents/{document}/credit-notes', [PurchaseController::class, 'creditNote'])->middleware('throttle:30,1')->name('purchaseCreditNote');
         Route::post('companies/{company}/purchases/documents/{document}/credit-notes/{creditNote}/void', [PurchaseController::class, 'voidCreditNote'])->whereNumber('creditNote')->middleware('throttle:30,1')->name('purchaseVoidCreditNote');
-        Route::post('companies/{company}/purchases/documents/{document}/payments/{payment}/void', [PurchaseController::class, 'voidPayment'])->middleware('throttle:30,1')->name('purchasePaymentVoid');
+        Route::post('companies/{company}/purchases/documents/{document}/payments/{payment}/void', [PurchaseController::class, 'voidPayment'])->whereNumber('payment')->middleware('throttle:30,1')->name('purchasePaymentVoid');
         Route::post('companies/{company}/purchases/documents/{document}/files', [PurchaseController::class, 'fileStore'])->middleware('throttle:20,1')->name('purchaseFileStore');
         Route::get('companies/{company}/purchases/documents/{document}/files/{file}', [PurchaseController::class, 'fileDownload'])->middleware('throttle:30,1')->name('purchaseFileDownload');
         Route::delete('companies/{company}/purchases/documents/{document}/files/{file}', [PurchaseController::class, 'fileDestroy'])->middleware('throttle:20,1')->name('purchaseFileDestroy');
         Route::post('companies/{company}/assignments', [AccountingController::class, 'assign'])->name('assign');
         Route::post('companies/{company}/accounts', [AccountingController::class, 'account'])->name('account');
         Route::post('companies/{company}/accounts/template', [AccountingController::class, 'accountTemplate'])->middleware('throttle:10,1')->name('accountTemplate');
-        Route::patch('companies/{company}/accounts/{account}', [AccountingController::class, 'updateAccount'])->middleware('throttle:30,1')->name('updateAccount');
+        Route::patch('companies/{company}/accounts/{account}', [AccountingController::class, 'updateAccount'])->whereNumber('account')->middleware('throttle:30,1')->name('updateAccount');
         Route::post('companies/{company}/periods', [AccountingController::class, 'period'])->name('period');
         Route::get('companies/{company}/periods/{period}/checks', [AccountingController::class, 'periodChecks'])->whereNumber('period')->name('periodChecks');
-        Route::post('companies/{company}/periods/{period}/close', [AccountingController::class, 'close'])->name('close');
-        Route::post('companies/{company}/periods/{period}/reopen/request', [AccountingController::class, 'requestReopen'])->middleware('throttle:10,1')->name('periods.reopen.request');
-        Route::post('companies/{company}/period-reopenings/{reopeningRequest}/approve', [AccountingController::class, 'approveReopen'])->middleware('throttle:10,1')->name('periods.reopen.approve');
-        Route::post('companies/{company}/period-reopenings/{reopeningRequest}/execute', [AccountingController::class, 'executeReopen'])->middleware('throttle:10,1')->name('periods.reopen.execute');
+        Route::post('companies/{company}/periods/{period}/close', [AccountingController::class, 'close'])->whereNumber('period')->name('close');
+        Route::post('companies/{company}/periods/{period}/reopen/request', [AccountingController::class, 'requestReopen'])->whereNumber('period')->middleware('throttle:10,1')->name('periods.reopen.request');
+        Route::post('companies/{company}/period-reopenings/{reopeningRequest}/approve', [AccountingController::class, 'approveReopen'])->whereNumber('reopeningRequest')->middleware('throttle:10,1')->name('periods.reopen.approve');
+        Route::post('companies/{company}/period-reopenings/{reopeningRequest}/execute', [AccountingController::class, 'executeReopen'])->whereNumber('reopeningRequest')->middleware('throttle:10,1')->name('periods.reopen.execute');
         Route::post('companies/{company}/entries', [AccountingController::class, 'entry'])->middleware('throttle:30,1')->name('entry');
         Route::get('companies/{company}/entries/import/template', [AccountingController::class, 'importTemplate'])->middleware('throttle:10,1')->name('entryImportTemplate');
         Route::post('companies/{company}/entries/import/preview', [AccountingController::class, 'importPreview'])->middleware('throttle:10,1')->name('entryImportPreview');
@@ -248,6 +259,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('billing.checkout.show');
     Route::get('billing/plans', [CheckoutController::class, 'plans'])
         ->name('billing.plans.index');
+    Route::get('billing/reactivate', [CheckoutController::class, 'reactivate'])->name('billing.reactivate');
+    Route::post('billing/reactivate', [CheckoutController::class, 'reactivateStore'])->middleware('throttle:10,1')->name('billing.reactivate.store');
     Route::patch('billing/plan', [CheckoutController::class, 'changePlan'])
         ->middleware('throttle:10,1')
         ->name('billing.plan.update');
@@ -342,6 +355,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('settings', 'settings')->name('settings');
             Route::post('settings', 'updateSetting')->middleware('throttle:30,1')->name('settings.update');
             Route::put('settings/templates/{template}', 'updateTemplate')->name('settings.template');
+            Route::get('legal', 'legal')->name('legal');
+            Route::post('legal/{slug}', 'publishLegal')->whereIn('slug', array_keys(LegalDocumentService::DOCUMENTS))->middleware('throttle:10,1')->name('legal.publish');
         });
     });
 
@@ -866,11 +881,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::redirect('client-portal', '/client')->name('client.portal');
         Route::get('office/offices', [WorkManagementController::class, 'offices'])->name('office.offices.index');
         Route::post('office/offices', [WorkManagementController::class, 'storeOffice'])->middleware('throttle:20,1')->name('office.offices.store');
-        Route::get('office/offices/{office}', [WorkManagementController::class, 'officeDetail'])->name('office.offices.show');
-        Route::patch('office/offices/{office}', [WorkManagementController::class, 'updateOffice'])->middleware('throttle:20,1')->name('office.offices.update');
+        Route::get('office/offices/{office}', [WorkManagementController::class, 'officeDetail'])->whereNumber('office')->name('office.offices.show');
+        Route::patch('office/offices/{office}', [WorkManagementController::class, 'updateOffice'])->whereNumber('office')->middleware('throttle:20,1')->name('office.offices.update');
         Route::get('office/users-roles', [WorkManagementController::class, 'usersRoles'])->name('office.usersRoles');
         Route::get('office/roles', [WorkManagementController::class, 'rolesPermissions'])->name('office.roles.index');
         Route::get('office/subscription', [SubscriptionController::class, 'show'])->name('office.subscription');
+        Route::get('office/subscription/plan-preview', [SubscriptionController::class, 'previewPlan'])->middleware('throttle:30,1')->name('office.subscription.preview');
+        Route::post('office/subscription/plan', [SubscriptionController::class, 'changePlan'])->middleware('throttle:10,1')->name('office.subscription.plan');
         Route::get('office/firm-profile', [FirmProfileController::class, 'show'])->name('office.firmProfile');
         Route::patch('office/firm-profile', [FirmProfileController::class, 'update'])->middleware('throttle:20,1')->name('office.firmProfile.update');
         Route::post('office/firm-profile/logo', [FirmProfileController::class, 'uploadLogo'])->middleware('throttle:10,1')->name('office.firmProfile.logo.upload');
@@ -904,10 +921,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/training/certifications/{certification}/certificate', [TrainingController::class, 'certificate'])->whereNumber('certification')->name('office.training.certifications.certificate');
         Route::post('office/training/needs', [TrainingController::class, 'storeNeed'])->middleware('throttle:30,1')->name('office.training.needs.store');
         Route::patch('office/training/needs/{need}', [TrainingController::class, 'updateNeed'])->whereNumber('need')->middleware('throttle:60,1')->name('office.training.needs.update');
-        Route::patch('office/users/{user}/membership', [WorkManagementController::class, 'updateUserMembership'])->middleware('throttle:30,1')->name('office.users.membership');
+        Route::patch('office/users/{user}/membership', [WorkManagementController::class, 'updateUserMembership'])->whereNumber('user')->middleware('throttle:30,1')->name('office.users.membership');
         Route::post('office/roles', [WorkManagementController::class, 'storeRole'])->middleware('throttle:20,1')->name('office.roles.store');
-        Route::patch('office/roles/{role}', [WorkManagementController::class, 'updateRole'])->middleware('throttle:20,1')->name('office.roles.update');
-        Route::patch('office/roles/{role}/status', [WorkManagementController::class, 'updateRoleStatus'])->middleware('throttle:20,1')->name('office.roles.status');
+        Route::patch('office/roles/{role}', [WorkManagementController::class, 'updateRole'])->whereNumber('role')->middleware('throttle:20,1')->name('office.roles.update');
+        Route::patch('office/roles/{role}/status', [WorkManagementController::class, 'updateRoleStatus'])->whereNumber('role')->middleware('throttle:20,1')->name('office.roles.status');
         Route::get('office/password-requests', [PasswordHelpController::class, 'index'])->name('office.passwordRequests.index');
         Route::post('office/password-requests/{passwordRequest}/approve', [PasswordHelpController::class, 'approve'])->whereNumber('passwordRequest')->middleware('throttle:20,1')->name('office.passwordRequests.approve');
         Route::post('office/password-requests/{passwordRequest}/reject', [PasswordHelpController::class, 'reject'])->whereNumber('passwordRequest')->middleware('throttle:20,1')->name('office.passwordRequests.reject');
@@ -922,25 +939,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/client-access/{access}/activity', [ClientAccessAdminController::class, 'activity'])->whereNumber('access')->middleware('throttle:60,1')->name('office.clientAccess.activity');
         Route::patch('office/client-access/offices/{office}/policy', [ClientAccessAdminController::class, 'policy'])->whereNumber('office')->middleware('throttle:20,1')->name('office.clientAccess.policy');
         Route::get('office/company-assignments', [WorkManagementController::class, 'companyAssignments'])->name('office.companyAssignments.index');
-        Route::delete('office/company-assignments/{assignment}', [WorkManagementController::class, 'unassignCompany'])->middleware('throttle:30,1')->name('office.companyAssignments.destroy');
-        Route::get('work/tasks/{task}', [WorkManagementController::class, 'taskDetail'])->name('work.tasks.show');
+        Route::delete('office/company-assignments/{assignment}', [WorkManagementController::class, 'unassignCompany'])->whereNumber('assignment')->middleware('throttle:30,1')->name('office.companyAssignments.destroy');
+        Route::get('work/tasks/{task}', [WorkManagementController::class, 'taskDetail'])->whereNumber('task')->name('work.tasks.show');
         Route::get('work/task-templates', [WorkManagementController::class, 'taskTemplates'])->name('work.taskTemplates.index');
         Route::post('work/task-templates', [WorkManagementController::class, 'storeTemplate'])->middleware('throttle:20,1')->name('work.taskTemplates.store');
-        Route::patch('work/task-templates/{template}', [WorkManagementController::class, 'updateTemplate'])->middleware('throttle:20,1')->name('work.taskTemplates.update');
+        Route::patch('work/task-templates/{template}', [WorkManagementController::class, 'updateTemplate'])->whereNumber('template')->middleware('throttle:20,1')->name('work.taskTemplates.update');
         Route::get('work/reviews', [WorkManagementController::class, 'reviewsIndex'])->name('work.reviews.index');
-        Route::get('work/reviews/{review}', [WorkManagementController::class, 'reviewDetail'])->name('work.reviews.show');
+        Route::get('work/reviews/{review}', [WorkManagementController::class, 'reviewDetail'])->whereNumber('review')->name('work.reviews.show');
         Route::get('work/closings', [WorkManagementController::class, 'closings'])->name('work.closings.index');
         Route::post('work/tasks', [WorkManagementController::class, 'storeTask'])->middleware('throttle:30,1')->name('work.tasks.store');
-        Route::post('work/tasks/{task}/transition', [WorkManagementController::class, 'transitionTask'])->middleware('throttle:60,1')->name('work.tasks.transition');
-        Route::post('work/tasks/{task}/reassign', [WorkManagementController::class, 'reassignTask'])->middleware('throttle:30,1')->name('work.tasks.reassign');
-        Route::post('work/tasks/{task}/comments', [WorkManagementController::class, 'commentTask'])->middleware('throttle:60,1')->name('work.tasks.comment');
-        Route::post('office/users/{user}/roles', [WorkManagementController::class, 'assignRole'])->middleware('throttle:30,1')->name('office.users.roles.assign');
+        Route::post('work/tasks/{task}/transition', [WorkManagementController::class, 'transitionTask'])->whereNumber('task')->middleware('throttle:60,1')->name('work.tasks.transition');
+        Route::post('work/tasks/{task}/reassign', [WorkManagementController::class, 'reassignTask'])->whereNumber('task')->middleware('throttle:30,1')->name('work.tasks.reassign');
+        Route::post('work/tasks/{task}/comments', [WorkManagementController::class, 'commentTask'])->whereNumber('task')->middleware('throttle:60,1')->name('work.tasks.comment');
+        Route::post('office/users/{user}/roles', [WorkManagementController::class, 'assignRole'])->whereNumber('user')->middleware('throttle:30,1')->name('office.users.roles.assign');
         Route::post('office/company-assignments', [WorkManagementController::class, 'assignCompany'])->middleware('throttle:30,1')->name('office.companyAssignments.store');
         Route::post('work/period-tasks', [WorkManagementController::class, 'generatePeriodTasks'])->middleware('throttle:20,1')->name('work.periodTasks.generate');
         Route::post('work/reviews', [WorkManagementController::class, 'submitReview'])->middleware('throttle:30,1')->name('work.reviews.submit');
-        Route::post('work/reviews/{review}/start', [WorkManagementController::class, 'startReview'])->middleware('throttle:30,1')->name('work.reviews.start');
-        Route::post('work/reviews/{review}/changes', [WorkManagementController::class, 'requestReviewChanges'])->middleware('throttle:30,1')->name('work.reviews.changes');
-        Route::post('work/reviews/{review}/approve', [WorkManagementController::class, 'approveReview'])->middleware('throttle:30,1')->name('work.reviews.approve');
+        Route::post('work/reviews/{review}/start', [WorkManagementController::class, 'startReview'])->whereNumber('review')->middleware('throttle:30,1')->name('work.reviews.start');
+        Route::post('work/reviews/{review}/changes', [WorkManagementController::class, 'requestReviewChanges'])->whereNumber('review')->middleware('throttle:30,1')->name('work.reviews.changes');
+        Route::post('work/reviews/{review}/approve', [WorkManagementController::class, 'approveReview'])->whereNumber('review')->middleware('throttle:30,1')->name('work.reviews.approve');
     });
     Route::post('workspace/organization', OrganizationSwitchController::class)->middleware('throttle:30,1')->name('workspace.organization.switch');
     Route::post('workspace/setup', [WorkspaceController::class, 'update'])->middleware(['subscription.active', 'throttle:10,1'])->name('workspace.setup');

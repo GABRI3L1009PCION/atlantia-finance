@@ -57,7 +57,7 @@ class WebhookDeliveryService
             $delivery->attempts = (int) $delivery->attempts + 1;
 
             try {
-                $response = Http::timeout((int) config('integrations.webhooks.timeout_seconds'))->withoutRedirecting()
+                $response = Http::timeout((int) config('integrations.webhooks.timeout_seconds'))->withoutRedirecting()->withOptions($this->guard->pinnedOptions((string) $endpoint->url))
                     ->withHeaders(['Atlantia-Signature' => 't='.$timestamp.',v1='.$signature, 'Atlantia-Event' => (string) $delivery->event,
                         'Atlantia-Delivery' => (string) $delivery->public_id, 'User-Agent' => 'Atlantia-Webhooks/1.0'])
                     ->withBody($body, 'application/json')->post((string) $endpoint->url);

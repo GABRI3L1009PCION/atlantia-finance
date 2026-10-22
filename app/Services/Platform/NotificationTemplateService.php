@@ -24,9 +24,10 @@ class NotificationTemplateService
     public const DEFAULTS = [
         'welcome' => ['label' => 'Bienvenida', 'subject' => 'Bienvenido a {brand}', 'body' => "Hola {name},\n\nTu organización {organization} ya está lista en {brand}. Ingresa y configura tu primera oficina."],
         'invitation' => ['label' => 'Invitación', 'subject' => 'Te invitaron a {organization}', 'body' => "Hola,\n\n{inviter} te invitó a trabajar en {organization} dentro de {brand}."],
-        'payment_failed' => ['label' => 'Pago fallido', 'subject' => 'Tu pago de {brand} está pendiente', 'body' => "Hola {name},\n\nTu suscripción de {organization} tiene {days} día(s) de atraso. Regulariza el pago para evitar la suspensión del servicio."],
-        'trial_ending' => ['label' => 'Fin de la prueba', 'subject' => 'Tu prueba de {brand} termina pronto', 'body' => "Hola {name},\n\nLa prueba de {organization} termina el {date}. Elige un plan para seguir trabajando sin interrupciones."],
-        'subscription_renewal' => ['label' => 'Renovación', 'subject' => 'Renovamos tu suscripción a {brand}', 'body' => "Hola {name},\n\nGeneramos la factura {invoice} por {amount} de la renovación de {organization}."],
+        'payment_failed' => ['label' => 'Pago fallido', 'subject' => 'Tu pago de {brand} está pendiente', 'body' => "Hola {name},\n\nTu suscripción de {organization} tiene {days} día(s) de atraso. Regulariza el pago para evitar la suspensión del servicio.\n\nPaga aquí: {url}"],
+        'trial_ending' => ['label' => 'Fin de la prueba', 'subject' => 'Tu prueba de {brand} termina pronto', 'body' => "Hola {name},\n\nLa prueba de {organization} termina el {date}. Al terminar recibirás la factura del primer período; págala para seguir trabajando sin interrupciones.\n\nPaga aquí: {url}"],
+        'subscription_renewal' => ['label' => 'Renovación', 'subject' => 'Renovamos tu suscripción a {brand}', 'body' => "Hola {name},\n\nGeneramos la factura {invoice} por {amount} de la renovación de {organization}. Págala antes del {due} para mantener el servicio.\n\nPaga aquí: {url}"],
+        'limit_warning' => ['label' => 'Aviso de límite del plan', 'subject' => 'Tu firma usa el {percent}% de {metric}', 'body' => "Hola {name},\n\nTu firma ya usa {used} de {limit} de {metric} en el plan contratado ({percent}%). Al llegar al límite no podrás agregar más; puedes ampliar el plan desde Plan y suscripción con el botón Cambiar plan.\n\nVer mi plan: {plans_url}"],
         'incident_notification' => ['label' => 'Incidente', 'subject' => '[{brand}] {title}', 'body' => "{message}\n\nEstado: {status}."],
         'support_message' => ['label' => 'Mensaje de soporte', 'subject' => 'Respuesta a tu ticket {ticket}', 'body' => "Hola {name},\n\nRespondimos tu solicitud {ticket}: {message}"],
     ];
@@ -80,7 +81,8 @@ class NotificationTemplateService
     public function render(string $key, array $variables): array
     {
         $template = $this->current($key);
-        $replace = ['{brand}' => (string) $this->settings->get('brand.name', 'Atlantia Finance')];
+        // {url} opens the firm's payment screen, which charges whatever invoice is open.
+        $replace = ['{brand}' => (string) $this->settings->get('brand.name', 'Atlantia Finance'), '{url}' => route('billing.checkout.show')];
         foreach ($variables as $name => $value) {
             $replace['{'.$name.'}'] = (string) $value;
         }

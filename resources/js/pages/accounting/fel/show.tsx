@@ -25,6 +25,7 @@ export default function FelShow({
     assignees,
     notice,
     entry,
+    entryPublicId,
 }: {
     company: Company;
     document: Document;
@@ -35,6 +36,7 @@ export default function FelShow({
     assignees: { id: number; name: string }[];
     notice: string | null;
     entry: number | null;
+    entryPublicId: string | null;
 }) {
     const action = useForm({});
     const cancellation = useForm({ reason: '' });
@@ -187,9 +189,13 @@ export default function FelShow({
                     {entry && (
                         <Link
                             className="mt-3 block text-[#640000]"
-                            href={accounting.show(company.public_id)}
+                            href={`${accounting.show.url(company.public_id, {
+                                query: entryPublicId
+                                    ? { entry: entryPublicId }
+                                    : {},
+                            })}#libro-diario`}
                         >
-                            Asiento contable #{entry} · Ver libros
+                            Asiento contable #{entry} · Abrir asiento
                         </Link>
                     )}
                 </Card>

@@ -12,12 +12,14 @@ type Plan = {
     code: string;
     name: string;
     description: string;
+    payrollNote: string | null;
     prices: Price[];
 };
 
 type Props = {
     organization: { name: string };
     plans: Plan[];
+    mode?: 'change' | 'reactivate';
     testEnvironment: boolean;
     errors?: { plan?: string };
 };
@@ -31,31 +33,45 @@ const money = new Intl.NumberFormat('es-GT', {
 export default function BillingPlans({
     organization,
     plans,
+    mode = 'change',
     testEnvironment,
     errors = {},
 }: Props) {
+    const reactivate = mode === 'reactivate';
+
     return (
         <>
-            <Head title="Cambiar plan" />
+            <Head title={reactivate ? 'Reactivar cuenta' : 'Cambiar plan'} />
             <main className="min-h-screen bg-[#f8f6f5] px-4 py-8 text-slate-950 lg:px-8">
                 <div className="mx-auto max-w-7xl">
-                    <Link
-                        href="/billing/checkout"
-                        className="inline-flex items-center gap-2 text-sm font-semibold text-[#640000]"
-                    >
-                        <ArrowLeft className="size-4" /> Volver al pago
-                    </Link>
+                    {!reactivate && (
+                        <Link
+                            href="/billing/checkout"
+                            className="inline-flex items-center gap-2 text-sm font-semibold text-[#640000]"
+                        >
+                            <ArrowLeft className="size-4" /> Volver al pago
+                        </Link>
+                    )}
 
                     <header className="mt-5 rounded-3xl bg-[#640000] px-7 py-8 text-white shadow-xl lg:px-10">
                         <p className="text-xs font-bold tracking-[0.22em] text-rose-100 uppercase">
                             Atlantia Systems
                         </p>
                         <h1 className="mt-2 text-3xl font-bold">
-                            Elige el plan correcto
+                            {reactivate
+                                ? 'Reactiva tu cuenta'
+                                : 'Elige el plan correcto'}
                         </h1>
                         <p className="mt-2 text-rose-100">
                             {organization.name}
                         </p>
+                        {reactivate && (
+                            <p className="mt-2 text-sm text-rose-100">
+                                Tu suscripción terminó, pero todos tus datos se
+                                conservan. Elige un plan y paga para volver a
+                                trabajar.
+                            </p>
+                        )}
                     </header>
 
                     {testEnvironment && (
@@ -89,13 +105,24 @@ export default function BillingPlans({
                                 <p className="mt-2 min-h-12 text-sm leading-6 text-slate-600">
                                     {plan.description}
                                 </p>
+                                {plan.payrollNote && (
+                                    <p className="mt-2 text-xs font-medium text-amber-800">
+                                        {plan.payrollNote}
+                                    </p>
+                                )}
 
                                 <div className="mt-5 space-y-3">
                                     {plan.prices.map((price) => (
                                         <Form
                                             key={price.billingPeriod}
-                                            action="/billing/plan"
-                                            method="patch"
+                                            action={
+                                                reactivate
+                                                    ? '/billing/reactivate'
+                                                    : '/billing/plan'
+                                            }
+                                            method={
+                                                reactivate ? 'post' : 'patch'
+                                            }
                                             className="rounded-xl border border-slate-200 p-4"
                                         >
                                             <input
@@ -134,6 +161,8 @@ export default function BillingPlans({
                                                             <CheckCircle2 className="size-4" />{' '}
                                                             Actual
                                                         </span>
+                                                    ) : reactivate ? (
+                                                        'Reactivar'
                                                     ) : (
                                                         'Elegir'
                                                     )}

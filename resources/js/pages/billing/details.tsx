@@ -1,6 +1,10 @@
 import { Form, Head } from '@inertiajs/react';
-import { field, primary } from '@/components/accounting-ui';
+import { ShieldCheck } from 'lucide-react';
 import InputError from '@/components/input-error';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import * as details from '@/routes/billing/details';
 
 export default function BillingDetails({
@@ -13,70 +17,87 @@ export default function BillingDetails({
     issuer: { name: string; nit: string };
 }) {
     return (
-        <main className="min-h-screen bg-[#f8f6f5] px-5 py-12 text-slate-950">
+        <>
             <Head title="Datos para tu factura de suscripción" />
-            <section className="mx-auto max-w-xl rounded-3xl border border-rose-100 bg-white p-8 shadow-sm">
-                <img
-                    src="/images/atlantia-finance-logo.png"
-                    alt="Atlantia Finance"
-                    className="mb-6 w-44"
-                />
-                <h1 className="text-2xl font-semibold">
-                    Tu factura de suscripción
-                </h1>
-                <p className="mt-3 text-sm text-slate-600">
-                    {issuer.name}, NIT {issuer.nit}, emitirá la factura de tu
-                    plan y enviará el PDF a {email} cuando se confirme el pago.
-                </p>
-                <Form {...details.update.form()} className="mt-6 space-y-4">
-                    {({ errors, processing }) => (
-                        <>
-                            <label className="block text-sm">
-                                Nombre o razón social
-                                <input
-                                    className={field}
-                                    name="name"
-                                    required
-                                    maxLength={150}
-                                    defaultValue={billing.name}
-                                />
-                                <InputError message={errors.name} />
-                            </label>
-                            <label className="block text-sm">
-                                NIT del comprador
-                                <input
-                                    className={field}
-                                    name="nit"
-                                    required
-                                    maxLength={30}
-                                    defaultValue={billing.nit}
-                                />
-                                <InputError message={errors.nit} />
-                            </label>
-                            <label className="block text-sm">
-                                Dirección fiscal
-                                <input
-                                    className={field}
-                                    name="address"
-                                    required
-                                    maxLength={255}
-                                    defaultValue={billing.address}
-                                />
-                                <InputError message={errors.address} />
-                            </label>
-                            <InputError message={errors.billing} />
-                            <button className={primary} disabled={processing}>
-                                Guardar y continuar al pago
-                            </button>
-                        </>
-                    )}
-                </Form>
-                <p className="mt-6 text-sm text-slate-500">
-                    Estos datos se usan para tu compra a Atlantia. La
-                    facturación de las ventas de tu empresa se configura por
-                    separado, dentro de Facturación electrónica.
-                </p>
-            </section>
-        </main>
+
+            <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-xs leading-5 text-slate-700">
+                <strong className="text-emerald-800">{issuer.name}</strong>, NIT{' '}
+                {issuer.nit}, emitirá la factura electrónica de tu plan con
+                estos datos y te la enviará en PDF, una vez emitida y después de
+                confirmar tu pago, al correo:
+                <strong className="mt-1 block text-sm break-normal whitespace-nowrap text-slate-950">
+                    {email}
+                </strong>
+            </p>
+
+            <Form {...details.update.form()} className="flex flex-col gap-3.5">
+                {({ errors, processing }) => (
+                    <>
+                        <div className="grid gap-1">
+                            <Label htmlFor="name">Nombre o razón social</Label>
+                            <Input
+                                id="name"
+                                name="name"
+                                required
+                                autoFocus
+                                maxLength={150}
+                                defaultValue={billing.name}
+                                placeholder="Como aparece en tu NIT"
+                            />
+                            <InputError message={errors.name} />
+                        </div>
+
+                        <div className="grid gap-1">
+                            <Label htmlFor="nit">NIT</Label>
+                            <Input
+                                id="nit"
+                                name="nit"
+                                required
+                                maxLength={30}
+                                defaultValue={billing.nit}
+                                placeholder="Ej. 1234567-8 o CF"
+                            />
+                            <InputError message={errors.nit} />
+                        </div>
+
+                        <div className="grid gap-1">
+                            <Label htmlFor="address">Dirección fiscal</Label>
+                            <Input
+                                id="address"
+                                name="address"
+                                required
+                                maxLength={255}
+                                defaultValue={billing.address}
+                                placeholder="Calle, zona, municipio, departamento"
+                            />
+                            <InputError message={errors.address} />
+                        </div>
+
+                        <InputError message={errors.billing} />
+
+                        <Button
+                            type="submit"
+                            disabled={processing}
+                            className="w-full bg-emerald-700 font-bold text-white hover:bg-emerald-800"
+                        >
+                            {processing && <Spinner />}
+                            Guardar y continuar al pago
+                        </Button>
+
+                        <p className="flex items-start gap-1.5 text-[11px] leading-4 text-slate-500">
+                            <ShieldCheck className="mt-px size-3.5 shrink-0 text-emerald-700" />
+                            Estos datos se usan solo para tu compra a Atlantia.
+                            La facturación de las ventas de tu empresa se
+                            configura aparte, dentro de Facturación electrónica.
+                        </p>
+                    </>
+                )}
+            </Form>
+        </>
     );
 }
+
+BillingDetails.layout = {
+    title: 'Datos de tu factura',
+    description: 'Un último paso antes del pago de tu suscripción.',
+};

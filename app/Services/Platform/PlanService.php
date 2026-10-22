@@ -18,7 +18,7 @@ use stdClass;
 class PlanService
 {
     public const METRICS = [
-        'offices' => ['label' => 'Oficinas', 'unit' => 'offices'], 'users' => ['label' => 'Usuarios', 'unit' => 'users'], 'active_cases' => ['label' => 'Empresas (expedientes)', 'unit' => 'cases'],
+        'offices' => ['label' => 'Oficinas', 'unit' => 'offices'], 'users' => ['label' => 'Usuarios', 'unit' => 'users'], 'active_cases' => ['label' => 'Empresas cliente', 'unit' => 'cases'],
         'storage_bytes' => ['label' => 'Almacenamiento', 'unit' => 'bytes'], 'ai_queries' => ['label' => 'Consultas de Luzma al mes', 'unit' => 'queries/month'],
         'api_requests' => ['label' => 'Solicitudes de API al mes', 'unit' => 'requests/month'],
     ];

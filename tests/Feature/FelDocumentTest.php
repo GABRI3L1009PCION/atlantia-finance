@@ -498,6 +498,12 @@ test('platform invoices subscriptions with Atlantia identity and the original bu
     expect(FelPdfService::amountInWords(79900))->toBe('SETECIENTOS NOVENTA Y NUEVE QUETZALES CON 00/100');
     $pdf = Storage::disk('local')->get($doc->fresh()->pdf_path);
     expect($pdf)->toStartWith('%PDF');
+    // The invoice carries the plan that was bought, the amounts and the SAT data of the layout.
+    $html = view('fel.invoice', ['document' => $doc->fresh()->load('lines')])->render();
+    expect($html)->toContain('Suscripción mensual Atlantia Finance')->toContain('Plan Profesional · Mensual')->toContain('Comprador original')
+        ->toContain('Q 713.39')->toContain('Q 85.61')->toContain('TOTAL A PAGAR')->toContain('Q 799.00')
+        ->toContain('SETECIENTOS NOVENTA Y NUEVE QUETZALES EXACTOS')->toContain('Forma de pago: tarjeta de crédito o débito (Recurrente).')
+        ->toContain('PLAT-AUTH-1')->toContain('AB12')->toContain('data:image/svg+xml;base64,');
     if ($path = getenv('FEL_PLATFORM_QA_PATH')) {
         file_put_contents($path, $pdf);
     }

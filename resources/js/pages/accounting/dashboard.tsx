@@ -31,6 +31,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import OperationalModuleCenter from '@/components/operational-module-center';
 import { hasPlanModule } from '@/lib/plan-capabilities';
+import { statusLabel } from '@/lib/status-labels';
 import ConfigurationWorkspace from '@/pages/accounting/configuration-workspace';
 import NormativeLibraryWorkspace from '@/pages/accounting/normative-library-workspace';
 import { companyDashboard, reports, sales } from '@/routes/accounting';
@@ -593,7 +594,7 @@ export default function CompanyDashboard({
                 .map((item) => ({
                     key: `fiscal-${item.label}-${item.due}`,
                     title: item.label,
-                    detail: `Vence ${shortDate(item.due)} · ${item.status}`,
+                    detail: `Vence ${shortDate(item.due)} · ${statusLabel(item.status)}`,
                     href: moduleUrl(item.module),
                     badge: 'Fiscal',
                 })),
@@ -950,7 +951,7 @@ export default function CompanyDashboard({
                                             </small>
                                         </span>
                                         <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-semibold text-amber-700">
-                                            {item.status}
+                                            {statusLabel(item.status)}
                                         </span>
                                     </Link>
                                 ))}
