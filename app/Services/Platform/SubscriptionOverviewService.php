@@ -78,8 +78,11 @@ class SubscriptionOverviewService
             'modules' => array_map(fn (array $module): array => ['name' => $module[0], 'included' => $module[1] === null || $this->entitlements->has($organization, $module[1])], self::MODULES),
             'available' => DB::table('plans')->where('is_active', true)->orderBy('display_order')->get()->map(function (object $plan) use ($planId): array {
                 $prices = DB::table('plan_prices')->where('plan_id', $plan->id)->where('is_active', true)->where('currency_code', 'GTQ')->pluck('amount', 'billing_period');
+                $ids = DB::table('plan_prices')->where('plan_id', $plan->id)->where('is_active', true)->where('currency_code', 'GTQ')->pluck('id', 'billing_period');
 
                 return [
+                    'monthly_price_id' => isset($ids['monthly']) ? (int) $ids['monthly'] : null,
+                    'annual_price_id' => isset($ids['annual']) ? (int) $ids['annual'] : null,
                     'name' => $plan->name,
                     'tagline' => $plan->tagline ?? $plan->description,
                     'monthly' => isset($prices['monthly']) ? (float) $prices['monthly'] : null,

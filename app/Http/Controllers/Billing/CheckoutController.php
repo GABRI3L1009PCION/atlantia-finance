@@ -12,6 +12,7 @@ use App\Models\Subscription;
 use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\PublicPlanCatalog;
 use App\Services\Tenancy\TenantDatabaseContext;
+use App\Support\PlatformStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -96,7 +97,10 @@ class CheckoutController extends Controller
             $organization->update(['status' => 'pending_payment']);
         }
 
-        abort_if($subscription === null, 404);
+        // A firm whose subscription ended (cancelled or expired) chooses a plan and pays again; its data is kept.
+        if ($subscription === null) {
+            return to_route('billing.reactivate');
+        }
         $item = $subscription->items->firstWhere('item_type', 'base_plan');
         abort_if($item === null, 409, 'La suscripción no tiene un plan base.');
         // A running firm pays what it owes (its oldest unpaid invoice: a renewal or an overdue period), not a fresh plan price.
@@ -151,10 +155,68 @@ class CheckoutController extends Controller
             ->where('item_type', 'base_plan')
             ->value('plan_price_id');
 
+        $plans = $this->planOptions($currentPriceId);
+
+        return Inertia::render('billing/plans', [
+            'organization' => ['name' => $organization->name],
+            'plans' => $plans,
+            'mode' => 'change',
+            'testEnvironment' => config('services.recurrente.environment') === 'test',
+        ]);
+    }
+
+    /** Ended subscription (cancelled or expired): the owner picks a plan and pays again, keeping all the firm's data. */
+    public function reactivate(Request $request): Response|RedirectResponse
+    {
+        $organization = $this->ownerOrganization($request);
+        if (self::payableSubscription($organization) !== null) {
+            return to_route('billing.checkout.show');
+        }
+        if ($organization->subscriptions()->whereIn('status', PlatformStatus::SUBSCRIPTION_ACCESS)->exists()) {
+            return redirect()->route('dashboard');
+        }
+
+        return Inertia::render('billing/plans', [
+            'organization' => ['name' => $organization->name],
+            'plans' => $this->planOptions(null),
+            'mode' => 'reactivate',
+            'testEnvironment' => config('services.recurrente.environment') === 'test',
+        ]);
+    }
+
+    public function reactivateStore(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'plan' => ['required', 'string', Rule::exists('plans', 'code')->where('is_active', true)],
+            'billing_period' => ['required', Rule::in(['monthly', 'annual'])],
+        ]);
+        $organization = $this->ownerOrganization($request);
+        if (self::payableSubscription($organization) !== null || $organization->subscriptions()->whereIn('status', PlatformStatus::SUBSCRIPTION_ACCESS)->exists()) {
+            return redirect()->route('billing.checkout.show');
+        }
+        if (in_array($organization->status, ['suspended', 'archived'], true)) {
+            throw ValidationException::withMessages(['plan' => 'La firma está suspendida. Escribe a soporte para reactivarla.']);
+        }
+
+        $price = PlanPrice::query()->where('is_active', true)->where('billing_period', $validated['billing_period'])->where('currency_code', 'GTQ')
+            ->whereHas('plan', fn ($query) => $query->where('code', $validated['plan'])->where('is_active', true))->firstOrFail();
+
+        DB::transaction(function () use ($organization, $price): void {
+            $subscription = Subscription::query()->create(['organization_id' => $organization->id, 'status' => 'incomplete', 'cancel_at_period_end' => false]);
+            $subscription->items()->create(['plan_price_id' => $price->id, 'item_type' => 'base_plan', 'quantity' => 1]);
+            $organization->update(['status' => 'pending_payment']);
+        });
+
+        return redirect()->route('billing.checkout.show');
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function planOptions(?int $currentPriceId): array
+    {
         $payrollNotes = collect(app(PublicPlanCatalog::class)->plans())->mapWithKeys(fn (array $plan): array => [$plan['code'] => collect($plan['features'])
             ->pluck('text')->first(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida'))]);
 
-        $plans = Plan::query()
+        return array_values(Plan::query()
             ->where('is_active', true)
             ->with(['prices' => fn ($query) => $query
                 ->where('is_active', true)
@@ -173,13 +235,16 @@ class CheckoutController extends Controller
                     'currencyCode' => $price->currency_code,
                     'selected' => $price->id === $currentPriceId,
                 ])->values(),
-            ]);
+            ])->all());
+    }
 
-        return Inertia::render('billing/plans', [
-            'organization' => ['name' => $organization->name],
-            'plans' => $plans,
-            'testEnvironment' => config('services.recurrente.environment') === 'test',
-        ]);
+    private function ownerOrganization(Request $request): Organization
+    {
+        /** @var Organization|null $organization */
+        $organization = $request->user()->organizations()->wherePivot('role', 'owner')->latest('organizations.created_at')->first();
+        abort_if($organization === null, 403, 'No tienes una organización para facturar.');
+
+        return $organization;
     }
 
     public function changePlan(Request $request): RedirectResponse

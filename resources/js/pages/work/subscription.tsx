@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     CalendarClock,
     CheckCircle2,
@@ -35,7 +35,10 @@ type Props = {
         unit: string;
     }[];
     modules: { name: string; included: boolean }[];
+    canChangePlan: boolean;
     available: {
+        monthly_price_id: number | null;
+        annual_price_id: number | null;
         name: string;
         tagline: string | null;
         monthly: number | null;
@@ -84,6 +87,17 @@ const formatDate = (value: string | null) =>
               year: 'numeric',
           })
         : '—';
+
+type PlanPreview = {
+    direction: 'upgrade' | 'downgrade' | 'lateral';
+    current_plan: string;
+    new_plan: string;
+    new_monthly: number;
+    proration: number;
+    conflicts: { label: string; value: number; limit: number }[];
+    policy: string;
+    effective: string;
+};
 
 function UsageRow({ item }: { item: Props['usage'][number] }) {
     const percent = item.limit
@@ -146,6 +160,7 @@ export default function Subscription({
     plan,
     usage,
     modules,
+    canChangePlan,
     available,
     payments,
     billing,
@@ -153,6 +168,37 @@ export default function Subscription({
     const [period, setPeriod] = useState<'monthly' | 'annual'>(
         plan.billing_period,
     );
+    const [target, setTarget] = useState<{
+        name: string;
+        priceId: number;
+    } | null>(null);
+    const [preview, setPreview] = useState<PlanPreview | null>(null);
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [changing, setChanging] = useState(false);
+    const askChange = async (name: string, priceId: number) => {
+        setTarget({ name, priceId });
+        setPreview(null);
+        setPreviewError(null);
+        const response = await fetch(
+            `/office/subscription/plan-preview?plan_price_id=${priceId}`,
+            {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            },
+        );
+
+        if (!response.ok) {
+            setPreviewError(
+                'No pudimos calcular el cambio. Inténtalo de nuevo.',
+            );
+
+            return;
+        }
+
+        setPreview(
+            ((await response.json()) as { preview: PlanPreview }).preview,
+        );
+    };
     const status = {
         label: plan.status_label,
         style: STATUS_STYLE[plan.status] ?? 'bg-slate-100 text-slate-600',
@@ -374,11 +420,38 @@ export default function Subscription({
                                                             </li>
                                                         ))}
                                                 </ul>
-                                                <p className="mt-3 rounded-lg bg-slate-50 py-2 text-center text-xs font-bold text-slate-600">
-                                                    {item.current
-                                                        ? '✓ Plan actual'
-                                                        : 'Para cambiar de plan, contacta a ventas'}
-                                                </p>
+                                                {item.current ||
+                                                !canChangePlan ? (
+                                                    <p className="mt-3 rounded-lg bg-slate-50 py-2 text-center text-xs font-bold text-slate-600">
+                                                        {item.current
+                                                            ? '✓ Plan actual'
+                                                            : 'Solo el propietario puede cambiar el plan'}
+                                                    </p>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        disabled={
+                                                            (period === 'annual'
+                                                                ? item.annual_price_id
+                                                                : item.monthly_price_id) ===
+                                                            null
+                                                        }
+                                                        onClick={() =>
+                                                            askChange(
+                                                                item.name,
+                                                                Number(
+                                                                    period ===
+                                                                        'annual'
+                                                                        ? item.annual_price_id
+                                                                        : item.monthly_price_id,
+                                                                ),
+                                                            )
+                                                        }
+                                                        className="mt-3 w-full rounded-lg bg-[#8a0b0b] py-2 text-xs font-bold text-white disabled:opacity-50"
+                                                    >
+                                                        Cambiar a este plan
+                                                    </button>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -523,6 +596,115 @@ export default function Subscription({
                     </div>
                 </div>
             </main>
+            {target && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4"
+                >
+                    <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-xl">
+                        <h2 className="text-xl font-black">
+                            Cambiar a {target.name}
+                        </h2>
+                        {previewError && (
+                            <p className="text-sm text-red-700">
+                                {previewError}
+                            </p>
+                        )}
+                        {!preview && !previewError && (
+                            <p className="animate-pulse text-sm text-slate-500">
+                                Calculando el cambio…
+                            </p>
+                        )}
+                        {preview && (
+                            <div className="space-y-2 text-sm text-slate-700">
+                                <p>
+                                    De <b>{preview.current_plan}</b> a{' '}
+                                    <b>{preview.new_plan}</b> (
+                                    {money(Math.round(preview.new_monthly))}
+                                    /mes).
+                                </p>
+                                {preview.direction === 'upgrade' && (
+                                    <p>
+                                        La subida se aplica de inmediato.
+                                        {preview.proration > 0
+                                            ? ` Se genera un cargo prorrateado de ${money(preview.proration)} que pagas con su factura.`
+                                            : ' No hay cargo adicional hoy.'}
+                                    </p>
+                                )}
+                                {preview.direction === 'downgrade' && (
+                                    <p>
+                                        La bajada se aplica al final del período
+                                        actual ({formatDate(preview.effective)}
+                                        ).
+                                    </p>
+                                )}
+                                {preview.direction === 'lateral' && (
+                                    <p>El cambio de periodo se aplica ahora.</p>
+                                )}
+                                {preview.conflicts.length > 0 && (
+                                    <div className="rounded-lg bg-red-50 p-3 text-red-800">
+                                        <p className="font-bold">
+                                            No se puede bajar a este plan: tu
+                                            uso actual lo excede.
+                                        </p>
+                                        <ul className="mt-1 list-disc pl-5">
+                                            {preview.conflicts.map(
+                                                (conflict) => (
+                                                    <li key={conflict.label}>
+                                                        {conflict.label}:{' '}
+                                                        {conflict.value} de{' '}
+                                                        {conflict.limit}{' '}
+                                                        permitidos
+                                                    </li>
+                                                ),
+                                            )}
+                                        </ul>
+                                        <p className="mt-1 text-xs">
+                                            No se elimina nada: reduce tu uso y
+                                            vuelve a intentarlo.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                className="rounded-lg border px-4 py-2 text-sm font-semibold"
+                                onClick={() => setTarget(null)}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={
+                                    !preview ||
+                                    changing ||
+                                    (preview.direction === 'downgrade' &&
+                                        preview.conflicts.length > 0)
+                                }
+                                className="rounded-lg bg-[#8a0b0b] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                                onClick={() => {
+                                    setChanging(true);
+                                    router.post(
+                                        '/office/subscription/plan',
+                                        { plan_price_id: target.priceId },
+                                        {
+                                            onFinish: () => {
+                                                setChanging(false);
+                                                setTarget(null);
+                                            },
+                                        },
+                                    );
+                                }}
+                            >
+                                Confirmar cambio
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

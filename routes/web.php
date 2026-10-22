@@ -257,6 +257,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('billing.checkout.show');
     Route::get('billing/plans', [CheckoutController::class, 'plans'])
         ->name('billing.plans.index');
+    Route::get('billing/reactivate', [CheckoutController::class, 'reactivate'])->name('billing.reactivate');
+    Route::post('billing/reactivate', [CheckoutController::class, 'reactivateStore'])->middleware('throttle:10,1')->name('billing.reactivate.store');
     Route::patch('billing/plan', [CheckoutController::class, 'changePlan'])
         ->middleware('throttle:10,1')
         ->name('billing.plan.update');
@@ -882,6 +884,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/users-roles', [WorkManagementController::class, 'usersRoles'])->name('office.usersRoles');
         Route::get('office/roles', [WorkManagementController::class, 'rolesPermissions'])->name('office.roles.index');
         Route::get('office/subscription', [SubscriptionController::class, 'show'])->name('office.subscription');
+        Route::get('office/subscription/plan-preview', [SubscriptionController::class, 'previewPlan'])->middleware('throttle:30,1')->name('office.subscription.preview');
+        Route::post('office/subscription/plan', [SubscriptionController::class, 'changePlan'])->middleware('throttle:10,1')->name('office.subscription.plan');
         Route::get('office/firm-profile', [FirmProfileController::class, 'show'])->name('office.firmProfile');
         Route::patch('office/firm-profile', [FirmProfileController::class, 'update'])->middleware('throttle:20,1')->name('office.firmProfile.update');
         Route::post('office/firm-profile/logo', [FirmProfileController::class, 'uploadLogo'])->middleware('throttle:10,1')->name('office.firmProfile.logo.upload');
