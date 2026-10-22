@@ -79,7 +79,7 @@ class UsageMeterService
         }
         $current = $this->measure($organizationId)[$metric] ?? 0;
         if ($current + $increment > $limit['value']) {
-            throw ValidationException::withMessages([$metric => 'Se alcanzó el límite de '.mb_strtolower(self::LABELS[$metric] ?? $metric).' del plan. Los datos existentes se conservan; amplía el plan para agregar más.']);
+            throw ValidationException::withMessages([$metric => 'Se alcanzó el límite de '.mb_strtolower(self::LABELS[$metric] ?? $metric).' del plan. Los datos existentes se conservan; usa «Cambiar plan» en Plan y suscripción para ampliar el plan.']);
         }
     }
 
