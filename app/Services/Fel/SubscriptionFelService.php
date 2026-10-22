@@ -13,6 +13,8 @@ use RuntimeException;
 
 class SubscriptionFelService
 {
+    private const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
     public function __construct(private FelDocumentService $documents, private AccountingService $accounting, private FiscalConfigurationService $fiscal) {}
 
     public function generate(int $paymentId): void
@@ -64,12 +66,16 @@ class SubscriptionFelService
             $total = $this->accounting->cents($payment->amount);
             $base = intdiv($total * 10000 + intdiv(10000 + $rate, 2), 10000 + $rate);
             $price = intdiv($base, 100).'.'.str_pad((string) ($base % 100), 2, '0', STR_PAD_LEFT);
+            $planName = (string) ($billing['plan_name'] ?? 'Atlantia Finance');
+            $periodLabel = ($billing['billing_period'] ?? 'monthly') === 'annual' ? 'Anual' : 'Mensual';
+            $paidAt = $payment->paid_at->timezone('America/Guatemala');
             $doc = $this->documents->save($organization, $owner, $company, [
                 'issued_on' => $date, 'currency' => 'GTQ', 'document_type' => 'FACT', 'customer_id' => $customerId,
+                'observations' => 'Servicios correspondientes a '.self::MONTHS[$paidAt->month - 1].' de '.$paidAt->year.".\nPlan ".$planName.' · '.$periodLabel."\nForma de pago: tarjeta de crédito o débito (Recurrente).",
                 'receiver_name' => $billing['name'], 'receiver_nit' => $billing['nit'],
                 'receiver_address' => $billing['address'], 'receiver_email' => $billing['email'], 'intent' => 'draft',
-                'lines' => [['item' => 'Suscripción Atlantia Finance', 'description' => 'Plan '.($billing['plan_name'] ?? 'Atlantia Finance')
-                    .' · '.(($billing['billing_period'] ?? 'monthly') === 'annual' ? 'Anual' : 'Mensual').' · pago '.$payment->public_id,
+                'lines' => [['item' => 'Suscripción '.mb_strtolower($periodLabel === 'Anual' ? 'anual' : 'mensual').' Atlantia Finance', 'description' => 'Plan '.$planName
+                    .' · '.$periodLabel.' · pago '.$payment->public_id,
                     'classification' => 'service', 'quantity' => '1', 'price' => $price, 'discount' => '0']],
             ]);
             if ($doc->total_cents !== $total) {

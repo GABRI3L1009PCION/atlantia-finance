@@ -4,10 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Fel;
 
-use BaconQrCode\Renderer\Image\SvgImageBackEnd;
-use BaconQrCode\Renderer\ImageRenderer;
-use BaconQrCode\Renderer\RendererStyle\RendererStyle;
-use BaconQrCode\Writer;
 use Carbon\CarbonImmutable;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -55,7 +51,7 @@ class FelPreviewService
             'paymentMethod' => 'Transferencia bancaria.',
             'certifier' => ['name' => 'Certificador de Ejemplo, S.A.', 'nit' => '0000000-0'],
             'certifiedAt' => $issued->addSeconds(3)->format('d/m/Y · H:i:s'),
-            'qr' => $this->qr('EJEMPLO ILUSTRATIVO - SIN VALIDEZ FISCAL - '.$series.'-'.$number),
+            'qr' => FelPdfService::qrDataUri('EJEMPLO ILUSTRATIVO - SIN VALIDEZ FISCAL - '.$series.'-'.$number),
         ])->render();
 
         $pdf = new Dompdf(new Options(['isRemoteEnabled' => false, 'isPhpEnabled' => false, 'defaultFont' => 'DejaVu Sans']));
@@ -64,13 +60,6 @@ class FelPreviewService
         $pdf->render();
 
         return $pdf->output();
-    }
-
-    private function qr(string $content): string
-    {
-        $svg = (new Writer(new ImageRenderer(new RendererStyle(200, 1), new SvgImageBackEnd)))->writeString($content);
-
-        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     private function inWords(int $cents): string

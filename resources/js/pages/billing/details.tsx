@@ -22,9 +22,10 @@ export default function BillingDetails({
 
             <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-xs leading-5 text-slate-700">
                 <strong className="text-emerald-800">{issuer.name}</strong>, NIT{' '}
-                {issuer.nit}, emitirá la factura de tu plan y enviará el PDF a{' '}
+                {issuer.nit}, emitirá la factura electrónica de tu plan con
+                estos datos y te la enviará en PDF a{' '}
                 <strong className="break-all text-slate-950">{email}</strong>{' '}
-                cuando se confirme el pago.
+                una vez emitida, después de confirmar tu pago.
             </p>
 
             <Form {...details.update.form()} className="flex flex-col gap-3.5">
