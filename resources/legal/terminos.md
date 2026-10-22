@@ -76,13 +76,13 @@ Para efectos de estos Términos:
 
 **4.4 Seguridad.** Atlantia aplica medidas técnicas y organizativas razonables: cifrado en tránsito, control de acceso por roles, bitácoras de actividad y verificación en dos pasos para su personal. Se recomienda que la Firma active la verificación en dos pasos para todos sus Usuarios.
 
-**4.5 Uso no autorizado.** La Firma debe avisar a [correo de seguridad] dentro de las 24 horas siguientes a conocer cualquier acceso no autorizado o pérdida de credenciales. El acceso no autorizado a sistemas o datos puede constituir delito conforme a los artículos 274 A al 274 G del Código Penal.
+**4.5 Uso no autorizado.** La Firma debe avisar a soporte@atlantiasystems.com dentro de las 24 horas siguientes a conocer cualquier acceso no autorizado o pérdida de credenciales. El acceso no autorizado a sistemas o datos puede constituir delito conforme a los artículos 274 A al 274 G del Código Penal.
 
 **4.6 Incidentes de seguridad.** Si Atlantia detecta un incidente que afecte Datos del Cliente, notificará a la Firma sin demora indebida, con la información disponible sobre su naturaleza, alcance y medidas adoptadas.
 
 ## 5. Planes, precios, pagos y facturación
 
-**5.1 Planes.** La Plataforma se ofrece en planes de suscripción (por ejemplo, el plan Multi- oficina) cuyos precios, límites de usuarios, empresas, oficinas y funciones se publican en [página de precios]. Los precios se expresan en quetzales (GTQ) e incluyen el IVA del 12 %, salvo que se indique lo contrario.
+**5.1 Planes.** La Plataforma se ofrece en planes de suscripción (por ejemplo, el plan Multi- oficina) cuyos precios, límites de usuarios, empresas, oficinas y funciones se publican en https://finance.atlantiasystems.com. Los precios se expresan en quetzales (GTQ) e incluyen el IVA del 12 %, salvo que se indique lo contrario.
 
 **5.2 Cobro.** Las suscripciones se cobran por adelantado, en forma mensual o anual, mediante la pasarela de pagos Recurrente u otro procesador que Atlantia designe. Atlantia no almacena los datos completos de tarjetas; estos son tratados por el procesador conforme a sus propios términos y estándares de seguridad.
 
@@ -162,9 +162,9 @@ La Firma se obliga a:
 
 **9.5 Acceso del personal de Atlantia.** El personal de Atlantia accede a Datos del Cliente solo por medio del Centro de Control, con verificación en dos pasos, cuando sea necesario para soporte solicitado, seguridad o requerimiento legal. Todo acceso queda registrado en bitácora.
 
-**9.6 Subencargados.** Atlantia usa proveedores de infraestructura en la nube, procesamiento de pagos (Recurrente), certificación FEL, correo y servicios de IA, publicados en [página de proveedores]. Los datos pueden alojarse fuera de Guatemala; Atlantia exige a esos proveedores obligaciones de seguridad y confidencialidad equivalentes.
+**9.6 Subencargados.** Atlantia usa proveedores de infraestructura en la nube, procesamiento de pagos (Recurrente, mediante API con token y comunicación cifrada), envío de correos (Resend) y dominio web (Cloudflare, que no almacena datos de los clientes). La infraestructura y los datos se alojan en Amazon Web Services (AWS). El asistente de inteligencia artificial es propio de Atlantia, funciona de forma local y no envía datos a servicios de terceros. Atlantia exige a esos proveedores obligaciones de seguridad y confidencialidad equivalentes.
 
-**9.7 Derechos de los titulares.** Las personas cuyos datos se tratan pueden solicitar acceso, rectificación, actualización o eliminación escribiendo a [correo de privacidad]. Si la solicitud se refiere a Datos del Cliente, Atlantia la trasladará a la Firma responsable.
+**9.7 Derechos de los titulares.** Las personas cuyos datos se tratan pueden solicitar acceso, rectificación, actualización o eliminación escribiendo a soporte@atlantiasystems.com. Si la solicitud se refiere a Datos del Cliente, Atlantia la trasladará a la Firma responsable.
 
 **9.8 Confidencialidad recíproca.** Cada parte guardará reserva sobre la información confidencial de la otra durante la relación y por 5 años después de terminada, salvo información pública, ya conocida legítimamente o que deba revelarse por mandato legal.
 
@@ -220,7 +220,7 @@ La Firma se obliga a:
 
 **14.2 Compensación.** Si la disponibilidad mensual cae por debajo del objetivo por causas imputables a Atlantia, la Firma tendrá derecho a un crédito sobre su siguiente pago: 10 % si fue menor a 99.5 % y 25 % si fue menor a 98 %. Debe solicitarlo dentro de los 30 días siguientes.
 
-**14.3 Soporte.** El soporte se presta por [canales de soporte] en horario de lunes a viernes, de 8:00 a 17:00, hora de Guatemala, en idioma español, con los tiempos de respuesta del plan contratado.
+**14.3 Soporte.** El soporte se presta por correo electrónico (soporte@atlantiasystems.com) y WhatsApp (+502 5535 5469) en horario de lunes a viernes, de 8:00 a 17:00, hora de Guatemala, en idioma español, con los tiempos de respuesta del plan contratado.
 
 **14.4 Respaldos.** Atlantia realiza copias de seguridad automáticas de forma diaria y las conserva por 30 días, para recuperación ante desastres. Estos respaldos no sustituyen la obligación de la Firma de exportar y conservar su propia información.
 
@@ -258,7 +258,7 @@ La Firma se obliga a:
 
 **16.4 Cancelación sencilla.** El consumidor puede cancelar la suscripción en cualquier momento, por el mismo medio electrónico por el que contrató, sin penalización. La cancelación surte efecto al final del período pagado.
 
-**16.5 Reclamos.** Los reclamos se reciben en [correo de reclamos] y se responden dentro de 10 días hábiles. El consumidor conserva en todo caso su derecho a presentar queja ante la DIACO.
+**16.5 Reclamos.** Los reclamos se reciben en soporte@atlantiasystems.com y se responden dentro de 10 días hábiles. El consumidor conserva en todo caso su derecho a presentar queja ante la DIACO.
 
 ## 17. Garantías, limitación de responsabilidad e indemnidad
 
@@ -318,14 +318,14 @@ Atlantia puede modificar estos Términos para reflejar cambios legales, del serv
 
 **21.7 Contacto.** Si tienes preguntas sobre estos Términos, puedes comunicarte con nosotros:
 
-- Soporte general: [correo, teléfono o WhatsApp]
+- Soporte general: soporte@atlantiasystems.com · WhatsApp +502 5535 5469
 
-- Seguridad e incidentes: [correo de seguridad]
+- Seguridad e incidentes: soporte@atlantiasystems.com
 
-- Privacidad y datos personales: [correo de privacidad]
+- Privacidad y datos personales: soporte@atlantiasystems.com
 
-- Reclamos: [correo de reclamos]
+- Reclamos: soporte@atlantiasystems.com
 
 - Domicilio para notificaciones: Colonia La Repegua, Santo Tomás de Castilla, Puerto Barrios, Izabal, Guatemala
 
-*Versión 1.0, vigente desde [fecha de publicación].*
+*Versión 1.0, vigente desde 22 de octubre de 2026.*

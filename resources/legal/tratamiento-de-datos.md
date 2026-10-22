@@ -20,7 +20,7 @@ El personal accede a Datos del Cliente solo por el Centro de Control, con verifi
 
 ## 5. Subencargados
 
-Atlantia usa proveedores de infraestructura, pagos, certificación FEL, correo y servicios de IA, publicados en [página de proveedores]. Se les exigen obligaciones de seguridad y confidencialidad equivalentes. Atlantia avisará a la Firma de cambios relevantes de subencargados con [plazo de aviso].
+Atlantia usa proveedores de infraestructura (AWS), pagos (Recurrente), correo (Resend) y dominio web (Cloudflare, que no almacena datos de clientes). El asistente de inteligencia artificial es propio, funciona de forma local y no envía datos a terceros. Se exige a los proveedores obligaciones de seguridad y confidencialidad equivalentes. Atlantia avisará a la Firma de cambios relevantes de subencargados con antelación razonable.
 
 ## 6. Medidas de seguridad
 
@@ -28,11 +28,11 @@ Cifrado en tránsito, separación lógica de datos por Firma, Oficina y Empresa 
 
 ## 7. Derechos de los titulares
 
-Las solicitudes de acceso, rectificación, actualización o eliminación que reciba Atlantia sobre Datos del Cliente se trasladarán a la Firma, que es la responsable de atenderlas. Contacto: [correo de privacidad].
+Las solicitudes de acceso, rectificación, actualización o eliminación que reciba Atlantia sobre Datos del Cliente se trasladarán a la Firma, que es la responsable de atenderlas. Contacto: soporte@atlantiasystems.com.
 
 ## 8. Incidentes de seguridad
 
-Si Atlantia detecta un incidente que afecte Datos del Cliente, notificará a la Firma sin demora indebida, con la información disponible sobre su naturaleza, alcance y medidas adoptadas. La Firma debe avisar a [correo de seguridad] dentro de las 24 horas siguientes a conocer cualquier acceso no autorizado.
+Si Atlantia detecta un incidente que afecte Datos del Cliente, notificará a la Firma sin demora indebida, con la información disponible sobre su naturaleza, alcance y medidas adoptadas. La Firma debe avisar a soporte@atlantiasystems.com dentro de las 24 horas siguientes a conocer cualquier acceso no autorizado.
 
 ## 9. Devolución y eliminación
 
@@ -42,4 +42,4 @@ Terminado el contrato, la Firma tiene 90 días de acceso en modo de solo lectura
 
 Si una autoridad competente requiere información de un cliente mediante orden legalmente emitida, Atlantia la entregará en lo estrictamente requerido y, salvo prohibición legal, avisará a la Firma.
 
-*Versión 1.0, vigente desde [fecha de publicación].*
+*Versión 1.0, vigente desde 22 de octubre de 2026.*

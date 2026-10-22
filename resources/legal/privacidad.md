@@ -4,7 +4,7 @@ Esta Política de Privacidad explica qué datos personales trata Atlantia Financ
 
 ## 1. Responsable
 
-Gabriel Antonio Picon Escalante, comerciante individual propietario de la empresa mercantil Atlantia Finance, con NIT 97655988 y domicilio en Colonia La Repegua, Santo Tomás de Castilla, Puerto Barrios, Izabal, Guatemala. Contacto de privacidad: [correo de privacidad].
+Gabriel Antonio Picon Escalante, comerciante individual propietario de la empresa mercantil Atlantia Finance, con NIT 97655988 y domicilio en Colonia La Repegua, Santo Tomás de Castilla, Puerto Barrios, Izabal, Guatemala. Contacto de privacidad: soporte@atlantiasystems.com.
 
 ## 2. Qué datos tratamos
 
@@ -28,14 +28,14 @@ Atlantia no vende, alquila, cede ni comercializa datos personales ni Datos del C
 
 ## 4. Con quién se comparten
 
-Solo con proveedores necesarios para operar el servicio (infraestructura en la nube, pagos, certificación FEL, correo y servicios de IA), listados en [página de proveedores], y con autoridades cuando una orden legal lo exija. Los datos pueden alojarse fuera de Guatemala; se exige a los proveedores obligaciones de seguridad y confidencialidad equivalentes.
+Solo con proveedores necesarios para operar el servicio (infraestructura en la nube en AWS, pagos con Recurrente, envío de correos con Resend y dominio web con Cloudflare, que no almacena datos de clientes; el asistente de inteligencia artificial es propio y local), y con autoridades cuando una orden legal lo exija. Los datos pueden alojarse fuera de Guatemala; se exige a los proveedores obligaciones de seguridad y confidencialidad equivalentes.
 
 ## 5. Cuánto tiempo los conservamos
 
 - Datos de la cuenta y del cliente: mientras la suscripción esté vigente y durante los 90 días de exportación posteriores a la terminación.
 - Copias de seguridad: 30 días.
 - Interacciones con Luzma: hasta 90 días.
-- Facturas y registros que la ley exija a Atlantia: por los plazos legales aplicables [plazo a confirmar con el abogado].
+- Facturas y registros que la ley exija a Atlantia: por los plazos legales aplicables.
 
 ## 6. Seguridad
 
@@ -43,10 +43,10 @@ Cifrado en tránsito, control de acceso por roles, separación de datos por Firm
 
 ## 7. Tus derechos
 
-Puedes solicitar acceso, rectificación, actualización o eliminación de tus datos escribiendo a [correo de privacidad]. Si la solicitud se refiere a Datos del Cliente, se trasladará a la Firma responsable. Responderemos en [plazo de respuesta].
+Puedes solicitar acceso, rectificación, actualización o eliminación de tus datos escribiendo a soporte@atlantiasystems.com. Si la solicitud se refiere a Datos del Cliente, se trasladará a la Firma responsable. Responderemos sin demora indebida y dentro de los plazos que establezca la ley.
 
 ## 8. Cambios a esta política
 
 Los cambios sustanciales se avisarán por correo y dentro de la Plataforma con al menos 30 días de anticipación. Cada versión queda fechada y disponible para consulta.
 
-*Versión 1.0, vigente desde [fecha de publicación].*
+*Versión 1.0, vigente desde 22 de octubre de 2026.*
