@@ -6,6 +6,7 @@ use App\Actions\Accounting\RequestAccountingPeriodReopening;
 use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\User;
+use App\Services\Platform\EntitlementResolverService;
 use App\Services\WorkManagement\CompanyAssignmentService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use Database\Seeders\PlanCatalogSeeder;
@@ -526,4 +527,23 @@ test('guest and unpaid organizations cannot use accounting', function () {
     $this->get(route('accounting.index'))->assertRedirect(route('login'));
     $f['org']->subscriptions()->update(['status' => 'incomplete']);
     $this->actingAs($f['owner'])->get(route('accounting.index'))->assertRedirect(route('billing.checkout.show'));
+});
+
+test('un respaldo que supera el almacenamiento del plan se rechaza sin guardarse', function () {
+    Storage::fake('local');
+    $f = accountingFixture();
+    $data = [...accountingDraft($f), 'kind' => 'adjustment', 'reference' => 'AJ-2026-002'];
+    $this->actingAs($f['owner'])->post(route('accounting.entry', $f['uuid']), $data)->assertRedirect();
+    foreach (DB::table('plan_versions')->get() as $version) {
+        $limits = json_decode((string) $version->limits, true);
+        $limits['storage_bytes']['value'] = 1000;
+        DB::table('plan_versions')->where('id', $version->id)->update(['limits' => json_encode($limits)]);
+    }
+    app(EntitlementResolverService::class)->forget((int) DB::table('organizations')->value('id'));
+
+    $this->post(route('accounting.entryDocumentStore', [$f['uuid'], $data['request_id']]), [
+        'document' => UploadedFile::fake()->create('respaldo.pdf', 120, 'application/pdf'),
+    ])->assertSessionHasErrors('document');
+
+    expect(DB::table('journal_entry_documents')->count())->toBe(0);
 });

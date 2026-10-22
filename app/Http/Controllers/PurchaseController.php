@@ -13,6 +13,7 @@ use App\Services\Fiscal\VatBookService;
 use App\Services\Fiscal\WithholdingService;
 use App\Services\FiscalConfigurationService;
 use App\Services\Payables\PayableService;
+use App\Services\Platform\UsageMeterService;
 use App\Services\PurchaseCreditNoteService;
 use App\Services\PurchaseDocumentDraftService;
 use App\Services\ReportExportService;
@@ -616,6 +617,7 @@ class PurchaseController extends Controller
         $row = $this->document($record->id, $document);
         $this->ensure($row->status === 'draft', 'Los respaldos solo se modifican mientras el documento es borrador.');
         $file = $data['file'];
+        app(UsageMeterService::class)->assertCanAdd((int) $org->id, 'storage_bytes', (int) $file->getSize(), 'file');
         $uuid = (string) Str::uuid();
         $extension = strtolower($file->getClientOriginalExtension());
         $path = "purchases/{$record->public_id}/{$row->public_id}/{$uuid}.{$extension}";

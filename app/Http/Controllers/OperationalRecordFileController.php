@@ -7,6 +7,7 @@ use App\Models\OperationalRecordFile;
 use App\Models\Organization;
 use App\Services\AccountingService;
 use App\Services\Operations\OperationalWorkflowRegistry;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,6 +30,7 @@ class OperationalRecordFileController extends Controller
         abort_if(in_array($operationalRecord->status, ['closed', 'cancelled', 'archived', 'published', 'posted'], true), 422, 'El registro ya no admite archivos.');
         $data = $request->validate(['file' => ['required', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,webp,xlsx,xls,csv,doc,docx,txt,xml']]);
         $uploaded = $data['file'];
+        app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $uploaded->getSize(), 'file');
         $uuid = (string) Str::uuid();
         $extension = strtolower($uploaded->getClientOriginalExtension());
         $path = "operations/{$companyRecord->public_id}/{$module}/{$operationalRecord->public_id}/{$uuid}.{$extension}";
