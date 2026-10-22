@@ -117,3 +117,22 @@ test('un fallo pasajero del proveedor sugiere reintentar', function () {
 
     $this->actingAs($user)->postJson(route('billing.checkout.store'))->assertStatus(503)->assertJsonPath('code', 'checkout_creation_failed');
 });
+
+test('el comando de simulación activa la suscripción como lo haría el aviso de Recurrente', function () {
+    Http::fake(['https://app.recurrente.com/api/checkouts' => Http::response(['id' => 'ch_sim', 'checkout_url' => 'https://app.recurrente.com/checkout-session/ch_sim'], 201)]);
+    config()->set('services.recurrente.webhook_secret', 'whsec_'.base64_encode('clave-de-prueba'));
+    [$user, $organization, $subscription] = firstPaymentFixture();
+    $this->actingAs($user)->postJson(route('billing.checkout.store'))->assertCreated();
+
+    $this->artisan('billing:simulate-webhook')->assertSuccessful();
+
+    expect($subscription->fresh()->status)->toBe('active')
+        ->and($organization->fresh()->status)->toBe('active')
+        ->and(Payment::query()->firstOrFail()->status)->toBe('succeeded');
+});
+
+test('el comando de simulación avisa si no hay un pago pendiente', function () {
+    config()->set('services.recurrente.webhook_secret', 'whsec_'.base64_encode('clave-de-prueba'));
+
+    $this->artisan('billing:simulate-webhook')->assertFailed();
+});
