@@ -1,4 +1,4 @@
-*[BORRADOR sujeto a revisión del abogado antes de publicarse como definitivo.]*
+_[BORRADOR sujeto a revisión del abogado antes de publicarse como definitivo.]_
 
 Esta Política de Privacidad explica qué datos personales trata Atlantia Finance, para qué los usa y cómo puedes ejercer tus derechos. Forma parte de los Términos y Condiciones.
 
@@ -49,4 +49,4 @@ Puedes solicitar acceso, rectificación, actualización o eliminación de tus da
 
 Los cambios sustanciales se avisarán por correo y dentro de la Plataforma con al menos 30 días de anticipación. Cada versión queda fechada y disponible para consulta.
 
-*Versión 1.0, vigente desde 22 de octubre de 2026.*
+_Versión 1.0, vigente desde 22 de octubre de 2026._

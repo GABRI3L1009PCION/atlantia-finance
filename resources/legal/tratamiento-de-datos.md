@@ -1,4 +1,4 @@
-*[BORRADOR sujeto a revisión del abogado antes de publicarse como definitivo.]*
+_[BORRADOR sujeto a revisión del abogado antes de publicarse como definitivo.]_
 
 Este documento regula cómo Atlantia Finance trata los datos personales que la Firma y sus Empresas Cliente cargan en la Plataforma. Complementa los Términos y Condiciones (cláusula 9) y la Política de Privacidad.
 
@@ -42,4 +42,4 @@ Terminado el contrato, la Firma tiene 90 días de acceso en modo de solo lectura
 
 Si una autoridad competente requiere información de un cliente mediante orden legalmente emitida, Atlantia la entregará en lo estrictamente requerido y, salvo prohibición legal, avisará a la Firma.
 
-*Versión 1.0, vigente desde 22 de octubre de 2026.*
+_Versión 1.0, vigente desde 22 de octubre de 2026._
