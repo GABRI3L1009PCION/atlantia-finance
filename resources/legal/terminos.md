@@ -86,7 +86,7 @@ Para efectos de estos Términos:
 
 **5.2 Cobro.** Las suscripciones se cobran por adelantado, en forma mensual o anual, mediante la pasarela de pagos Recurrente u otro procesador que Atlantia designe. Atlantia no almacena los datos completos de tarjetas; estos son tratados por el procesador conforme a sus propios términos y estándares de seguridad.
 
-**5.3 Renovación automática.** La suscripción se renueva automáticamente por períodos iguales, salvo que la Firma la cancele antes de la fecha de renovación desde la configuración de su cuenta. Atlantia enviará un recordatorio al menos 7 días antes de cada renovación anual.
+**5.3 Pago de cada período.** Cada pago es un cargo único y Atlantia no realiza cargos automáticos a la tarjeta de la Firma. Antes del vencimiento de cada período, Atlantia enviará por correo electrónico una factura con un enlace de pago para renovarlo. Si el pago no se realiza, la suscripción puede quedar suspendida al vencer el período, conforme a estos Términos. La Firma puede dejar de renovar en cualquier momento simplemente no pagando la siguiente factura, o solicitar la cancelación escribiendo a soporte@atlantiasystems.com.
 
 **5.4 Facturación.** Por cada pago, Atlantia emitirá una factura electrónica (DTE) a nombre y NIT indicados por la Firma, conforme al régimen FEL de la Superintendencia de Administración Tributaria (SAT). Es responsabilidad de la Firma mantener correctos sus datos de facturación.
 
@@ -274,7 +274,7 @@ La Firma se obliga a:
 
 ## 18. Plazo, suspensión, terminación y devolución de datos
 
-**18.1 Plazo.** El contrato inicia con la aceptación y dura el período de suscripción contratado, con renovaciones automáticas según la cláusula 5.3.
+**18.1 Plazo.** El contrato inicia con la aceptación y dura el período de suscripción contratado y puede renovarse con el pago de cada nuevo período, según la cláusula 5.3.
 
 **18.2 Terminación por la Firma.** La Firma puede cancelar en cualquier momento; la cancelación surte efecto al final del período pagado.
 
