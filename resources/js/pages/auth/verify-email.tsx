@@ -81,7 +81,7 @@ export default function VerifyEmail({ status, email, selectedPlan }: Props) {
 
                         <TextLink
                             href={logout()}
-                            className="mx-auto block text-sm"
+                            className="mx-auto block text-sm font-semibold text-[#640000]"
                         >
                             Cerrar sesión
                         </TextLink>

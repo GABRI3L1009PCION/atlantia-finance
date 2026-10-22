@@ -245,7 +245,11 @@ export default function Register({
 
                         <div className="text-center text-sm text-muted-foreground">
                             ¿Ya tienes una cuenta?{' '}
-                            <TextLink href={login()} tabIndex={7}>
+                            <TextLink
+                                href={login()}
+                                tabIndex={7}
+                                className="font-semibold text-[#640000]"
+                            >
                                 Iniciar sesión
                             </TextLink>
                         </div>
