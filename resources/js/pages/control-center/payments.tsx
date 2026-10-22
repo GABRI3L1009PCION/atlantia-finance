@@ -30,6 +30,24 @@ type Payment = {
         attempted_at: string;
     }[];
 };
+type FelRequest = {
+    payment_id: number;
+    organization_id: number;
+    organization: string;
+    amount: number;
+    currency: string;
+    status: string;
+    error_code: string | null;
+    created: string;
+};
+const FEL_STATUS: Record<string, string> = {
+    pending: 'Pendiente',
+    needs_configuration: 'Requiere configuración',
+    failed: 'Con error',
+};
+const FEL_ERROR: Record<string, string> = {
+    issuer_not_configured: 'El emisor FEL de la plataforma no está configurado',
+};
 type Event = {
     provider: string;
     provider_event_id: string;
@@ -43,8 +61,10 @@ type Event = {
 export default function Payments({
     payments,
     webhook_events,
+    fel_requests,
     filters,
 }: {
+    fel_requests: FelRequest[];
     payments: Payment[];
     webhook_events: Event[];
     filters: { status?: string; provider?: string };
@@ -153,6 +173,61 @@ export default function Payments({
                                 </td>
                                 <td className="px-2 py-2 whitespace-nowrap">
                                     {date(payment.paid_at, true)}
+                                </td>
+                            </tr>
+                        ))}
+                    </Table>
+                </Panel>
+                <Panel title="Facturas FEL de suscripción pendientes o con error">
+                    <Table
+                        headers={[
+                            'Pago',
+                            'Firma',
+                            'Monto',
+                            'Estado',
+                            'Motivo',
+                            'Desde',
+                        ]}
+                        empty={
+                            fel_requests.length === 0 &&
+                            'Todas las facturas de suscripción están emitidas.'
+                        }
+                    >
+                        {fel_requests.map((request) => (
+                            <tr key={request.payment_id}>
+                                <td className="px-2 py-2 font-mono">
+                                    #{request.payment_id}
+                                </td>
+                                <td className="px-2 py-2">
+                                    <Link
+                                        href={`/control-center/organizations/${request.organization_id}`}
+                                    >
+                                        {request.organization}
+                                    </Link>
+                                </td>
+                                <td className="px-2 py-2">
+                                    {money(request.amount, request.currency)}
+                                </td>
+                                <td className="px-2 py-2">
+                                    <Pill
+                                        tone={
+                                            request.status === 'pending'
+                                                ? 'amber'
+                                                : 'red'
+                                        }
+                                    >
+                                        {FEL_STATUS[request.status] ??
+                                            request.status}
+                                    </Pill>
+                                </td>
+                                <td className="px-2 py-2 text-[#f87171]">
+                                    {request.error_code
+                                        ? (FEL_ERROR[request.error_code] ??
+                                          request.error_code)
+                                        : ''}
+                                </td>
+                                <td className="px-2 py-2 whitespace-nowrap">
+                                    {date(request.created, true)}
                                 </td>
                             </tr>
                         ))}

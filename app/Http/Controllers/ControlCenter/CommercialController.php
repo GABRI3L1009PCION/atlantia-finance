@@ -209,6 +209,11 @@ class CommercialController extends ControlCenterController
                     'amount' => (float) $row->amount, 'currency' => (string) $row->currency_code, 'status' => (string) $row->status, 'attempt' => max(1, (int) $row->attempt_count),
                     'created' => Carbon::parse($row->created_at)->toIso8601String(), 'paid_at' => $row->paid_at === null ? null : Carbon::parse($row->paid_at)->toIso8601String(),
                     'attempts' => DB::table('payment_attempts')->where('payment_id', $row->id)->orderBy('id')->get(['status', 'failure_code', 'failure_message', 'attempted_at'])->all()])->all()),
+            // Subscription invoices (FEL) that did not come out on their own, for support to attend.
+            'fel_requests' => array_values(DB::table('fel_subscription_requests as r')->join('payments', 'payments.id', '=', 'r.payment_id')->join('organizations', 'organizations.id', '=', 'payments.organization_id')
+                ->where('r.status', '!=', 'generated')->orderBy('r.created_at')->limit(100)->get(['r.payment_id', 'r.status', 'r.error_code', 'r.created_at', 'payments.amount', 'payments.currency_code', 'organizations.id as organization_id', 'organizations.name as organization'])
+                ->map(fn (stdClass $row): array => ['payment_id' => (int) $row->payment_id, 'organization_id' => (int) $row->organization_id, 'organization' => (string) $row->organization, 'amount' => (float) $row->amount,
+                    'currency' => (string) $row->currency_code, 'status' => (string) $row->status, 'error_code' => $row->error_code, 'created' => Carbon::parse($row->created_at)->toIso8601String()])->all()),
             'webhook_events' => DB::table('webhook_events')->orderByDesc('id')->limit(50)->get(['provider', 'provider_event_id', 'event_type', 'status', 'received_at', 'processed_at', 'error_message'])->all(),
         ]);
     }
