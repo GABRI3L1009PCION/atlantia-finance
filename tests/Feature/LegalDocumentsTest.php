@@ -29,11 +29,21 @@ test('el seeder carga los tres documentos y las páginas públicas los muestran 
 
     $this->get('/terminos')->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('legal/show')
-        ->where('document.label', 'Términos y Condiciones')
+        ->where('document.label', 'Términos y Condiciones')->has('sections', 3)
         ->where('document.version', 1)
         ->where('document.body', fn ($body) => str_contains((string) $body, 'Gabriel Antonio Picon Escalante') && str_contains((string) $body, '## 21. Disposiciones generales y contacto')));
-    $this->get('/privacidad')->assertOk()->assertInertia(fn (Assert $page) => $page->component('legal/show')->where('document.slug', 'privacy'));
+    $this->get('/privacidad')->assertOk()->assertInertia(fn (Assert $page) => $page->component('legal/show')->where('document.slug', 'privacy')->has('sections', 1));
     $this->get('/tratamiento-de-datos')->assertOk()->assertInertia(fn (Assert $page) => $page->component('legal/show')->where('document.slug', 'data'));
+});
+
+test('los documentos se guardan con saltos de línea normales aunque el texto venga de Windows', function () {
+    $staff = ccOwner();
+    $this->actingAs($staff)->post('/control-center/legal/terms', ['title' => 'Términos', 'body' => "## 1. Título\r\n\r\nPrimer párrafo de prueba con suficiente largo para pasar.\r\n\r\n- Una viñeta"])->assertRedirect();
+
+    $body = (string) DB::table('legal_documents')->where('slug', 'terms')->where('status', 'active')->value('body');
+    expect($body)->not->toContain("\r")->and(DB::table('legal_documents')->where('slug', 'terms')->where('status', 'active')->value('version'))->toBe(2);
+    expect(file_get_contents(resource_path('legal/terminos.md')))->toBeString();
+    expect(DB::table('legal_documents')->where('slug', 'privacy')->value('body'))->not->toContain("\r");
 });
 
 test('correr el seeder otra vez no pisa una versión editada', function () {

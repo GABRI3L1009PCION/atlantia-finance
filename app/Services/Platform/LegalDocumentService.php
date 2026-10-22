@@ -82,6 +82,7 @@ class LegalDocumentService
     /** Publishes a new version of a document; the previous one is kept as superseded. */
     public function publish(User $actor, string $slug, string $title, string $body): int
     {
+        $body = trim(str_replace(["\r\n", "\r"], "\n", $body));
         if (! isset(self::DOCUMENTS[$slug])) {
             throw ValidationException::withMessages(['slug' => 'Documento desconocido.']);
         }
@@ -127,6 +128,6 @@ class LegalDocumentService
     {
         $file = resource_path('legal/'.(self::DOCUMENTS[$slug]['file'] ?? abort(404)));
 
-        return trim((string) file_get_contents($file));
+        return trim(str_replace(["\r\n", "\r"], "\n", (string) file_get_contents($file)));
     }
 }

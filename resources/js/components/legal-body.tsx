@@ -31,7 +31,10 @@ function inline(text: string): ReactNode[] {
 }
 
 export function LegalBody({ body }: { body: string }) {
-    const blocks = body.split(/\n{2,}/).map((block) => block.trim());
+    const blocks = body
+        .replace(/\r\n?/g, '\n')
+        .split(/\n{2,}/)
+        .map((block) => block.trim());
     const nodes: ReactNode[] = [];
     let bullets: string[] = [];
 

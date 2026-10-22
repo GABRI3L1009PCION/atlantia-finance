@@ -20,7 +20,11 @@ class LegalController extends Controller
     {
         $document = $this->legal->current($slug) ?? abort(404);
 
-        return Inertia::render('legal/show', ['document' => $this->present($document), 'links' => $this->links(), 'signedIn' => auth()->check()]);
+        // The terms page carries the privacy policy and the personal data processing document too: one link covers all three.
+        $sections = $slug === 'terms' ? array_values(array_filter(array_map(fn (string $key): ?array => $this->legal->current($key), array_keys(LegalDocumentService::DOCUMENTS)))) : [$document];
+
+        return Inertia::render('legal/show', ['document' => $this->present($document), 'sections' => array_map(fn (array $section): array => $this->present($section), $sections),
+            'links' => $this->links(), 'signedIn' => auth()->check()]);
     }
 
     public function accept(Request $request): Response|RedirectResponse

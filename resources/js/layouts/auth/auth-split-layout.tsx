@@ -59,25 +59,25 @@ export default function AuthSplitLayout({
                 </div>
             </aside>
 
-            <main className="flex min-h-svh overflow-y-auto px-5 py-8 sm:px-10 lg:h-svh lg:min-h-0 lg:px-16 lg:py-4">
+            <main className="flex min-h-svh overflow-y-auto px-5 py-4 sm:px-10 lg:h-svh lg:min-h-0 lg:px-16 lg:py-4">
                 <div className="m-auto w-full max-w-md">
                     <Link
                         href={home()}
-                        className="mb-9 flex justify-center lg:hidden"
+                        className="mb-3 flex justify-center lg:hidden"
                     >
                         <img
                             src="/images/atlantia-finance-logo.png"
                             alt="Atlantia Finance"
-                            className="h-auto w-64"
+                            className="h-auto w-40"
                         />
                     </Link>
 
-                    <div className="mb-4">
+                    <div className="mb-3">
                         <div className="mb-2.5 inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700 [@media(max-height:900px)]:hidden">
                             <CheckCircle2 className="size-3.5" /> Acceso
                             protegido
                         </div>
-                        <h1 className="text-3xl font-bold tracking-tight text-slate-950">
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-950">
                             {title}
                         </h1>
                         <p className="mt-1.5 text-sm leading-5 text-slate-600">
@@ -85,7 +85,7 @@ export default function AuthSplitLayout({
                         </p>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-950/5 sm:p-6">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-950/5 sm:p-5">
                         {children}
                     </div>
 
