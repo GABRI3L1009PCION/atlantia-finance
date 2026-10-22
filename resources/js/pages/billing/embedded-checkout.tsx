@@ -274,26 +274,23 @@ export default function EmbeddedCheckout({
                 <link rel="dns-prefetch" href="https://app.recurrente.com" />
             </Head>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start justify-between gap-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <p className="text-[10px] font-extrabold tracking-widest text-[#640000] uppercase">
                             Resumen de compra
                         </p>
-                        <p className="mt-1 text-lg font-bold text-slate-950">
-                            Plan {plan.name}
+                        <p className="text-base font-bold text-slate-950">
+                            Plan {plan.name} ·{' '}
+                            {plan.billingPeriod === 'annual'
+                                ? 'Anual'
+                                : 'Mensual'}
                         </p>
                         <p className="truncate text-xs text-slate-500">
                             {organization.name}
                         </p>
-                        <p className="text-xs text-slate-500">
-                            Facturación{' '}
-                            {plan.billingPeriod === 'annual'
-                                ? 'anual'
-                                : 'mensual'}
-                        </p>
                         {invoice && (
-                            <p className="mt-0.5 text-xs text-slate-500">
+                            <p className="truncate text-xs text-slate-500">
                                 Factura {invoice.number}
                                 {invoice.periodStart &&
                                     invoice.periodEnd &&
@@ -301,13 +298,18 @@ export default function EmbeddedCheckout({
                             </p>
                         )}
                     </div>
-                    <strong className="shrink-0 text-xl text-[#640000]">
-                        {currency.format(Number(plan.amount))}
-                    </strong>
+                    <div className="shrink-0 text-right">
+                        <p className="text-[10px] font-medium text-slate-500 uppercase">
+                            Total a pagar
+                        </p>
+                        <strong className="text-2xl text-[#640000]">
+                            {currency.format(Number(plan.amount))}
+                        </strong>
+                    </div>
                 </div>
                 {breakdown &&
                     (breakdown.discount > 0 || breakdown.credit > 0) && (
-                        <dl className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-xs text-slate-600">
+                        <dl className="mt-2 space-y-0.5 border-t border-slate-200 pt-2 text-xs text-slate-600">
                             <div className="flex justify-between">
                                 <dt>Precio de lista</dt>
                                 <dd>{currency.format(breakdown.subtotal)}</dd>
@@ -330,16 +332,9 @@ export default function EmbeddedCheckout({
                             )}
                         </dl>
                     )}
-                <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
-                    <span className="text-sm font-medium">Total a pagar</span>
-                    <strong className="text-2xl text-[#640000]">
-                        {currency.format(Number(plan.amount))}
-                    </strong>
-                </div>
             </div>
-
             {planChanged && (
-                <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm font-medium text-emerald-800">
+                <p className="mt-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-center text-sm font-medium text-emerald-800">
                     Plan actualizado. Revisa el nuevo resumen antes de
                     continuar.
                 </p>
@@ -386,52 +381,51 @@ export default function EmbeddedCheckout({
                 )}
 
                 {status === 'failed' && (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
                         <div className="flex items-start gap-3">
-                            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
+                            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-red-50 text-red-700">
                                 <AlertCircle className="size-5" />
                             </span>
                             <div>
-                                <h3 className="text-base font-bold text-slate-950">
+                                <h3 className="text-base leading-5 font-bold text-slate-950">
                                     {errorTitle}
                                 </h3>
-                                <p className="mt-1 text-sm leading-6 text-slate-600">
+                                <p className="mt-1 text-sm leading-5 text-slate-600">
                                     {error}
                                 </p>
                             </div>
                         </div>
 
-                        <ul className="mt-4 space-y-1.5 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-                            <li className="flex items-center gap-2">
-                                <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-                                No se realizó ningún cobro.
-                            </li>
-                            <li className="flex items-center gap-2">
-                                <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-                                Tu plan y tus datos de factura quedan guardados.
-                            </li>
-                        </ul>
+                        <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                            <span className="flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                                No se realizó ningún cobro
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                                Tus datos quedan guardados
+                            </span>
+                        </p>
 
-                        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                        <div className="mt-3 flex flex-wrap items-center gap-2.5">
                             <button
                                 type="button"
                                 onClick={retry}
-                                className="inline-flex items-center gap-2 rounded-xl bg-[#640000] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#420001]"
+                                className="inline-flex items-center gap-2 rounded-xl bg-[#640000] px-4 py-2 text-sm font-bold text-white hover:bg-[#420001]"
                             >
                                 <RefreshCw className="size-4" /> Reintentar
                             </button>
                             <Link
                                 href="/billing/plans"
-                                className="inline-flex rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-[#640000] hover:bg-slate-50"
+                                className="inline-flex rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-[#640000] hover:bg-slate-50"
                             >
                                 Elegir otro plan
                             </Link>
                         </div>
 
                         {reference && (
-                            <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-                                Si el problema continúa, escríbenos e indica
-                                esta referencia:{' '}
+                            <p className="mt-3 text-[11px] leading-4 text-slate-500">
+                                Si continúa, escríbenos con esta referencia:{' '}
                                 <span className="font-mono break-all text-slate-700 select-all">
                                     {reference}
                                 </span>
@@ -439,7 +433,6 @@ export default function EmbeddedCheckout({
                         )}
                     </div>
                 )}
-
                 {(status === 'processing' || status === 'paid') && (
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-6 text-center">
                         <CheckCircle2 className="mx-auto size-12 text-emerald-600" />
@@ -486,33 +479,32 @@ export default function EmbeddedCheckout({
                         status === 'paid' ||
                         !paymentProviderReady
                             ? 'hidden'
-                            : 'min-h-[620px] overflow-hidden rounded-xl'
+                            : 'h-[calc(100svh-330px)] max-h-[640px] min-h-[430px] overflow-hidden rounded-xl'
                     }
                 />
             </section>
 
-            <ul className="mt-4 grid gap-1.5 text-xs text-slate-600">
-                <li className="flex items-center gap-2">
-                    <CheckCircle2 className="size-4 shrink-0 text-[#640000]" />
+            <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                <li className="flex items-center gap-1.5">
+                    <CheckCircle2 className="size-3.5 shrink-0 text-[#640000]" />
                     Correo verificado
                 </li>
-                <li className="flex items-center gap-2">
-                    <ShieldCheck className="size-4 shrink-0 text-[#640000]" />
-                    Precio validado por Atlantia
+                <li className="flex items-center gap-1.5">
+                    <ShieldCheck className="size-3.5 shrink-0 text-[#640000]" />
+                    Precio validado
                 </li>
-                <li className="flex items-center gap-2">
-                    <LockKeyhole className="size-4 shrink-0 text-[#640000]" />
-                    Pago protegido por Recurrente · datos de tarjeta aislados
+                <li className="flex items-center gap-1.5">
+                    <LockKeyhole className="size-3.5 shrink-0 text-[#640000]" />
+                    Pago protegido por Recurrente
                 </li>
             </ul>
 
-            <p className="mt-3 text-[11px] leading-4 text-slate-500">
-                Atlantia nunca recibe ni almacena el número de tu tarjeta.{' '}
+            <p className="mt-2 text-[10.5px] leading-4 text-slate-500">
+                Atlantia no recibe ni guarda el número de tu tarjeta. Es un
+                cargo único
                 {invoice
-                    ? 'El pago se aplica a esta factura al confirmarse con el proveedor; es un cargo único, no se programan cobros automáticos.'
-                    : 'La cuenta se activa únicamente al confirmar el webhook firmado. Es un cargo único: cada renovación se paga con su propia factura.'}
-            </p>
-            <p className="mt-2 text-[11px] leading-4 text-slate-500">
+                    ? ': el pago se aplica a esta factura.'
+                    : '; cada renovación se paga con su propia factura.'}{' '}
                 Al pagar aceptas los{' '}
                 <a
                     href="/terminos"
@@ -521,30 +513,20 @@ export default function EmbeddedCheckout({
                     className="font-semibold text-[#640000] underline"
                 >
                     Términos y Condiciones
-                </a>{' '}
-                y la{' '}
-                <a
-                    href="/privacidad"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-semibold text-[#640000] underline"
-                >
-                    Política de Privacidad
                 </a>
-                .
+                .{' '}
+                {!invoice && (
+                    <Link
+                        href="/billing/plans"
+                        className="font-semibold text-[#640000] underline underline-offset-2"
+                    >
+                        Cambiar plan
+                    </Link>
+                )}
             </p>
-            {!invoice && (
-                <Link
-                    href="/billing/plans"
-                    className="mt-3 inline-flex text-sm font-semibold text-[#640000] underline underline-offset-4"
-                >
-                    Cambiar plan
-                </Link>
-            )}
         </>
     );
 }
-
 EmbeddedCheckout.layout = {
     title: 'Finaliza tu suscripción',
     description: 'Un último paso: paga de forma segura para activar tu plan.',
