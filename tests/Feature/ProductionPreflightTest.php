@@ -25,6 +25,14 @@ function productionConfig(array $overrides = []): void
         'services.recurrente.webhook_secret' => 'external-webhook-secret',
         'mail.default' => 'smtp',
         'mail.from.address' => 'cobros@atlantia.gt',
+        'app.trusted_proxies' => ['10.0.0.0/16'],
+        'cache.default' => 'database',
+        'session.driver' => 'database',
+        'queue.default' => 'database',
+        'backup.enabled' => true,
+        'backup.destination' => '/var/backups/atlantia-finance',
+        'fel.provider' => 'sat_manual',
+        'services.recurrente.environment' => 'live',
         ...$overrides,
     ]);
 }
@@ -73,4 +81,24 @@ test('producción exige HTTPS, depuración apagada y las claves del cobro', func
         ->expectsOutputToContain('RECURRENTE_SECRET_KEY must be provided externally')
         ->expectsOutputToContain('RECURRENTE_WEBHOOK_SECRET must be provided externally')
         ->assertFailed();
+});
+
+test('producción exige correo que funcione, proxies, servicios compartidos, respaldos y cobro en vivo', function () {
+    productionConfig(['mail.default' => 'resend', 'app.trusted_proxies' => [], 'app.trust_cloudflare_proxies' => false, 'cache.default' => 'array', 'session.driver' => 'file',
+        'queue.default' => 'sync', 'backup.enabled' => false, 'fel.provider' => 'mock', 'services.recurrente.environment' => 'test']);
+    $this->mock(FelIssuerSettings::class, fn ($mock) => $mock->shouldReceive('platformCompanyUuid')->andReturn('uuid-emisor'));
+    schedulerRanMinutesAgo(1);
+
+    $command = $this->artisan('production:preflight')
+        ->expectsOutputToContain('Configura TRUSTED_PROXIES')
+        ->expectsOutputToContain('CACHE_STORE debe ser compartido')
+        ->expectsOutputToContain('SESSION_DRIVER debe ser compartido')
+        ->expectsOutputToContain('QUEUE_CONNECTION no puede ser')
+        ->expectsOutputToContain('Activa los respaldos')
+        ->expectsOutputToContain('FEL_PROVIDER no puede ser "mock"')
+        ->expectsOutputToContain('Recurrente está en modo de prueba');
+    if (! class_exists('Resend')) {
+        $command->expectsOutputToContain('MAIL_MAILER=resend necesita el paquete');
+    }
+    $command->assertFailed();
 });

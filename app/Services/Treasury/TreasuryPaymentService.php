@@ -14,6 +14,7 @@ use App\Services\Payables\PayableService;
 use App\Services\Payables\PaymentProposalService;
 use App\Services\Payables\SupplierAdvanceService;
 use App\Services\Payroll\PayrollPaymentService;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkManagement\WorkNotificationService;
 use Illuminate\Http\UploadedFile;
@@ -290,8 +291,9 @@ class TreasuryPaymentService
                 DB::table('payment_instruction_items')->where('id', $item->id)->update(['purchase_payment_id' => $paymentId, 'updated_at' => now()]);
             }
 
+            app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $proof->getSize(), 'proof');
             $path = $proof->storeAs('treasury-evidence/'.$instruction->organization_id.'/'.$instruction->company_id, Str::uuid().'.'.$proof->getClientOriginalExtension(), 'local');
-            DB::table('payment_instructions')->where('id', $instructionId)->update(['status' => 'executed', 'executed_by' => $actor->id, 'executed_at' => now(), 'executed_on' => $executedOn, 'execution_reference' => $reference, 'evidence_path' => $path, 'evidence_name' => mb_substr($proof->getClientOriginalName(), 0, 250), 'updated_at' => now()]);
+            DB::table('payment_instructions')->where('id', $instructionId)->update(['status' => 'executed', 'executed_by' => $actor->id, 'executed_at' => now(), 'executed_on' => $executedOn, 'execution_reference' => $reference, 'evidence_path' => $path, 'evidence_name' => mb_substr($proof->getClientOriginalName(), 0, 250), 'evidence_size_bytes' => (int) $proof->getSize(), 'updated_at' => now()]);
             DB::table('work_tasks')->where('work_tasks.organization_id', $organization->id)->where('automation_key', 'execute_payment:'.$instructionId)->whereNotIn('status', ['completed', 'cancelled'])->update(['status' => 'completed', 'completed_at' => now(), 'updated_at' => now()]);
             $this->accounting->audit($organization, $actor, 'payment.executed', 'payment_instructions', $instructionId, ['reference' => $reference, 'executed_on' => $executedOn, 'amount_cents' => (int) $instruction->amount_cents], (int) $instruction->office_id);
             $this->syncProposal($instruction);

@@ -38,6 +38,8 @@ class SubscriptionController extends Controller
         return Inertia::render('work/subscription', [
             ...$this->subscription->overview($organization),
             'canChangePlan' => $this->isOwner($organization, $request->user()) && $this->runningSubscriptionId($organization) !== null,
+            'canCancel' => $this->isOwner($organization, $request->user()) && $this->runningSubscriptionId($organization, includeOverdue: true) !== null,
+            'cancelEndsNow' => $this->runningSubscriptionId($organization) === null && $this->runningSubscriptionId($organization, includeOverdue: true) !== null,
         ]);
     }
 
@@ -83,15 +85,17 @@ class SubscriptionController extends Controller
     /** POST office/subscription/cancel: the owner stops renewing; access continues until the end of the paid period. */
     public function cancel(Request $request): RedirectResponse
     {
-        [, $subscriptionId] = $this->ownerSubscription($request);
+        [, $subscriptionId] = $this->ownerSubscription($request, includeOverdue: true);
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:300']]);
         /** @var User $user */
         $user = $request->user();
         $reason = 'Cancelación solicitada por el propietario de la firma.'.(filled($data['reason'] ?? null) ? ' Motivo: '.$data['reason'] : '');
 
-        $this->tenancy->runAsSystem(fn () => $this->subscriptions->cancel($user, $subscriptionId, false, $reason));
+        $result = $this->tenancy->runAsSystem(fn (): string => $this->subscriptions->cancelByOwner($user, $subscriptionId, $reason));
 
-        return back()->with('workspace_notice', 'Tu suscripción no se renovará. Seguirás usando Atlantia hasta el final del período pagado.');
+        return $result === 'immediate'
+            ? to_route('billing.reactivate')->with('workspace_notice', 'Tu suscripción quedó cancelada y sus facturas pendientes se anularon. Tus datos se conservan si decides volver.')
+            : back()->with('workspace_notice', 'Tu suscripción no se renovará. Seguirás usando Atlantia hasta el final del período pagado.');
     }
 
     /** POST office/subscription/keep: the owner changes their mind before the period ends. */
@@ -111,19 +115,20 @@ class SubscriptionController extends Controller
         return $user !== null && $organization->users()->whereKey($user->id)->wherePivot('role', 'owner')->wherePivot('status', 'active')->exists();
     }
 
-    private function runningSubscriptionId(Organization $organization): ?int
+    private function runningSubscriptionId(Organization $organization, bool $includeOverdue = false): ?int
     {
-        $id = DB::table('subscriptions')->where('organization_id', $organization->id)->whereIn('status', ['active', 'trialing'])->orderByDesc('id')->value('id');
+        $statuses = $includeOverdue ? ['active', 'trialing', 'past_due', 'grace_period'] : ['active', 'trialing'];
+        $id = DB::table('subscriptions')->where('organization_id', $organization->id)->whereIn('status', $statuses)->orderByDesc('id')->value('id');
 
         return $id === null ? null : (int) $id;
     }
 
     /** @return array{Organization, int} */
-    private function ownerSubscription(Request $request): array
+    private function ownerSubscription(Request $request, bool $includeOverdue = false): array
     {
         $organization = $this->context->organization($request->user());
         abort_unless($this->isOwner($organization, $request->user()), 403, 'Solo el propietario de la firma puede administrar la suscripción.');
-        $subscriptionId = $this->runningSubscriptionId($organization) ?? abort(409, 'La firma no tiene una suscripción vigente.');
+        $subscriptionId = $this->runningSubscriptionId($organization, $includeOverdue) ?? abort(409, 'La firma no tiene una suscripción vigente.');
 
         return [$organization, $subscriptionId];
     }

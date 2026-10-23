@@ -21,7 +21,7 @@ class LuzmaWatchdogCommand extends Command
 
     protected $description = 'Revisa Luzma y la reinicia o la calienta si se detuvo';
 
-    /** Only the local gateway needs watching: hosted providers (Gemini) have nothing to restart or warm up. */
+    /** Watches the local gateway (Ollama), the only model provider Luzma uses. */
     public function handle(OllamaLuzmaProvider $provider, LuzmaSwitch $switch): int
     {
         if (! $switch->enabled() || ! in_array('ollama', (array) config('luzma.providers', ['ollama']), true)) {

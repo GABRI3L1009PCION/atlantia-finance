@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\ClientPortal\ClientAccessService;
 use App\Services\ClientPortal\ClientRequestService;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -76,8 +77,11 @@ class TaskWaitService
             if ($wait->client_request_id !== null) {
                 throw ValidationException::withMessages(['wait' => 'Esta espera se resuelve con la respuesta del cliente en el portal: acéptala allí.']);
             }
+            if ($file !== null) {
+                app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $file->getSize(), 'file');
+            }
             $path = $file?->storeAs('task-waits/'.$organization->id.'/'.$wait->work_task_id, Str::uuid().'.'.$file->getClientOriginalExtension(), 'local');
-            $this->resolve($organization, $actor, $wait, $resolution, $path ?: null, $file?->getClientOriginalName());
+            $this->resolve($organization, $actor, $wait, $resolution, $path ?: null, $file?->getClientOriginalName(), $file === null ? null : (int) $file->getSize());
         });
     }
 
@@ -120,10 +124,10 @@ class TaskWaitService
         return $id;
     }
 
-    private function resolve(Organization $organization, User $actor, stdClass $wait, string $resolution, ?string $path, ?string $fileName): void
+    private function resolve(Organization $organization, User $actor, stdClass $wait, string $resolution, ?string $path, ?string $fileName, ?int $fileSize = null): void
     {
         DB::table('work_task_waits')->where('id', $wait->id)->update(['status' => 'resolved', 'resolved_by' => $actor->id, 'resolved_at' => now(), 'resolution' => mb_substr($resolution, 0, 500),
-            'file_path' => $path, 'file_name' => $fileName === null ? null : mb_substr($fileName, 0, 250), 'updated_at' => now()]);
+            'file_path' => $path, 'file_name' => $fileName === null ? null : mb_substr($fileName, 0, 250), 'file_size_bytes' => $path === null ? null : $fileSize, 'updated_at' => now()]);
         $task = DB::table('work_tasks')->where('id', $wait->work_task_id)->lockForUpdate()->first();
         $stillWaiting = DB::table('work_task_waits')->where('work_task_id', $wait->work_task_id)->where('status', 'open')->exists();
         if ($task !== null && ! $stillWaiting && in_array($task->status, ['waiting_client', 'waiting_external'], true)) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Organization;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkManagement\TrainingService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkspaceContext;
@@ -93,8 +94,10 @@ class TrainingController extends Controller
         abort_unless(DB::table('organization_user')->where('organization_id', $organization->id)->where('user_id', $data['user_id'])->exists(), 422);
 
         if ($request->hasFile('attachment')) {
+            app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $request->file('attachment')->getSize(), 'attachment');
             $data['attachment_path'] = $request->file('attachment')->store('training-certificates/'.$organization->id);
             $data['attachment_name'] = $request->file('attachment')->getClientOriginalName();
+            $data['attachment_size_bytes'] = (int) $request->file('attachment')->getSize();
         }
         $this->training->createCertification($organization, $request->user(), $data);
 

@@ -30,7 +30,7 @@ Solo con proveedores necesarios para operar el servicio (infraestructura en la n
 
 ## 5. Cuánto tiempo los conservamos
 
-- Datos de la cuenta y del cliente: mientras la suscripción esté vigente y durante los 90 días de exportación posteriores a la terminación.
+- Datos de la cuenta y del cliente: mientras la suscripción esté vigente y durante los 90 días posteriores a la terminación, en los que la Firma puede reactivar su suscripción o pedir una exportación; después se eliminan dentro de los 30 días siguientes.
 - Copias de seguridad: 30 días.
 - Interacciones con Luzma: hasta 90 días.
 - Facturas y registros que la ley exija a Atlantia: por los plazos legales aplicables.

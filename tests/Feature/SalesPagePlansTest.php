@@ -43,6 +43,14 @@ test('a plan without payroll says so and names the plan that has it', function (
         ->and(collect($texts('enterprise'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty();
 });
 
+test('a plan without the VAT books says so and names the plan that has them', function () {
+    $catalog = collect(app(PublicPlanCatalog::class)->plans())->keyBy('code');
+    $texts = fn (string $code): array => collect($catalog[$code]['features'])->pluck('text')->all();
+
+    expect($texts('essential'))->toContain('Libros de IVA y reportes avanzados no incluidos (disponibles desde el plan Profesional)')
+        ->and(collect($texts('professional'))->filter(fn (string $text): bool => str_starts_with($text, 'Libros de IVA')))->toBeEmpty();
+});
+
 test('a newly published version changes what the sales page shows and retired plans disappear', function () {
     $owner = ccOwner();
     $plan = DB::table('plans')->where('code', 'essential')->first();

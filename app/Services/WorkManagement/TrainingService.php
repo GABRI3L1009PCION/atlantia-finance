@@ -232,6 +232,7 @@ class TrainingService
             'expires_on' => $data['expires_on'] ?? null,
             'attachment_path' => $data['attachment_path'] ?? null,
             'attachment_name' => $data['attachment_name'] ?? null,
+            'attachment_size_bytes' => $data['attachment_size_bytes'] ?? null,
             'generated' => (bool) ($data['generated'] ?? false),
             'created_at' => now(),
             'updated_at' => now(),

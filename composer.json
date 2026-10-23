@@ -10,6 +10,9 @@
     "license": "proprietary",
     "require": {
         "php": "^8.3",
+        "ext-bcmath": "*",
+        "ext-mbstring": "*",
+        "ext-pdo_pgsql": "*",
         "dompdf/dompdf": "^3.1",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",

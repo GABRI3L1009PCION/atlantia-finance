@@ -18,7 +18,6 @@ use App\Services\Fiscal\TaxFilingProviderInterface;
 use App\Services\Integrations\WebhookDispatcher;
 use App\Services\Luzma\ChainLuzmaProvider;
 use App\Services\Luzma\Contracts\LuzmaModelProvider;
-use App\Services\Luzma\GeminiLuzmaProvider;
 use App\Services\Luzma\OllamaLuzmaProvider;
 use App\Services\Platform\Billing\PaymentProviderInterface;
 use App\Services\Platform\Billing\RecurrentePaymentProvider;
@@ -40,6 +39,7 @@ use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Database\Events\ConnectionEstablished;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
@@ -81,7 +81,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(WebhookDispatcher::class);
         $this->app->bind(PaymentProviderInterface::class, RecurrentePaymentProvider::class);
         $this->app->bind(LuzmaModelProvider::class, function ($app): LuzmaModelProvider {
-            $available = ['gemini' => fn (): LuzmaModelProvider => $app->make(GeminiLuzmaProvider::class), 'ollama' => fn (): LuzmaModelProvider => $app->make(OllamaLuzmaProvider::class)];
+            $available = ['ollama' => fn (): LuzmaModelProvider => $app->make(OllamaLuzmaProvider::class)];
             $chain = [];
             foreach ((array) config('luzma.providers', ['ollama']) as $name) {
                 if (isset($available[$name])) {
@@ -180,6 +180,22 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
+     * Believes the X-Forwarded-* headers (client address, HTTPS, port) only from the load balancer's network and, when the
+     * domain is proxied by Cloudflare, from Cloudflare's ranges (see config/app.php).
+     */
+    public function configureTrustedProxies(): void
+    {
+        $proxies = [...(array) config('app.trusted_proxies'), ...((bool) config('app.trust_cloudflare_proxies') ? (array) config('app.cloudflare_proxies') : [])];
+        if ($proxies === []) {
+            return;
+        }
+
+        TrustProxies::at($proxies);
+        TrustProxies::withHeaders(Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST | Request::HEADER_X_FORWARDED_PORT
+            | Request::HEADER_X_FORWARDED_PROTO | Request::HEADER_X_FORWARDED_AWS_ELB);
+    }
+
+    /**
      * Configure default behaviors for production-ready applications.
      */
     protected function configureDefaults(): void
@@ -189,6 +205,8 @@ class AppServiceProvider extends ServiceProvider
         if (config('app.force_https')) {
             URL::forceScheme('https');
         }
+
+        $this->configureTrustedProxies();
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),

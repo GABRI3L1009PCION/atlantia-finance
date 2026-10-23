@@ -4,6 +4,7 @@ use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\Billing\SubscriptionService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use Database\Seeders\PlanCatalogSeeder;
@@ -160,4 +161,37 @@ test('solo el propietario puede cancelar la suscripción y no se cancela dos vec
 
     $this->actingAs($member)->post(route('office.subscription.cancel'))->assertForbidden();
     $this->actingAs($owner)->post(route('office.subscription.keep'))->assertSessionHasErrors('subscription');
+});
+
+test('el dueño de una firma vencida cancela de inmediato y sus facturas pendientes se anulan', function () {
+    [$owner, $organization] = selfServiceFirm('essential');
+    $subscriptionId = (int) DB::table('subscriptions')->where('organization_id', $organization->id)->value('id');
+    $this->travelTo(now()->addMonth()->addDay());
+    app(TenantDatabaseContext::class)->runAsSystem(fn () => app(SubscriptionService::class)->renewDue());
+    $this->travel(10)->days();
+    app(TenantDatabaseContext::class)->runAsSystem(fn () => app(SaaSBillingService::class)->runDunning());
+    expect(DB::table('subscriptions')->where('id', $subscriptionId)->value('status'))->toBe('past_due');
+
+    $this->actingAs($owner)->get(route('office.subscription'))->assertInertia(fn (Assert $page) => $page->where('canCancel', true)->where('cancelEndsNow', true));
+    $this->post(route('office.subscription.cancel'), ['reason' => 'No podemos pagar'])->assertRedirect(route('billing.reactivate'));
+
+    expect(DB::table('subscriptions')->where('id', $subscriptionId)->value('status'))->toBe('cancelled')
+        ->and(app(TenantDatabaseContext::class)->runAsSystem(fn () => DB::table('saas_invoices')->where('subscription_id', $subscriptionId)->whereIn('status', ['open', 'past_due'])->count()))->toBe(0)
+        ->and($organization->fresh()->status)->toBe('cancelled');
+
+    // A cancelled firm is not reopened by the dunning run.
+    $this->travel(10)->days();
+    app(TenantDatabaseContext::class)->runAsSystem(fn () => app(SaaSBillingService::class)->runDunning());
+    expect($organization->fresh()->status)->toBe('cancelled');
+});
+
+test('una firma vencida no cambia su plan desde la pantalla del primer pago', function () {
+    [$owner, $organization] = selfServiceFirm('corporate');
+    $subscriptionId = (int) DB::table('subscriptions')->where('organization_id', $organization->id)->value('id');
+    DB::table('subscriptions')->where('id', $subscriptionId)->update(['status' => 'past_due', 'past_due_since' => now()]);
+
+    $this->actingAs($owner)->patch(route('billing.plan.update'), ['plan' => 'essential', 'billing_period' => 'monthly'])->assertRedirect(route('billing.checkout.show'));
+    $this->get(route('billing.plans.index'))->assertRedirect(route('billing.checkout.show'));
+
+    expect((int) DB::table('subscription_items')->where('subscription_id', $subscriptionId)->value('plan_price_id'))->toBe(selfServicePriceId('corporate'));
 });

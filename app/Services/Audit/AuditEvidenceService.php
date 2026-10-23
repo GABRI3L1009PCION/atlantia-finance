@@ -7,6 +7,7 @@ namespace App\Services\Audit;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\Platform\UsageMeterService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -88,8 +89,9 @@ class AuditEvidenceService
                 $values = [...$values, 'source_type' => $sourceType, 'source_id' => $sourceId, 'source_label' => self::SOURCES[$sourceType].' #'.$sourceId];
             }
             if ($file !== null) {
+                app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $file->getSize(), 'file');
                 $path = $file->storeAs('audit-evidence/'.$organization->id.'/'.$request->company_id, Str::uuid().'.'.$file->getClientOriginalExtension(), 'local');
-                $values = [...$values, 'file_path' => $path, 'file_name' => mb_substr($file->getClientOriginalName(), 0, 250), 'file_hash' => hash_file('sha256', $file->getRealPath())];
+                $values = [...$values, 'file_path' => $path, 'file_name' => mb_substr($file->getClientOriginalName(), 0, 250), 'file_size_bytes' => (int) $file->getSize(), 'file_hash' => hash_file('sha256', $file->getRealPath())];
             }
             DB::table('audit_evidence_requests')->where('id', $requestId)->update($values);
             $this->tasks->complete($organization->id, ['audit_evidence:'.$requestId]);

@@ -18,6 +18,16 @@ class UsageMeterService
     public const LABELS = ['users' => 'Usuarios', 'offices' => 'Oficinas', 'active_cases' => 'Empresas', 'storage_bytes' => 'Almacenamiento',
         'ai_queries' => 'Consultas de Luzma (mes)', 'api_requests' => 'Solicitudes de API (mes)', 'documents' => 'Documentos'];
 
+    /** @var array<string, array{literal-string, literal-string}> table => [size column, path column] */
+    private const EVIDENCE_FILES = [
+        'audit_evidence_requests' => ['file_size_bytes', 'file_path'],
+        'payment_instructions' => ['evidence_size_bytes', 'evidence_path'],
+        'fiscal_obligations' => ['evidence_size_bytes', 'evidence_path'],
+        'fiscal_obligation_checks' => ['file_size_bytes', 'file_path'],
+        'work_task_waits' => ['file_size_bytes', 'file_path'],
+        'training_certifications' => ['attachment_size_bytes', 'attachment_path'],
+    ];
+
     public function __construct(private TenantDatabaseContext $tenancy, private EntitlementResolverService $entitlements) {}
 
     /** @return array<string, int> */
@@ -29,6 +39,13 @@ class UsageMeterService
             $documents = 0;
             foreach (['client_document_versions', 'journal_entry_documents', 'operational_record_files', 'purchase_document_files'] as $table) {
                 $row = DB::table($table)->where($table.'.organization_id', $organizationId)->selectRaw('CAST(COALESCE(SUM(size_bytes), 0) AS BIGINT) as bytes, CAST(COUNT(*) AS BIGINT) as total')->first();
+                $files += (int) ($row->bytes ?? 0);
+                $documents += (int) ($row->total ?? 0);
+            }
+            // Evidence attached to audit requests, payments, filings, checklists, task waits and certifications.
+            foreach (self::EVIDENCE_FILES as $table => [$sizeColumn, $pathColumn]) {
+                $row = DB::table($table)->where($table.'.organization_id', $organizationId)->whereNotNull($pathColumn)
+                    ->selectRaw('CAST(COALESCE(SUM('.$sizeColumn.'), 0) AS BIGINT) as bytes, CAST(COUNT(*) AS BIGINT) as total')->first();
                 $files += (int) ($row->bytes ?? 0);
                 $documents += (int) ($row->total ?? 0);
             }

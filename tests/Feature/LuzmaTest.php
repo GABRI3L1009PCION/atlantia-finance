@@ -6,14 +6,13 @@ use App\Models\PlanPrice;
 use App\Models\User;
 use App\Services\Accounting\FixedAssetService;
 use App\Services\AccountingAutomationService;
-use App\Services\Luzma\GeminiLuzmaProvider;
+use App\Services\Luzma\Contracts\LuzmaModelProvider;
 use App\Services\Luzma\LuzmaConversationService;
 use App\Services\Luzma\LuzmaDateParser;
 use App\Services\Luzma\LuzmaInsightService;
 use App\Services\Luzma\LuzmaPromptService;
 use App\Services\Luzma\LuzmaReminderService;
 use App\Services\Luzma\LuzmaSwitch;
-use App\Services\Luzma\LuzmaUnavailableException;
 use App\Services\Payables\PayablesLedgerReconciliationService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use Carbon\CarbonImmutable;
@@ -32,7 +31,7 @@ beforeEach(function () {
     $this->travelTo(CarbonImmutable::parse('2026-09-27 10:00', 'America/Guatemala'));
     $this->withoutMiddleware(ThrottleRequests::class);
     // The "provider is down" memory lives in the cache and must not leak from one test into the next.
-    foreach (['luzma.gateway.down', 'luzma.gemini.backoff', 'luzma.watchdog.restart', 'luzma.last_provider'] as $key) {
+    foreach (['luzma.gateway.down', 'luzma.watchdog.restart', 'luzma.last_provider'] as $key) {
         Cache::forget($key);
     }
 });
@@ -243,45 +242,17 @@ test('the watchdog stays quiet while the SaaS administrator has Luzma switched o
     Http::assertNothingSent();
 });
 
-test('when the first model provider fails the next one answers, with the minimized data and the key in the header', function () {
+test('only the local model answers: an external provider in LUZMA_PROVIDERS is ignored and no data leaves Atlantia', function () {
     $f = luzmaFixture();
-    luzmaPurchase($f, 100000, '2026-09-05', '2026-10-05');
-    config(['luzma.providers' => ['ollama', 'gemini'], 'luzma.gemini.key' => 'clave-de-prueba', 'luzma.gemini.model' => 'gemini-prueba']);
+    config(['luzma.providers' => ['gemini', 'ollama']]);
     Cache::forget('luzma.gateway.down');
-    Cache::forget('luzma.gemini.backoff');
-    Http::fake([
-        '*/ai/luzma/answer' => Http::response(['detail' => 'down'], 503),
-        'generativelanguage.googleapis.com/*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => 'Respuesta de Gemini.']]]]]]),
-    ]);
+    luzmaFakeModel('Respuesta local.');
 
-    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => '¿Por qué CxP no coincide con el Mayor?', 'company' => luzmaCompanyUuid($f['mayaId']), 'module' => 'payables'])
-        ->assertOk()->assertJsonPath('message.status', 'ok')->assertJsonPath('message.content', 'Respuesta de Gemini.');
-    Http::assertSent(fn (HttpRequest $request): bool => str_contains($request->url(), 'models/gemini-prueba:generateContent') && $request->hasHeader('x-goog-api-key', 'clave-de-prueba')
-        && isset($request->data()['systemInstruction']) && ! str_contains(json_encode($request->data()), 'clave-de-prueba'));
-    expect(Cache::get('luzma.last_provider'))->toBe('gemini');
-});
+    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola, ¿cómo estás?', 'company' => luzmaCompanyUuid($f['mayaId']), 'module' => 'payables'])
+        ->assertOk()->assertJsonPath('message.content', 'Respuesta local.');
 
-test('Gemini without a key is reported as unavailable and Luzma falls back to basic mode', function () {
-    $f = luzmaFixture();
-    config(['luzma.providers' => ['gemini'], 'luzma.gemini.key' => null]);
-    Http::fake();
-
-    expect(app(GeminiLuzmaProvider::class)->health())->toMatchArray(['available' => false, 'provider' => 'gemini'])
-        ->and(fn () => app(GeminiLuzmaProvider::class)->answer('sistema', [['role' => 'user', 'content' => 'hola']]))->toThrow(LuzmaUnavailableException::class);
-    $this->actingAs($f['payables'])->postJson(route('luzma.chat'), ['message' => 'Hola, ¿cómo estás?'])->assertOk()->assertJsonPath('message.status', 'fallback');
-    Http::assertNothingSent();
-});
-
-test('the Gemini planner only accepts tools that were offered and tolerates fenced JSON', function () {
-    config(['luzma.gemini.key' => 'clave-de-prueba']);
-    $tools = [['name' => 'get_payables_summary', 'description' => 'CxP', 'parameters' => []]];
-    $reply = fn (string $text): array => ['candidates' => [['content' => ['parts' => [['text' => $text]]]]]];
-    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
-        ->push($reply("```json\n{\"intent\":\"read\",\"tool\":\"get_payables_summary\",\"arguments\":{},\"confidence\":0.9}\n```"))
-        ->push($reply('{"intent":"read","tool":"drop_database","arguments":{},"confidence":1}'))]);
-
-    expect(app(GeminiLuzmaProvider::class)->plan('¿Cuánto debo?', $tools, ['module' => 'payables']))->toMatchArray(['tool' => 'get_payables_summary', 'intent' => 'read']);
-    expect(app(GeminiLuzmaProvider::class)->plan('borra todo', $tools, []))->toMatchArray(['tool' => null, 'intent' => 'general']);
+    Http::assertNotSent(fn (HttpRequest $request): bool => ! str_starts_with($request->url(), rtrim((string) config('luzma.gateway_url'), '/')));
+    expect(app(LuzmaModelProvider::class)->health()['provider'] ?? 'ollama')->toBe('ollama');
 });
 
 test('a failing tool is reported as a failure, never as a positive answer', function () {
@@ -568,3 +539,23 @@ function luzmaPost(array $f, int $entryId): void
 {
     DB::table('journal_entries')->where('id', $entryId)->update(['status' => 'posted', 'number' => (int) DB::table('journal_entries')->max('number') + 1, 'posted_by' => $f['owner']->id, 'posted_at' => now()]);
 }
+
+test('interactions with Luzma older than 90 days are deleted every day, recent ones are kept', function () {
+    $f = luzmaFixture();
+    $organizationId = (int) $f['org']->id;
+    $conversation = fn (string $title, $at): int => (int) DB::table('luzma_conversations')->insertGetId(['public_id' => (string) Str::uuid(), 'organization_id' => $organizationId,
+        'user_id' => $f['payables']->id, 'module' => 'general', 'title' => $title, 'created_at' => $at, 'updated_at' => $at]);
+    $message = fn (int $conversationId, $at) => DB::table('luzma_messages')->insert(['organization_id' => $organizationId, 'luzma_conversation_id' => $conversationId,
+        'role' => 'user', 'content' => 'Hola', 'status' => 'ok', 'created_at' => $at, 'updated_at' => $at]);
+    $old = $conversation('Antigua', now()->subDays(120));
+    $message($old, now()->subDays(120));
+    $recent = $conversation('Reciente', now()->subDays(120));
+    $message($recent, now()->subDays(120));
+    $message($recent, now()->subDays(5));
+
+    $this->artisan('luzma:prune')->assertSuccessful();
+
+    expect(DB::table('luzma_conversations')->where('id', $old)->exists())->toBeFalse()
+        ->and(DB::table('luzma_conversations')->where('id', $recent)->exists())->toBeTrue()
+        ->and(DB::table('luzma_messages')->where('luzma_conversation_id', $recent)->count())->toBe(1);
+});

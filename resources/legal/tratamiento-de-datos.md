@@ -34,7 +34,7 @@ Si Atlantia detecta un incidente que afecte Datos del Cliente, notificará a la 
 
 ## 9. Devolución y eliminación
 
-Terminado el contrato, la Firma tiene 90 días de acceso en modo de solo lectura para exportar sus datos. Después, Atlantia los elimina de forma segura de sus sistemas activos; las copias de respaldo se eliminan al cumplirse su ciclo de 30 días, salvo lo que la ley exija conservar.
+Terminado el contrato, Atlantia conserva los datos durante 90 días, en los que la Firma puede reactivar su suscripción o pedir una exportación a soporte@atlantiasystems.com. Después, Atlantia los elimina de forma segura de sus sistemas activos dentro de los 30 días siguientes; las copias de respaldo se eliminan al cumplirse su ciclo de 30 días, salvo lo que la ley exija conservar.
 
 ## 10. Requerimientos de autoridades
 

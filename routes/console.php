@@ -43,6 +43,19 @@ Artisan::command('luzma:run', function () {
 
 Schedule::command('luzma:run')->everyFiveMinutes()->withoutOverlapping();
 
+Artisan::command('luzma:prune', function () {
+    // Terms 10.5 and the privacy policy: Luzma's interactions are kept for at most 90 days.
+    $cutoff = now()->subDays(90);
+    [$messages, $conversations] = app(TenantDatabaseContext::class)->runAsSystem(fn (): array => [
+        DB::table('luzma_messages')->where('created_at', '<', $cutoff)->delete(),
+        DB::table('luzma_conversations')->where('updated_at', '<', $cutoff)->whereNotExists(fn ($query) => $query->selectRaw('1')->from('luzma_messages')
+            ->whereColumn('luzma_messages.luzma_conversation_id', 'luzma_conversations.id'))->delete(),
+    ]);
+    $this->info("Luzma: {$messages} mensaje(s) y {$conversations} conversación(es) de más de 90 días eliminados.");
+})->purpose('Elimina las interacciones con Luzma de más de 90 días');
+
+Schedule::command('luzma:prune')->dailyAt('03:10')->withoutOverlapping()->onOneServer();
+
 // Luzma must not switch itself off: bring the gateway back and keep the model in memory.
 Schedule::command('luzma:watchdog')->everyMinute()->withoutOverlapping(5)->runInBackground();
 

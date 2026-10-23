@@ -8,7 +8,7 @@ use App\Services\Luzma\Contracts\LuzmaModelProvider;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Tries the configured model providers in order (LUZMA_PROVIDERS, for example "gemini,ollama") and uses the first that
+ * Tries the configured model providers in order (LUZMA_PROVIDERS) and uses the first that
  * answers, so no single provider is a single point of failure. When all fail, the caller falls back to basic mode.
  */
 class ChainLuzmaProvider implements LuzmaModelProvider

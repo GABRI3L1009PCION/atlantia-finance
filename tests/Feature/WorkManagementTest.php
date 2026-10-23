@@ -728,7 +728,7 @@ test('the firm administrator runs training and the supervising director only see
         'attachment' => UploadedFile::fake()->create('externo.pdf', 100, 'application/pdf'),
     ])->assertRedirect();
     $cert = DB::table('training_certifications')->where('code', 'AF-2026-00500')->first();
-    expect($cert->generated)->toBeTrue()->and($cert->attachment_name)->toBe('externo.pdf');
+    expect($cert->generated)->toBeTrue()->and($cert->attachment_name)->toBe('externo.pdf')->and((int) $cert->attachment_size_bytes)->toBe(100 * 1024);
     Storage::assertExists($cert->attachment_path);
     $this->post(route('office.training.certifications.store'), ['user_id' => $f['assistant']->id, 'name' => 'Repetido', 'issued_on' => '2026-02-01', 'code' => 'AF-2026-00500'])->assertSessionHasErrors('code');
     $this->get(route('office.training.certifications.file', $cert->id))->assertOk();

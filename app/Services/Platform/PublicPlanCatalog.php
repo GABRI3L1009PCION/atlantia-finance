@@ -29,7 +29,8 @@ class PublicPlanCatalog
         return $this->tenancy->runAsSystem(function (): array {
             $plans = [];
             $activePlans = DB::table('plans')->where('is_active', true)->orderBy('display_order')->orderBy('id')->get();
-            $payrollFrom = $this->firstPlanWithPayroll($activePlans);
+            $payrollFrom = $this->firstPlanWith($activePlans, 'payroll');
+            $reportsFrom = $this->firstPlanWith($activePlans, 'advanced_reports');
             foreach ($activePlans as $plan) {
                 $version = DB::table('plan_versions')->where('plan_id', $plan->id)->where('status', 'published')->orderByDesc('version')->first();
                 $prices = DB::table('plan_prices')->where('plan_id', $plan->id)->where('is_active', true)->where('currency_code', 'GTQ')->pluck('amount', 'billing_period');
@@ -53,7 +54,7 @@ class PublicPlanCatalog
                     'price_prefix' => $plan->price_prefix,
                     'cta_label' => $plan->cta_label,
                     'contact_only' => in_array($plan->code, (array) config('atlantia-plans.contact_only', []), true),
-                    'features' => [...$this->capacity($version), ...$this->payrollNote($version, $payrollFrom), ...array_map(
+                    'features' => [...$this->capacity($version), ...$this->payrollNote($version, $payrollFrom), ...$this->reportsNote($version, $reportsFrom), ...array_map(
                         fn (string $text): array => ['text' => $text, 'hint' => null],
                         array_values(array_filter((array) json_decode((string) ($plan->highlights ?? '[]'), true), 'is_string')),
                     )],
@@ -65,15 +66,15 @@ class PublicPlanCatalog
     }
 
     /**
-     * Name of the first plan, in display order, whose published version includes payroll.
+     * Name of the first plan, in display order, whose published version includes a feature.
      *
      * @param  Collection<int, stdClass>  $activePlans
      */
-    private function firstPlanWithPayroll(Collection $activePlans): ?string
+    private function firstPlanWith(Collection $activePlans, string $feature): ?string
     {
         foreach ($activePlans as $plan) {
             $version = DB::table('plan_versions')->where('plan_id', $plan->id)->where('status', 'published')->orderByDesc('version')->first();
-            if ($version !== null && in_array('payroll', (array) json_decode((string) $version->entitlements, true), true)) {
+            if ($version !== null && in_array($feature, (array) json_decode((string) $version->entitlements, true), true)) {
                 return (string) $plan->name;
             }
         }
@@ -93,6 +94,21 @@ class PublicPlanCatalog
         }
 
         return [['text' => $payrollFrom === null ? 'Nómina no incluida' : 'Nómina no incluida (disponible desde el plan '.$payrollFrom.')', 'hint' => null]];
+    }
+
+    /**
+     * The VAT books (libros de compras y ventas) and advanced reports are part of "advanced_reports": a plan without them
+     * says so, like payroll, so no firm buys it expecting them.
+     *
+     * @return list<array{text: string, hint: string|null}>
+     */
+    private function reportsNote(stdClass $version, ?string $reportsFrom): array
+    {
+        if (in_array('advanced_reports', (array) json_decode((string) $version->entitlements, true), true)) {
+            return [];
+        }
+
+        return [['text' => $reportsFrom === null ? 'Libros de IVA y reportes avanzados no incluidos' : 'Libros de IVA y reportes avanzados no incluidos (disponibles desde el plan '.$reportsFrom.')', 'hint' => null]];
     }
 
     /**

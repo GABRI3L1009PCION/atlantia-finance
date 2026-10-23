@@ -256,8 +256,9 @@ class SaaSBillingService
         $today = now()->toDateString();
         foreach (DB::table('saas_invoices')->where('status', 'open')->whereNotNull('due_on')->where('due_on', '<', $today)->get() as $invoice) {
             DB::table('saas_invoices')->where('id', $invoice->id)->update(['status' => 'past_due', 'updated_at' => now()]);
-            if ($invoice->subscription_id !== null) {
-                DB::table('subscriptions')->where('id', $invoice->subscription_id)->whereIn('status', ['active', 'trialing'])->update(['status' => 'past_due', 'past_due_since' => now(), 'updated_at' => now()]);
+            // Only a running subscription falls behind: an invoice left over from an ended one does not reopen the firm.
+            if ($invoice->subscription_id !== null && DB::table('subscriptions')->where('id', $invoice->subscription_id)->whereIn('status', ['active', 'trialing'])
+                ->update(['status' => 'past_due', 'past_due_since' => now(), 'updated_at' => now()]) > 0) {
                 $this->organizations->syncWithSubscription((int) $invoice->organization_id, 'past_due');
             }
             $this->audit->record(null, 'subscription.past_due', 'saas_invoices', (int) $invoice->id, ['status' => 'open'], ['status' => 'past_due'], 'Factura vencida sin pago.', (int) $invoice->organization_id);

@@ -37,6 +37,8 @@ type Props = {
     }[];
     modules: { name: string; included: boolean }[];
     canChangePlan: boolean;
+    canCancel: boolean;
+    cancelEndsNow: boolean;
     available: {
         monthly_price_id: number | null;
         annual_price_id: number | null;
@@ -162,6 +164,8 @@ export default function Subscription({
     usage,
     modules,
     canChangePlan,
+    canCancel,
+    cancelEndsNow,
     available,
     payments,
     billing,
@@ -462,7 +466,8 @@ export default function Subscription({
                             <CancelSubscription
                                 cancelAtPeriodEnd={plan.cancel_at_period_end}
                                 periodEndsAt={formatDate(plan.period_ends_at)}
-                                canManage={canChangePlan}
+                                canManage={canCancel}
+                                endsNow={cancelEndsNow}
                             />
                         </div>
 

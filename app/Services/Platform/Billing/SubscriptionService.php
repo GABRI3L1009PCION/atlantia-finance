@@ -79,20 +79,16 @@ class SubscriptionService
         $newMonthly = $this->monthly($newPrice->billing_period, (float) $newPrice->amount);
         $direction = $newMonthly > $currentMonthly ? 'upgrade' : ($newMonthly < $currentMonthly ? 'downgrade' : 'lateral');
 
-        $conflicts = [];
-        $limits = (array) json_decode((string) $newVersion->limits, true);
-        foreach ($this->usage->measure((int) $subscription->organization_id) as $metric => $value) {
-            $limit = $limits[$metric]['value'] ?? null;
-            if (array_key_exists($metric, $limits) && $limit !== null && $value > (int) $limit) {
-                $conflicts[] = ['metric' => $metric, 'label' => UsageMeterService::LABELS[$metric] ?? $metric, 'value' => $value, 'limit' => (int) $limit];
-            }
-        }
+        $conflicts = $this->limitConflicts((int) $subscription->organization_id, $newVersion);
         $proration = 0.0;
         if ($direction === 'upgrade' && $subscription->current_period_ends_at !== null && $subscription->status !== 'trialing') {
             $start = Carbon::parse($subscription->current_period_starts_at);
             $end = Carbon::parse($subscription->current_period_ends_at);
             $remaining = max(0, now()->diffInSeconds($end, false)) / max(1, $start->diffInSeconds($end));
-            $proration = round(($this->periodAmount($newPrice) - $this->periodAmount($currentPrice)) * $remaining, 2);
+            // Both prices are compared at the monthly rate over the length of the current period, so switching from monthly to
+            // annual only charges the remaining days at the new rate; the annual price itself is invoiced when the period renews.
+            $monthsInPeriod = $currentPrice->billing_period === 'annual' ? 12 : 1;
+            $proration = round(($newMonthly - $currentMonthly) * $monthsInPeriod * $remaining, 2);
         }
         $policy = (string) $this->settings->get('billing.downgrade_policy', 'next_cycle');
 
@@ -151,6 +147,34 @@ class SubscriptionService
                 ['status' => $immediately ? 'cancelled' : $subscription->status, 'effective_date' => $immediately ? now()->toIso8601String() : (string) $subscription->current_period_ends_at],
                 $reason, (int) $subscription->organization_id, ['immediately' => $immediately], true);
         });
+    }
+
+    /**
+     * The owner cancels from the app. A running subscription ends with its paid period; one that is behind (past due or in
+     * grace) has no paid period left, so it ends now and its unpaid invoices are voided instead of being chased.
+     *
+     * @return 'period_end'|'immediate'
+     */
+    public function cancelByOwner(User $actor, int $subscriptionId, string $reason): string
+    {
+        $status = (string) (DB::table('subscriptions')->where('id', $subscriptionId)->value('status') ?? abort(404));
+        if (in_array($status, ['active', 'trialing'], true)) {
+            $this->cancel($actor, $subscriptionId, false, $reason);
+
+            return 'period_end';
+        }
+        if (! in_array($status, ['past_due', 'grace_period'], true)) {
+            throw ValidationException::withMessages(['subscription' => 'La suscripción ya terminó.']);
+        }
+
+        DB::transaction(function () use ($actor, $subscriptionId, $reason): void {
+            foreach (DB::table('saas_invoices')->where('subscription_id', $subscriptionId)->whereIn('status', ['open', 'past_due'])->pluck('id') as $invoiceId) {
+                $this->billing->void($actor, (int) $invoiceId, 'Suscripción cancelada por el propietario con el período sin pagar.');
+            }
+            $this->cancel($actor, $subscriptionId, true, $reason);
+        });
+
+        return 'immediate';
     }
 
     /** Takes back a cancellation scheduled for the end of the period while the subscription is still running. */
@@ -227,8 +251,10 @@ class SubscriptionService
                 continue;
             }
             if ($subscription->scheduled_plan_price_id !== null) {
-                $this->applyPlan($subscription, (int) $subscription->scheduled_plan_price_id);
-                $result['scheduled_applied']++;
+                // The firm may have grown since it scheduled the downgrade: a plan it no longer fits in is never applied.
+                if ($this->applyScheduledPlan($subscription)) {
+                    $result['scheduled_applied']++;
+                }
             }
             $price = $this->basePrice((int) $subscription->id);
             $start = Carbon::parse($subscription->current_period_ends_at);
@@ -270,6 +296,49 @@ class SubscriptionService
             'grace_ends_at' => $row->grace_ends_at === null ? null : Carbon::parse($row->grace_ends_at)->toDateString()];
     }
 
+    /**
+     * Usage that would not fit in a plan version: each metric over its limit (null limits are unlimited).
+     *
+     * @return list<array{metric: string, label: string, value: int, limit: int}>
+     */
+    private function limitConflicts(int $organizationId, stdClass $version): array
+    {
+        $conflicts = [];
+        $limits = (array) json_decode((string) $version->limits, true);
+        foreach ($this->usage->measure($organizationId) as $metric => $value) {
+            $limit = $limits[$metric]['value'] ?? null;
+            if (array_key_exists($metric, $limits) && $limit !== null && $value > (int) $limit) {
+                $conflicts[] = ['metric' => $metric, 'label' => UsageMeterService::LABELS[$metric] ?? $metric, 'value' => $value, 'limit' => (int) $limit];
+            }
+        }
+
+        return $conflicts;
+    }
+
+    /** Applies a downgrade scheduled for the renewal, unless the firm now exceeds the new limits (then it is dropped and the owner told). */
+    private function applyScheduledPlan(stdClass $subscription): bool
+    {
+        $price = DB::table('plan_prices')->join('plans', 'plans.id', '=', 'plan_prices.plan_id')->where('plan_prices.id', $subscription->scheduled_plan_price_id)
+            ->first(['plan_prices.*', 'plans.name as plan_name']);
+        $conflicts = $price === null ? [] : $this->limitConflicts((int) $subscription->organization_id, $this->publishedVersion((int) $price->plan_id));
+        if ($price !== null && $conflicts === []) {
+            $this->applyPlan($subscription, (int) $subscription->scheduled_plan_price_id);
+
+            return true;
+        }
+
+        DB::table('subscriptions')->where('id', $subscription->id)->update(['scheduled_plan_price_id' => null, 'scheduled_change_at' => null,
+            'over_limit_since' => $conflicts === [] ? $subscription->over_limit_since : ($subscription->over_limit_since ?? now()), 'updated_at' => now()]);
+        $this->audit->record(null, 'subscription.downgrade_blocked', 'subscriptions', (int) $subscription->id, null,
+            ['plan_price_id' => (int) $subscription->scheduled_plan_price_id, 'conflicts' => $conflicts], 'Cambio programado no aplicado al renovar.', (int) $subscription->organization_id);
+        if ($price !== null) {
+            $this->templates->notifyOrganization((int) $subscription->organization_id, 'downgrade_blocked', ['plan' => (string) $price->plan_name,
+                'conflicts' => implode(', ', array_map(fn (array $c): string => $c['label'].' '.$c['value'].'/'.$c['limit'], $conflicts)), 'plans_url' => url('/office/subscription')]);
+        }
+
+        return false;
+    }
+
     private function applyPlan(stdClass $subscription, int $planPriceId): void
     {
         $price = DB::table('plan_prices')->where('id', $planPriceId)->first() ?? abort(404);
@@ -294,11 +363,6 @@ class SubscriptionService
     private function monthly(string $period, float $amount): float
     {
         return $period === 'annual' ? $amount / 12 : $amount;
-    }
-
-    private function periodAmount(stdClass $price): float
-    {
-        return (float) $price->amount;
     }
 
     /** @return array{description: string, unit_amount: float, plan_version_id: int} */

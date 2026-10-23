@@ -15,6 +15,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\Operations\ReviewObservationService;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkManagement\WorkNotificationService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -172,10 +173,11 @@ class FiscalObligationWorkflowService
                 throw ValidationException::withMessages(['filing_reference' => 'Esa referencia ya registra la presentación de otra obligación de esta empresa.']);
             }
 
+            app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $evidence->getSize(), 'evidence');
             $path = $evidence->storeAs('fiscal-evidence/'.$obligation->organization_id.'/'.$obligation->company_id, Str::uuid().'.'.$evidence->getClientOriginalExtension(), 'local');
             DB::table('fiscal_obligations')->where('id', $obligationId)->update([
                 'status' => 'completed', 'filing_mode' => 'external', 'filing_reference' => $reference, 'filed_on' => $filedOn,
-                'evidence_path' => $path, 'evidence_name' => mb_substr($evidence->getClientOriginalName(), 0, 250),
+                'evidence_path' => $path, 'evidence_name' => mb_substr($evidence->getClientOriginalName(), 0, 250), 'evidence_size_bytes' => (int) $evidence->getSize(),
                 'completed_by' => $actor->id, 'completed_at' => now(), 'metadata' => json_encode(['notes' => $notes], JSON_THROW_ON_ERROR), 'updated_at' => now(),
             ]);
             $this->syncTask($organization->id, $obligationId, 'completed');

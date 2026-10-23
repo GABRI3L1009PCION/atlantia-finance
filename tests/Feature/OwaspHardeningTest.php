@@ -1,8 +1,11 @@
 <?php
 
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use App\Services\Integrations\WebhookUrlGuard;
 use App\Support\CsvCell;
+use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -165,3 +168,21 @@ test('A05: redirects to the login page carry the security headers too', function
     expect((string) $response->headers->get('Content-Security-Policy'))->toContain("default-src 'self'")
         ->and($response->headers->get('X-Frame-Options'))->toBe('SAMEORIGIN');
 });
+
+test('behind the load balancer and Cloudflare the real client address and HTTPS are taken from the trusted proxies only', function () {
+    $this->withoutVite();
+    config(['app.trusted_proxies' => ['10.0.0.0/16'], 'app.trust_cloudflare_proxies' => true]);
+    app()->getProvider(AppServiceProvider::class)?->configureTrustedProxies();
+    Route::get('/__proxy-probe', fn (Request $request) => response()->json(['ip' => $request->ip(), 'secure' => $request->isSecure()]));
+
+    $viaCloudflare = ['REMOTE_ADDR' => '10.0.1.10', 'HTTP_X_FORWARDED_PROTO' => 'https', 'HTTP_X_FORWARDED_PORT' => '443', 'HTTP_X_FORWARDED_FOR' => '190.56.1.20, 172.68.10.4'];
+    $this->withServerVariables($viaCloudflare)->getJson('/__proxy-probe')->assertJson(['ip' => '190.56.1.20', 'secure' => true]);
+    expect($this->withServerVariables($viaCloudflare)->get('/')->headers->get('Strict-Transport-Security'))->toContain('max-age=');
+
+    // A client cannot pose as someone else by sending its own X-Forwarded-For straight to the load balancer.
+    $this->withServerVariables(['REMOTE_ADDR' => '10.0.1.10', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4, 190.56.1.20'])->getJson('/__proxy-probe')->assertJson(['ip' => '190.56.1.20']);
+    // A request that does not come from a trusted proxy keeps its own address.
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_FORWARDED_FOR' => '1.2.3.4', 'HTTP_X_FORWARDED_PROTO' => 'https'])->getJson('http://localhost/__proxy-probe')->assertJson(['ip' => '203.0.113.9', 'secure' => false]);
+});
+
+afterEach(fn () => TrustProxies::flushState());

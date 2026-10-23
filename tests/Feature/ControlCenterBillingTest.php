@@ -213,6 +213,19 @@ test('usage is measured against the effective limits and only the related new ac
         ->and(DB::table('organization_user')->where('organization_id', $organizationId)->count())->toBe(3);
 });
 
+test('evidence attachments count toward the storage limit and block new uploads when it is full', function () {
+    $owner = ccOwner();
+    $organizationId = ccOrganization($owner, 'essential', false, 'Firma Evidencias');
+    $member = User::factory()->create();
+    DB::table('training_certifications')->insert(['organization_id' => $organizationId, 'user_id' => $member->id, 'name' => 'Certificado', 'code' => 'AF-TEST-1', 'issued_on' => now()->toDateString(),
+        'attachment_path' => 'training-certificates/x.pdf', 'attachment_name' => 'x.pdf', 'attachment_size_bytes' => 2147483000, 'created_at' => now(), 'updated_at' => now()]);
+    $usage = app(UsageMeterService::class);
+
+    expect(app(UsageMeterService::class)->measure($organizationId)['storage_bytes'])->toBe(2147483000);
+    expect(fn () => $usage->assertCanAdd($organizationId, 'storage_bytes', 1024 * 1024, 'file'))->toThrow(ValidationException::class);
+    $usage->assertCanAdd($organizationId, 'storage_bytes', 100);
+});
+
 test('feature flags resolve by organization, plan and global value and every change is audited', function () {
     $owner = ccOwner();
     $pilot = ccOrganization($owner, 'professional', false, 'Firma Piloto');
@@ -238,4 +251,43 @@ test('feature flags resolve by organization, plan and global value and every cha
         ->and($flags->enabled('nuevo_cierre'))->toBeTrue()
         ->and(DB::table('platform_audit_events')->where('action', 'feature_flag.changed')->count())->toBe(4)
         ->and(DB::table('platform_audit_events')->where('action', 'feature_flag.created')->count())->toBe(1);
+});
+
+test('switching from a monthly plan to an annual one charges only the remaining days at the new monthly rate', function () {
+    $owner = ccOwner();
+    $organizationId = ccOrganization($owner, 'essential', false, 'Firma Anual');
+    $subscription = ccSubscription($organizationId);
+    $subscriptions = app(SubscriptionService::class);
+
+    $this->travel(15)->days();
+    expect($subscriptions->changePlan($owner, $subscription->id, ccPrice('professional', 'annual'), 'Pasa a anual'))->toBe('applied');
+    $adjustment = (float) DB::table('saas_invoices')->where('organization_id', $organizationId)->where('kind', 'adjustment')->value('total');
+    // About half a month of (Q7,990 / 12 - Q399), never a share of the whole annual price.
+    expect($adjustment)->toBeGreaterThan(100)->toBeLessThan(170);
+
+    $this->travelTo(Carbon\Carbon::parse(ccSubscription($organizationId)->current_period_ends_at)->addHour());
+    $subscriptions->renewDue();
+    $renewal = DB::table('saas_invoices')->where('organization_id', $organizationId)->where('kind', 'recurring')->orderByDesc('id')->first();
+    expect((float) $renewal->total)->toBe(7990.0)
+        ->and(Carbon\Carbon::parse($renewal->period_end)->diffInMonths(Carbon\Carbon::parse($renewal->period_start), true))->toEqual(12.0);
+});
+
+test('a scheduled downgrade the firm no longer fits in is not applied on renewal and the owner is told', function () {
+    $owner = ccOwner();
+    $organizationId = ccOrganization($owner, 'professional', false, 'Firma Creció');
+    $subscription = ccSubscription($organizationId);
+    $subscriptions = app(SubscriptionService::class);
+
+    expect($subscriptions->changePlan($owner, $subscription->id, ccPrice('essential'), 'Reduce su equipo'))->toBe('scheduled');
+    ccAddMembers($organizationId, 4);
+
+    $this->travelTo(now()->addMonth()->addHour());
+    expect($subscriptions->renewDue()['scheduled_applied'])->toBe(0);
+    app(EntitlementResolverService::class)->forget($organizationId);
+    $fresh = ccSubscription($organizationId);
+    expect($fresh->scheduled_plan_price_id)->toBeNull()
+        ->and(DB::table('subscription_items')->where('subscription_id', $subscription->id)->value('plan_price_id'))->toBe(ccPrice('professional'))
+        ->and(app(EntitlementResolverService::class)->limit($organizationId, 'users'))->toBe(8)
+        ->and(DB::table('platform_audit_events')->where('action', 'subscription.downgrade_blocked')->where('entity_id', (string) $subscription->id)->exists())->toBeTrue()
+        ->and((float) DB::table('saas_invoices')->where('organization_id', $organizationId)->orderByDesc('id')->value('total'))->toBe(799.0);
 });

@@ -8,15 +8,10 @@ return [
     'enabled' => (bool) env('LUZMA_ENABLED', true),
 
     /*
-     * Model providers in order of preference, comma separated: "gemini", "ollama". The first that answers is used and
-     * the next one takes over when it fails, so one provider going down never switches Luzma off.
+     * Model providers in order of preference, comma separated. Only the local "ollama" gateway exists: Luzma never sends
+     * data to an external AI service, so any other name is ignored.
      */
     'providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('LUZMA_PROVIDERS', 'ollama'))))),
-
-    'gemini' => [
-        'key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
-    ],
 
     'gateway_url' => env('LUZMA_URL', env('ATLANTIA_AI_URL', 'http://127.0.0.1:8100')),
 

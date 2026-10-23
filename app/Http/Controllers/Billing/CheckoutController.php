@@ -281,7 +281,7 @@ class CheckoutController extends Controller
         DB::transaction(function () use ($subscription, $price, $request): void {
             $lockedSubscription = Subscription::query()
                 ->whereKey($subscription->id)
-                ->whereIn('status', ['incomplete', 'past_due'])
+                ->where('status', 'incomplete')
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -314,7 +314,12 @@ class CheckoutController extends Controller
         return redirect()->route('billing.checkout.show', ['plan_changed' => 1]);
     }
 
-    /** @return array{Organization, Subscription} */
+    /**
+     * The subscription whose plan the owner may still pick freely: only one that has never been paid. A running or overdue
+     * subscription changes plan from "Plan y suscripción", with its proration, limit checks and scheduling.
+     *
+     * @return array{Organization, Subscription}
+     */
     private function pendingSubscription(Request $request): array
     {
         /** @var Organization|null $organization */
@@ -325,11 +330,14 @@ class CheckoutController extends Controller
 
         abort_if($organization === null, 403, 'No tienes una organización para facturar.');
 
-        /** @var Subscription $subscription */
+        /** @var Subscription|null $subscription */
         $subscription = $organization->subscriptions()
-            ->whereIn('status', ['incomplete', 'past_due'])
+            ->where('status', 'incomplete')
             ->latest()
-            ->firstOrFail();
+            ->first();
+        if ($subscription === null) {
+            abort(redirect()->route('billing.checkout.show'));
+        }
 
         return [$organization, $subscription];
     }

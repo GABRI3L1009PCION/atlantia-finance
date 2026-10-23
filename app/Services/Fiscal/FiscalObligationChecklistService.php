@@ -7,6 +7,7 @@ namespace App\Services\Fiscal;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\Platform\UsageMeterService;
 use App\Services\WorkManagement\TaskDependencyService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -135,11 +136,14 @@ class FiscalObligationChecklistService
             throw ValidationException::withMessages(['file' => 'Adjunta el archivo de este requisito.']);
         }
 
+        if ($file !== null) {
+            app(UsageMeterService::class)->assertCanAdd((int) $organization->id, 'storage_bytes', (int) $file->getSize(), 'file');
+        }
         DB::transaction(function () use ($organization, $actor, $obligation, $key, $note, $file): void {
             $path = $file === null ? null : $file->storeAs('fiscal-workpapers/'.$obligation->organization_id.'/'.$obligation->company_id, Str::uuid().'.'.$file->getClientOriginalExtension(), 'local');
             DB::table('fiscal_obligation_checks')->updateOrInsert(['fiscal_obligation_id' => $obligation->id, 'check_key' => $key], [
                 'organization_id' => $organization->id, 'completed_by' => $actor->id, 'completed_at' => now(), 'note' => $note === null ? null : mb_substr($note, 0, 500),
-                ...($path === null ? [] : ['file_path' => $path, 'file_name' => mb_substr((string) $file->getClientOriginalName(), 0, 250)]),
+                ...($path === null ? [] : ['file_path' => $path, 'file_name' => mb_substr((string) $file->getClientOriginalName(), 0, 250), 'file_size_bytes' => (int) $file->getSize()]),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
             $this->accounting->audit($organization, $actor, 'fiscal.check.completed', 'fiscal_obligations', (int) $obligation->id, ['check' => $key, 'note' => $note], (int) $obligation->office_id);

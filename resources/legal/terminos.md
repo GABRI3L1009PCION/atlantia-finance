@@ -86,7 +86,7 @@ Para efectos de estos Términos:
 
 **5.2 Cobro.** Las suscripciones se cobran por adelantado, en forma mensual o anual, mediante la pasarela de pagos Recurrente u otro procesador que Atlantia designe. Atlantia no almacena los datos completos de tarjetas; estos son tratados por el procesador conforme a sus propios términos y estándares de seguridad.
 
-**5.3 Pago de cada período.** Cada pago es un cargo único y Atlantia no realiza cargos automáticos a la tarjeta de la Firma. Antes del vencimiento de cada período, Atlantia enviará por correo electrónico una factura con un enlace de pago para renovarlo. Si el pago no se realiza, la suscripción puede quedar suspendida al vencer el período, conforme a estos Términos. La Firma puede dejar de renovar en cualquier momento simplemente no pagando la siguiente factura, o cancelar su suscripción en cualquier momento desde Plan y suscripción, dentro de la plataforma; la cancelación surte efecto al final del período pagado.
+**5.3 Pago de cada período.** Cada pago es un cargo único y Atlantia no realiza cargos automáticos a la tarjeta de la Firma. Al terminar cada período, Atlantia emite la factura del período siguiente y la envía por correo electrónico con un enlace de pago; la Firma debe pagarla dentro del plazo indicado en ella (5 días, salvo que la factura indique otro). Si no se paga, se aplica la cláusula 5.7. La Firma puede cancelar su suscripción en cualquier momento desde Plan y suscripción, dentro de la plataforma: si está al día, la cancelación surte efecto al final del período pagado; si tiene facturas pendientes, la suscripción termina de inmediato y esas facturas se anulan.
 
 **5.4 Facturación.** Por cada pago, Atlantia emitirá una factura electrónica (DTE) a nombre y NIT indicados por la Firma, conforme al régimen FEL de la Superintendencia de Administración Tributaria (SAT). Es responsabilidad de la Firma mantener correctos sus datos de facturación.
 
@@ -94,7 +94,7 @@ Para efectos de estos Términos:
 
 **5.6 Cambios de precio.** Atlantia puede modificar sus precios avisando con al menos 30 días de anticipación. El nuevo precio aplica desde la siguiente renovación. La Firma que no esté de acuerdo puede cancelar antes de esa fecha.
 
-**5.7 Mora.** Si un cobro es rechazado, Atlantia notificará a la Firma y concederá un plazo de gracia de 7 días. Vencido ese plazo, podrá suspender el acceso en modo de solo lectura hasta regularizar el pago, sin borrar datos. Para Firmas que no sean consumidores, podrán aplicarse intereses moratorios al tipo legal conforme al Código de Comercio.
+**5.7 Mora.** Si una factura no se paga dentro de su plazo, la suscripción queda vencida y Atlantia lo notificará a la Firma. A los 7 días de atraso inicia un período de gracia, durante el cual la Firma conserva el acceso. A los 15 días de atraso Atlantia puede suspender el acceso hasta que se regularice el pago, sin borrar datos; durante la suspensión, el propietario de la Firma puede pagar en línea y el acceso se restablece de inmediato. Para Firmas que no sean consumidores, podrán aplicarse intereses moratorios al tipo legal conforme al Código de Comercio.
 
 **5.8 Reembolsos.** Los pagos no son reembolsables, salvo: (a) lo dispuesto en las cláusulas 3.4, 14 y 16; (b) cobros duplicados o erróneos; o (c) cuando la ley lo exija. Los reembolsos se realizan por el mismo medio de pago y se documentan con la nota de crédito electrónica correspondiente.
 
@@ -282,9 +282,9 @@ La Firma se obliga a:
 
 **18.4 Suspensión.** Atlantia puede suspender el acceso de forma temporal y proporcional ante riesgos de seguridad, uso ilícito o mandato de autoridad, avisando a la Firma salvo prohibición legal.
 
-**18.5 Periodo de exportación.** Terminado el contrato por cualquier causa, la Firma tendrá 90 días calendario de acceso en modo de solo lectura para exportar sus datos. Atlantia apoyará esa exportación en formatos de uso común.
+**18.5 Conservación y exportación.** Terminado el contrato por cualquier causa, Atlantia conserva los Datos del Cliente durante 90 días calendario. Dentro de ese plazo, la Firma puede reactivar su suscripción y recuperar el acceso con todos sus datos, o solicitar a soporte@atlantiasystems.com una exportación en formatos de uso común, que Atlantia entregará sin costo adicional.
 
-**18.6 Eliminación.** Vencido el plazo anterior, Atlantia eliminará de forma segura los Datos del Cliente de sus sistemas activos; las copias en respaldos se eliminan al cumplirse su ciclo de 30 días. Atlantia podrá conservar solo lo que la ley le exija (por ejemplo, sus propias facturas y registros contables) y la evidencia necesaria para defenderse de reclamos.
+**18.6 Eliminación.** Vencido el plazo anterior sin que la Firma reactive su suscripción, Atlantia eliminará de forma segura los Datos del Cliente de sus sistemas activos dentro de los 30 días siguientes, o antes si la Firma lo solicita por escrito; las copias en respaldos se eliminan al cumplirse su ciclo de 30 días. Atlantia podrá conservar solo lo que la ley le exija (por ejemplo, sus propias facturas y registros contables) y la evidencia necesaria para defenderse de reclamos.
 
 **18.7 Subsistencia.** Las cláusulas de confidencialidad, propiedad intelectual, limitación de responsabilidad, indemnidad y ley aplicable subsisten tras la terminación.
 

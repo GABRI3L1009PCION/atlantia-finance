@@ -5,13 +5,18 @@ type Props = {
     cancelAtPeriodEnd: boolean;
     periodEndsAt: string;
     canManage: boolean;
+    endsNow: boolean;
 };
 
-/** The owner stops the renewal (access continues until the end of the paid period) or takes the cancellation back. */
+/**
+ * The owner stops the renewal (access continues until the end of the paid period) or takes the cancellation back. A firm
+ * that is behind on payments has no paid period left: cancelling ends it now and voids its unpaid invoices.
+ */
 export default function CancelSubscription({
     cancelAtPeriodEnd,
     periodEndsAt,
     canManage,
+    endsNow,
 }: Props) {
     const [confirming, setConfirming] = useState(false);
     const [reason, setReason] = useState('');
@@ -60,9 +65,9 @@ export default function CancelSubscription({
         <section className="rounded-2xl border border-[#e4dbd6] bg-white p-5">
             <h2 className="text-lg font-black">Cancelar suscripción</h2>
             <p className="mt-1 text-sm text-slate-600">
-                Si ya no vas a usar Atlantia, puedes dejar de renovar cuando
-                quieras, sin penalización. Seguirás teniendo acceso hasta el{' '}
-                {periodEndsAt}.
+                {endsNow
+                    ? 'Tu suscripción tiene pagos pendientes. Si cancelas, termina hoy y se anulan sus facturas pendientes; tus datos se conservan si decides volver.'
+                    : `Si ya no vas a usar Atlantia, puedes dejar de renovar cuando quieras, sin penalización. Seguirás teniendo acceso hasta el ${periodEndsAt}.`}
             </p>
             {confirming ? (
                 <div className="mt-3 space-y-3">
