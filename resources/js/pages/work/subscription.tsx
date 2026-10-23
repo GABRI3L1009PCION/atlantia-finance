@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import CancelSubscription from '@/components/subscription/cancel-subscription';
 
 type Props = {
     plan: {
@@ -457,6 +458,12 @@ export default function Subscription({
                                     })}
                                 </div>
                             </section>
+
+                            <CancelSubscription
+                                cancelAtPeriodEnd={plan.cancel_at_period_end}
+                                periodEndsAt={formatDate(plan.period_ends_at)}
+                                canManage={canChangePlan}
+                            />
                         </div>
 
                         <div className="space-y-4">

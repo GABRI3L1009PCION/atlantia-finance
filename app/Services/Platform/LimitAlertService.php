@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
 class LimitAlertService
 {
     /** Resources that matter to the owner and the label used in the message. */
-    private const METRICS = ['offices' => 'oficinas', 'users' => 'usuarios', 'active_cases' => 'empresas cliente', 'storage_bytes' => 'almacenamiento', 'ai_queries' => 'consultas de Luzma este mes'];
+    private const METRICS = ['offices' => 'oficinas', 'users' => 'usuarios', 'active_cases' => 'empresas cliente', 'storage_bytes' => 'almacenamiento', 'ai_queries' => 'consultas de Luzma este mes',
+        'api_requests' => 'solicitudes de API este mes'];
 
     private const THRESHOLDS = [95, 80];
 
@@ -46,7 +47,7 @@ class LimitAlertService
                 continue;
             }
             // The resources that reset every month (Luzma) are announced once a month; the others once per billing period.
-            $key = 'limit-alert:'.$organizationId.':'.$row['metric'].':'.$threshold.':'.($row['metric'] === 'ai_queries' ? now()->format('Y-m') : $period);
+            $key = 'limit-alert:'.$organizationId.':'.$row['metric'].':'.$threshold.':'.(in_array($row['metric'], ['ai_queries', 'api_requests'], true) ? now()->format('Y-m') : $period);
             if (! Cache::add($key, true, now()->addDays(400))) {
                 continue;
             }

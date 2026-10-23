@@ -80,6 +80,32 @@ class SubscriptionController extends Controller
         return back()->with('workspace_notice', 'Plan cambiado.');
     }
 
+    /** POST office/subscription/cancel: the owner stops renewing; access continues until the end of the paid period. */
+    public function cancel(Request $request): RedirectResponse
+    {
+        [, $subscriptionId] = $this->ownerSubscription($request);
+        $data = $request->validate(['reason' => ['nullable', 'string', 'max:300']]);
+        /** @var User $user */
+        $user = $request->user();
+        $reason = 'Cancelación solicitada por el propietario de la firma.'.(filled($data['reason'] ?? null) ? ' Motivo: '.$data['reason'] : '');
+
+        $this->tenancy->runAsSystem(fn () => $this->subscriptions->cancel($user, $subscriptionId, false, $reason));
+
+        return back()->with('workspace_notice', 'Tu suscripción no se renovará. Seguirás usando Atlantia hasta el final del período pagado.');
+    }
+
+    /** POST office/subscription/keep: the owner changes their mind before the period ends. */
+    public function keep(Request $request): RedirectResponse
+    {
+        [, $subscriptionId] = $this->ownerSubscription($request);
+        /** @var User $user */
+        $user = $request->user();
+
+        $this->tenancy->runAsSystem(fn () => $this->subscriptions->undoCancellation($user, $subscriptionId, 'El propietario conservó la suscripción.'));
+
+        return back()->with('workspace_notice', 'Listo, tu suscripción sigue activa y se renovará con normalidad.');
+    }
+
     private function isOwner(Organization $organization, ?User $user): bool
     {
         return $user !== null && $organization->users()->whereKey($user->id)->wherePivot('role', 'owner')->wherePivot('status', 'active')->exists();
@@ -96,8 +122,8 @@ class SubscriptionController extends Controller
     private function ownerSubscription(Request $request): array
     {
         $organization = $this->context->organization($request->user());
-        abort_unless($this->isOwner($organization, $request->user()), 403, 'Solo el propietario de la firma puede cambiar el plan.');
-        $subscriptionId = $this->runningSubscriptionId($organization) ?? abort(409, 'La firma no tiene una suscripción vigente que cambiar.');
+        abort_unless($this->isOwner($organization, $request->user()), 403, 'Solo el propietario de la firma puede administrar la suscripción.');
+        $subscriptionId = $this->runningSubscriptionId($organization) ?? abort(409, 'La firma no tiene una suscripción vigente.');
 
         return [$organization, $subscriptionId];
     }

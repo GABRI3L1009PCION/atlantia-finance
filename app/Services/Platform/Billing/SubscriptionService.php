@@ -153,6 +153,19 @@ class SubscriptionService
         });
     }
 
+    /** Takes back a cancellation scheduled for the end of the period while the subscription is still running. */
+    public function undoCancellation(User $actor, int $subscriptionId, string $reason): void
+    {
+        DB::transaction(function () use ($actor, $subscriptionId, $reason): void {
+            $subscription = DB::table('subscriptions')->where('id', $subscriptionId)->lockForUpdate()->first() ?? abort(404);
+            if (! (bool) $subscription->cancel_at_period_end || ! in_array($subscription->status, ['active', 'trialing'], true)) {
+                throw ValidationException::withMessages(['subscription' => 'La suscripción no tiene una cancelación pendiente.']);
+            }
+            DB::table('subscriptions')->where('id', $subscriptionId)->update(['cancel_at_period_end' => false, 'canceled_at' => null, 'cancel_reason' => null, 'cancel_requested_by' => null, 'updated_at' => now()]);
+            $this->audit->record($actor, 'subscription.cancellation_undone', 'subscriptions', $subscriptionId, ['cancel_at_period_end' => true], ['cancel_at_period_end' => false], $reason, (int) $subscription->organization_id);
+        });
+    }
+
     public function pause(User $actor, int $subscriptionId, string $reason): void
     {
         $subscription = DB::table('subscriptions')->where('id', $subscriptionId)->first() ?? abort(404);

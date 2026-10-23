@@ -119,6 +119,7 @@ class PlanCatalogSeeder extends Seeder
                         'active_cases' => [5000, 'cases'],
                         'storage_bytes' => [128849018880, 'bytes'],
                         'ai_queries' => [1500, 'queries/month'],
+                        'api_requests' => [100000, 'requests/month'],
                     ],
                     'features' => [
                         'basic_accounting',
@@ -159,6 +160,7 @@ class PlanCatalogSeeder extends Seeder
                         'active_cases' => [null, 'cases'],
                         'storage_bytes' => [null, 'bytes'],
                         'ai_queries' => [null, 'queries/month'],
+                        'api_requests' => [null, 'requests/month'],
                     ],
                     'features' => [
                         'basic_accounting',

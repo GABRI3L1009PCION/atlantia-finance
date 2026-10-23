@@ -4,6 +4,7 @@ use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\User;
 use App\Services\Integrations\WebhookDeliveryService;
+use App\Services\Platform\EntitlementResolverService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Http\Client\Request as HttpRequest;
@@ -295,3 +296,39 @@ function apiToken(array $f, User $user, array $abilities, mixed $expiresAt = nul
 
     return $plain;
 }
+
+test('el plan limita las solicitudes de API del mes y avisa cuándo se restablece', function () {
+    $f = apiFixture();
+    $this->withoutMiddleware(ThrottleRequests::class);
+    $token = apiToken($f, $f['owner'], ['companies:read']);
+    foreach (DB::table('plan_versions')->get() as $version) {
+        $limits = json_decode((string) $version->limits, true);
+        $limits['api_requests'] = ['value' => 2, 'unit' => 'requests/month', 'warning' => 80, 'high' => 95, 'enforcement' => 'hard'];
+        DB::table('plan_versions')->where('id', $version->id)->update(['limits' => json_encode($limits)]);
+    }
+    app(EntitlementResolverService::class)->forget((int) DB::table('organizations')->value('id'));
+    auth()->logout();
+    $organizationId = (int) DB::table('api_tokens')->value('organization_id');
+    $tokenId = (int) DB::table('api_tokens')->value('id');
+
+    DB::table('api_request_logs')->insert(['organization_id' => $organizationId, 'api_token_id' => $tokenId, 'method' => 'GET', 'path' => '/api/v1/me', 'status' => 200, 'ip' => '127.0.0.1', 'duration_ms' => 5, 'created_at' => now()]);
+    $this->withToken($token)->getJson('/api/v1/companies')->assertOk();
+
+    Cache::flush();
+    $this->withToken($token)->getJson('/api/v1/companies')->assertStatus(429)->assertJsonPath('error.code', 'monthly_quota_exceeded');
+});
+
+test('un plan cuya versión no define cuota de API no la limita', function () {
+    $f = apiFixture();
+    $this->withoutMiddleware(ThrottleRequests::class);
+    $token = apiToken($f, $f['owner'], ['companies:read']);
+    foreach (DB::table('plan_versions')->get() as $version) {
+        $limits = json_decode((string) $version->limits, true);
+        unset($limits['api_requests']);
+        DB::table('plan_versions')->where('id', $version->id)->update(['limits' => json_encode($limits)]);
+    }
+    app(EntitlementResolverService::class)->forget((int) DB::table('organizations')->value('id'));
+    auth()->logout();
+
+    $this->withToken($token)->getJson('/api/v1/companies')->assertOk();
+});

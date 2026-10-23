@@ -7,6 +7,7 @@ namespace App\Http\Middleware;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Integrations\ApiTokenService;
+use App\Services\Platform\EntitlementResolverService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkspaceContext;
 use App\Support\PlatformStatus;
@@ -15,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -67,6 +69,12 @@ class AuthenticateApiToken
             return $this->error(403, 'plan_feature_missing', 'El acceso a la API no está incluido en el plan activo.');
         }
 
+        // A plan version without this metric (created before the quota existed) is not limited.
+        $quota = app(EntitlementResolverService::class)->resolve($organization)['limits']['api_requests']['value'] ?? null;
+        if ($quota !== null && $this->requestsThisMonth((int) $organization->id) >= $quota) {
+            return $this->error(429, 'monthly_quota_exceeded', 'Tu plan alcanzó el límite mensual de solicitudes de API. Se restablece el '.now()->addMonthNoOverflow()->startOfMonth()->format('d/m/Y').'; para ampliarlo, cambia de plan o escribe a soporte.');
+        }
+
         Auth::setUser($user);
         $request->setUserResolver(fn () => $user);
         $request->attributes->set('api_token', $token);
@@ -90,6 +98,13 @@ class AuthenticateApiToken
             $this->tenancy->restore($this->previousState);
             $this->previousState = null;
         }
+    }
+
+    /** Calls already served this month (rejected ones do not count); refreshed every half minute so the check stays cheap. */
+    private function requestsThisMonth(int $organizationId): int
+    {
+        return (int) Cache::remember('api-requests:'.$organizationId.':'.now()->format('Y-m'), 30, fn (): int => DB::table('api_request_logs')
+            ->where('api_request_logs.organization_id', $organizationId)->where('created_at', '>=', now()->startOfMonth())->where('status', '<>', 429)->count());
     }
 
     private function error(int $status, string $code, string $message): JsonResponse
