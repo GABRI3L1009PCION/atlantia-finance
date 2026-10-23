@@ -106,6 +106,16 @@ class IntegrationConnectionService
         ],
     ];
 
+    /**
+     * The connections a firm is offered: the catalog minus the ones kept hidden until a customer needs them.
+     *
+     * @return array<string, array{label: string, category: string, description: string, oauth?: bool, builtin?: bool, fields: list<array{key: string, label: string, type: string, secret?: bool, required?: bool, placeholder?: string, options?: list<string>}>}>
+     */
+    public static function available(): array
+    {
+        return array_diff_key(self::PROVIDERS, array_flip((array) config('integrations.hidden_providers', [])));
+    }
+
     public function __construct(private WebhookUrlGuard $guard, private AccountingService $accounting, private TenantDatabaseContext $tenancy) {}
 
     /**
@@ -116,7 +126,7 @@ class IntegrationConnectionService
         $rows = DB::table('integration_connections')->where('organization_id', $organization->id)->get()->keyBy('provider');
         $states = [];
 
-        foreach (self::PROVIDERS as $provider => $definition) {
+        foreach (self::available() as $provider => $definition) {
             $row = $rows->get($provider);
             $config = $row ? $this->decode($row->config) : [];
             $values = [];
@@ -147,7 +157,7 @@ class IntegrationConnectionService
     /** @param array<string, mixed> $input */
     public function connect(Organization $organization, User $actor, string $provider, array $input): void
     {
-        $definition = self::PROVIDERS[$provider] ?? abort(404);
+        $definition = self::available()[$provider] ?? abort(404);
         $existing = DB::table('integration_connections')->where('organization_id', $organization->id)->where('provider', $provider)->first();
         $previous = $existing ? $this->decode($existing->config) : [];
         $config = [];
