@@ -2,6 +2,7 @@
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Platform\LegalDocumentService;
 use Database\Seeders\LegalDocumentSeeder;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Support\Facades\Cache;
@@ -111,4 +112,13 @@ test('una firma cliente no puede editar los documentos legales', function () {
 
     expect($this->post('/control-center/legal/terms', ['title' => 'X', 'body' => str_repeat('Hackeado. ', 10)])->status())->toBeIn([403, 404]);
     expect(DB::table('legal_documents')->where('slug', 'terms')->count())->toBe(1);
+});
+
+test('los textos legales que se publican no llevan marcadores ni avisos de borrador', function () {
+    foreach (array_keys(LegalDocumentService::DOCUMENTS) as $slug) {
+        $text = LegalDocumentService::starterText($slug);
+
+        expect($text)->not->toMatch('/\[[A-Za-zÁÉÍÓÚáéíóúñ ,]{4,60}\]/u')
+            ->and(mb_strtolower($text))->not->toContain('borrador sujeto');
+    }
 });
