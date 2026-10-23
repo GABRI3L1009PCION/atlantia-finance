@@ -43,6 +43,27 @@ test('a plan without payroll says so and names the plan that has it', function (
         ->and(collect($texts('enterprise'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty();
 });
 
+test('every plan includes electronic invoicing (FEL)', function () {
+    foreach (DB::table('plans')->pluck('id', 'code') as $code => $planId) {
+        $entitlements = json_decode((string) DB::table('plan_versions')->where('plan_id', $planId)->where('status', 'published')->value('entitlements'), true);
+        expect($entitlements)->toContain('basic_invoicing')->toContain('fel');
+    }
+});
+
+test('catalogs loaded before FEL was in every plan are brought up to date by the migration', function () {
+    $plan = DB::table('plans')->where('code', 'essential')->first();
+    $version = DB::table('plan_versions')->where('plan_id', $plan->id)->where('status', 'published')->first();
+    DB::table('plan_versions')->where('id', $version->id)->update(['entitlements' => json_encode(array_values(array_diff(json_decode($version->entitlements, true), ['fel'])))]);
+    DB::table('feature_plan')->where('plan_id', $plan->id)->where('feature_id', DB::table('features')->where('code', 'fel')->value('id'))->delete();
+    DB::table('plans')->where('id', $plan->id)->update(['highlights' => json_encode(['Contabilidad y facturación básica', 'Otra línea'])]);
+
+    (require database_path('migrations/2026_10_23_193110_include_fel_in_every_plan.php'))->up();
+
+    expect(json_decode((string) DB::table('plan_versions')->where('id', $version->id)->value('entitlements'), true))->toContain('fel')
+        ->and(DB::table('feature_plan')->where('plan_id', $plan->id)->where('feature_id', DB::table('features')->where('code', 'fel')->value('id'))->exists())->toBeTrue()
+        ->and(json_decode((string) DB::table('plans')->where('id', $plan->id)->value('highlights'), true))->toBe(['Contabilidad y facturación electrónica (FEL)', 'Otra línea']);
+});
+
 test('a plan without the VAT books says so and names the plan that has them', function () {
     $catalog = collect(app(PublicPlanCatalog::class)->plans())->keyBy('code');
     $texts = fn (string $code): array => collect($catalog[$code]['features'])->pluck('text')->all();

@@ -32,6 +32,7 @@ class PlanCatalogSeeder extends Seeder
                     'features' => [
                         'basic_accounting',
                         'basic_invoicing',
+                        'fel',
                         'case_management',
                         'task_management',
                         'obligation_management',
@@ -293,9 +294,9 @@ class PlanCatalogSeeder extends Seeder
     {
         $presentation = [
             'essential' => ['tagline' => 'Para comenzar con orden',
-                'highlights' => ['Contabilidad y facturación básica', 'Expedientes, tareas y obligaciones', 'Seguridad, auditoría y copias de respaldo']],
+                'highlights' => ['Contabilidad y facturación electrónica (FEL)', 'Expedientes, tareas y obligaciones', 'Seguridad, auditoría y copias de respaldo']],
             'professional' => ['tagline' => 'Para oficinas establecidas', 'recommended' => true,
-                'highlights' => ['Contabilidad, reportes e inventario', 'Roles, aprobaciones y FEL', 'Gestión de documentos y soporte prioritario']],
+                'highlights' => ['Contabilidad, reportes e inventario', 'Roles, permisos y flujos de aprobación', 'Gestión de documentos y soporte prioritario']],
             'multi_office' => ['tagline' => 'Para propietarios de varias sedes',
                 'highlights' => ['Contabilidad e inventario multi-oficina', 'Panel consolidado y permisos por sede', 'Auditoría central y capacitación inicial']],
             'corporate' => ['tagline' => 'Para firmas de gran escala',
