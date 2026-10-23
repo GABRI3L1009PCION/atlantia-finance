@@ -891,6 +891,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/subscription', [SubscriptionController::class, 'show'])->name('office.subscription');
         Route::get('office/subscription/plan-preview', [SubscriptionController::class, 'previewPlan'])->middleware('throttle:30,1')->name('office.subscription.preview');
         Route::post('office/subscription/plan', [SubscriptionController::class, 'changePlan'])->middleware('throttle:10,1')->name('office.subscription.plan');
+        Route::post('office/subscription/cancel', [SubscriptionController::class, 'cancel'])->middleware('throttle:5,1')->name('office.subscription.cancel');
+        Route::post('office/subscription/keep', [SubscriptionController::class, 'keep'])->middleware('throttle:5,1')->name('office.subscription.keep');
         Route::get('office/firm-profile', [FirmProfileController::class, 'show'])->name('office.firmProfile');
         Route::patch('office/firm-profile', [FirmProfileController::class, 'update'])->middleware('throttle:20,1')->name('office.firmProfile.update');
         Route::post('office/firm-profile/logo', [FirmProfileController::class, 'uploadLogo'])->middleware('throttle:10,1')->name('office.firmProfile.logo.upload');

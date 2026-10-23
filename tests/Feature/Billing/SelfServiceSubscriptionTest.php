@@ -123,3 +123,41 @@ test('el plan Empresarial no se puede contratar desde el registro', function () 
 
     $this->assertDatabaseMissing('users', ['email' => 'grande@example.com']);
 });
+
+test('el dueño cancela su suscripción: sigue activa hasta el final del período y puede arrepentirse', function () {
+    [$owner, $organization] = selfServiceFirm('essential');
+    $subscriptionId = (int) DB::table('subscriptions')->where('organization_id', $organization->id)->value('id');
+
+    $this->actingAs($owner)->post(route('office.subscription.cancel'), ['reason' => 'Cerramos el despacho'])->assertSessionHasNoErrors();
+
+    $subscription = DB::table('subscriptions')->where('id', $subscriptionId)->first();
+    expect($subscription->status)->toBe('active')->and((bool) $subscription->cancel_at_period_end)->toBeTrue()->and($subscription->cancel_reason)->toContain('Cerramos el despacho')
+        ->and($organization->fresh()->status)->toBe('active');
+    expect(app(TenantDatabaseContext::class)->runAsSystem(fn () => DB::table('platform_audit_events')->where('action', 'subscription.cancelled')->where('entity_id', (string) $subscriptionId)->exists()))->toBeTrue();
+
+    $this->post(route('office.subscription.keep'))->assertSessionHasNoErrors();
+    $subscription = DB::table('subscriptions')->where('id', $subscriptionId)->first();
+    expect((bool) $subscription->cancel_at_period_end)->toBeFalse()->and($subscription->cancel_reason)->toBeNull();
+});
+
+test('al terminar el período una suscripción cancelada se cierra y no genera otra factura', function () {
+    [$owner, $organization] = selfServiceFirm('essential');
+    $subscriptionId = (int) DB::table('subscriptions')->where('organization_id', $organization->id)->value('id');
+    $this->actingAs($owner)->post(route('office.subscription.cancel'))->assertSessionHasNoErrors();
+    $invoices = app(TenantDatabaseContext::class)->runAsSystem(fn () => DB::table('saas_invoices')->where('organization_id', $organization->id)->count());
+
+    $this->travel(2)->months();
+    app(TenantDatabaseContext::class)->runAsSystem(fn () => app(SubscriptionService::class)->renewDue());
+
+    expect(DB::table('subscriptions')->where('id', $subscriptionId)->value('status'))->toBe('cancelled')
+        ->and(app(TenantDatabaseContext::class)->runAsSystem(fn () => DB::table('saas_invoices')->where('organization_id', $organization->id)->count()))->toBe($invoices);
+});
+
+test('solo el propietario puede cancelar la suscripción y no se cancela dos veces', function () {
+    [$owner, $organization] = selfServiceFirm('essential');
+    $member = User::factory()->create();
+    $organization->users()->attach($member->id, ['role' => 'member', 'status' => 'active', 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+
+    $this->actingAs($member)->post(route('office.subscription.cancel'))->assertForbidden();
+    $this->actingAs($owner)->post(route('office.subscription.keep'))->assertSessionHasErrors('subscription');
+});

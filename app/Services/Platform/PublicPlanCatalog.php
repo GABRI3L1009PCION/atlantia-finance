@@ -131,6 +131,11 @@ class PublicPlanCatalog
                 'hint' => 'Luzma es el asistente con IA de Atlantia Finance: cada pregunta que le haces cuenta como una consulta.'];
         }
 
+        if (array_key_exists('api_requests', $limits)) {
+            $requests = $value('api_requests');
+            $result[] = ['text' => $requests === null ? 'Solicitudes de API a medida' : $number($requests).' solicitudes de API al mes', 'hint' => null];
+        }
+
         return $result;
     }
 }
