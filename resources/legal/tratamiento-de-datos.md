@@ -1,5 +1,3 @@
-_[BORRADOR sujeto a revisión del abogado antes de publicarse como definitivo.]_
-
 Este documento regula cómo Atlantia Finance trata los datos personales que la Firma y sus Empresas Cliente cargan en la Plataforma. Complementa los Términos y Condiciones (cláusula 9) y la Política de Privacidad.
 
 ## 1. Roles

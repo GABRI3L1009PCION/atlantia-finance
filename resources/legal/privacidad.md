@@ -1,5 +1,3 @@
-_[BORRADOR sujeto a revisión del abogado antes de publicarse como definitivo.]_
-
 Esta Política de Privacidad explica qué datos personales trata Atlantia Finance, para qué los usa y cómo puedes ejercer tus derechos. Forma parte de los Términos y Condiciones.
 
 ## 1. Responsable
