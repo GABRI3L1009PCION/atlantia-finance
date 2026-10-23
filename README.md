@@ -34,6 +34,7 @@
 - [Despliegue](#despliegue)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Documentación adicional](#documentación-adicional)
+- [Licencia](#licencia)
 
 ---
 
@@ -328,6 +329,14 @@ atlantia-finance/
 | [Matriz de trazabilidad](docs/quality/purchases-traceability-matrix.md) | Requisito → prueba → evidencia |
 | [Aceptación de staging](docs/quality/staging-acceptance.md) | Evidencia de controles técnicos |
 | [Runbook de staging](docs/deployment/staging-runbook.md) | Procedimiento de despliegue y respaldo |
+
+---
+
+## Licencia
+
+**Software propietario.** © 2026 Atlantia Systems. Todos los derechos reservados.
+
+Queda prohibido copiar, clonar, modificar, distribuir, vender o crear obras derivadas de este software sin autorización previa y por escrito de Atlantia Systems. Consulta el archivo [LICENSE](LICENSE) para conocer los términos completos.
 
 ---
 
