@@ -194,7 +194,7 @@ test('plan selector lists active plans and the current selection', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('billing/plans')
-            ->has('plans', 5)
+            ->has('plans', 4)
             ->where('plans.1.code', 'professional')
             ->where('plans.1.prices.0.selected', true));
 });

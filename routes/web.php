@@ -49,6 +49,7 @@ use App\Http\Controllers\PayablesController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ProfitabilityController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\QuoteRequestController;
 use App\Http\Controllers\ReceivablesController;
 use App\Http\Controllers\RegionalController;
 use App\Http\Controllers\RevenueController;
@@ -70,6 +71,8 @@ use App\Services\Platform\LegalDocumentService;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', WelcomeController::class)->name('home');
+Route::get('cotizacion', [QuoteRequestController::class, 'create'])->middleware('throttle:60,1')->name('quote.create');
+Route::post('cotizacion', [QuoteRequestController::class, 'store'])->middleware('throttle:5,10')->name('quote.store');
 
 Route::post('webhooks/recurrente', RecurrenteWebhookController::class)->middleware(['throttle:120,1', 'tenancy.system'])->name('webhooks.recurrente');
 Route::get('calendar/{token}.ics', [CalendarFeedController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware(['throttle:60,1', 'tenancy.system'])->name('calendar.feed');

@@ -47,6 +47,10 @@ class CreateNewUser implements CreatesNewUsers
             'terms' => ['accepted'],
         ])->validate();
 
+        if (in_array($input['plan'], (array) config('atlantia-plans.contact_only', []), true)) {
+            throw ValidationException::withMessages(['plan' => 'El plan Empresarial se cotiza a la medida: escríbenos por WhatsApp o a soporte@atlantiasystems.com.']);
+        }
+
         $planPrice = PlanPrice::query()
             ->with('plan')
             ->where('billing_period', $input['billing_period'])

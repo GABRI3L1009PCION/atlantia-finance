@@ -19,6 +19,7 @@ createInertiaApp({
             case name === 'work/certificate':
             case name === 'legal/show':
             case name === 'legal/accept':
+            case name === 'quote/request':
                 return null;
             case name === 'billing/checkout':
             case name === 'billing/plans':

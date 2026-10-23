@@ -3,6 +3,10 @@
 return [
     'default' => 'essential',
     'billing_periods' => ['monthly', 'annual'],
+    // Plans that are quoted and set up with the team: they cannot be bought, switched to or reactivated on one's own.
+    'contact_only' => ['enterprise'],
+    // Where the quote requests for those plans are sent.
+    'quote_email' => env('QUOTE_REQUEST_EMAIL', 'soporte@atlantiasystems.com'),
     'catalog' => [
         'essential' => [
             'name' => 'Esencial',

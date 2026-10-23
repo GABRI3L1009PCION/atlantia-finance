@@ -106,7 +106,7 @@ class SubscriptionController extends Controller
     {
         $data = $request->validate(['plan_price_id' => ['required', 'integer']]);
         $valid = $this->tenancy->runAsSystem(fn (): bool => DB::table('plan_prices')->join('plans', 'plans.id', '=', 'plan_prices.plan_id')
-            ->where('plan_prices.id', $data['plan_price_id'])->where('plan_prices.is_active', true)->where('plan_prices.currency_code', 'GTQ')->where('plans.is_active', true)->exists());
+            ->where('plan_prices.id', $data['plan_price_id'])->where('plan_prices.is_active', true)->where('plan_prices.currency_code', 'GTQ')->where('plans.is_active', true)->whereNotIn('plans.code', (array) config('atlantia-plans.contact_only', []))->exists());
         if (! $valid) {
             throw ValidationException::withMessages(['plan_price_id' => 'El plan elegido no está disponible.']);
         }

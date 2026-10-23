@@ -35,6 +35,7 @@ export type PublicPlan = {
     recommended: boolean;
     price_prefix: string | null;
     cta_label: string | null;
+    contact_only: boolean;
     features: { text: string; hint: string | null }[];
 };
 
@@ -284,6 +285,8 @@ function PlanCard3D({
         }
     };
 
+    const ctaClass = `group/btn flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-[14px] font-bold transition duration-200 hover:-translate-y-0.5 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4A44C] active:scale-[0.97] ${dark ? 'bg-[linear-gradient(180deg,#f8e3ad,#d9ab55)] text-[#3d0000] shadow-[0_12px_24px_-10px_rgba(212,164,76,0.8)] hover:shadow-[0_16px_30px_-10px_rgba(212,164,76,0.9)]' : 'border border-[#e4d3cf] bg-white text-[#0C1424] shadow-sm hover:border-[#c99b95] hover:shadow-[0_12px_24px_-14px_rgba(101,0,0,0.45)]'}`;
+
     return (
         <article
             ref={cardRef}
@@ -402,13 +405,20 @@ function PlanCard3D({
                     transition: `opacity 500ms ${show ? T.buttons : 0}ms`,
                 }}
             >
-                <Link
-                    href={register({ query: { plan: plan.code, billing } })}
-                    className={`group/btn flex items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-[14px] font-bold transition duration-200 hover:-translate-y-0.5 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4A44C] active:scale-[0.97] ${dark ? 'bg-[linear-gradient(180deg,#f8e3ad,#d9ab55)] text-[#3d0000] shadow-[0_12px_24px_-10px_rgba(212,164,76,0.8)] hover:shadow-[0_16px_30px_-10px_rgba(212,164,76,0.9)]' : 'border border-[#e4d3cf] bg-white text-[#0C1424] shadow-sm hover:border-[#c99b95] hover:shadow-[0_12px_24px_-14px_rgba(101,0,0,0.45)]'}`}
-                >
-                    {plan.cta_label ?? 'Elegir este plan'}
-                    <ArrowRight className="size-4 transition-transform duration-200 group-hover/btn:translate-x-[5px]" />
-                </Link>
+                {plan.contact_only ? (
+                    <Link href="/cotizacion" className={ctaClass}>
+                        {plan.cta_label ?? 'Solicitar cotización'}
+                        <ArrowRight className="size-4 transition-transform duration-200 group-hover/btn:translate-x-[5px]" />
+                    </Link>
+                ) : (
+                    <Link
+                        href={register({ query: { plan: plan.code, billing } })}
+                        className={ctaClass}
+                    >
+                        {plan.cta_label ?? 'Elegir este plan'}
+                        <ArrowRight className="size-4 transition-transform duration-200 group-hover/btn:translate-x-[5px]" />
+                    </Link>
+                )}
             </div>
         </article>
     );
