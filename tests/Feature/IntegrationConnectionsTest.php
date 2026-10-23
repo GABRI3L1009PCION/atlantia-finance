@@ -76,6 +76,7 @@ test('the private calendar link lists the firm deadlines, can be renewed, and st
 });
 
 test('HubSpot is verified with the office token and receives the prospects that have an email', function () {
+    config(['integrations.hidden_providers' => []]);
     Http::fake(['api.hubapi.com/*' => Http::response(['results' => []])]);
     $f = integrationFixture();
     DB::table('crm_prospects')->insert(['organization_id' => $f['org']->id, 'name' => 'Hoteles del Lago', 'contact_name' => 'Ana', 'contact_email' => 'ana@hotel.example.com', 'stage' => 'proposal', 'estimated_value_cents' => 500000, 'created_at' => now(), 'updated_at' => now()]);
@@ -169,3 +170,17 @@ function integrationMember(array $f, string $role): User
 
     return $user;
 }
+
+test('las conexiones que no se ofrecen al lanzar no aparecen ni se pueden usar por la dirección directa', function () {
+    $f = integrationFixture();
+    $this->actingAs($f['admin']);
+
+    $offered = collect(IntegrationConnectionService::available())->keys()->all();
+    expect($offered)->toContain('slack', 'teams', 'calendar', 'google_drive', 'smtp', 'luzma')->not->toContain('gmail', 'outlook', 'dropbox', 'hubspot');
+
+    $this->post(route('integrations.connections.connect', 'hubspot'), ['access_token' => 'pat-na1-test-token'])->assertNotFound();
+    $this->post(route('integrations.connections.connect', 'dropbox'), ['client_id' => 'a', 'client_secret' => 'b'])->assertNotFound();
+    $this->get(route('integrations.oauth.redirect', 'gmail'))->assertNotFound();
+    $this->post(route('integrations.connections.hubspot.sync'))->assertNotFound();
+    expect(DB::table('integration_connections')->count())->toBe(0);
+});

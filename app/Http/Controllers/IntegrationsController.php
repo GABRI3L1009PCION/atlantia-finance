@@ -172,6 +172,7 @@ class IntegrationsController extends Controller
 
     public function connect(Request $request, string $provider, IntegrationConnectionService $connections): RedirectResponse
     {
+        abort_unless(isset(IntegrationConnectionService::available()[$provider]), 404);
         [$organization, $user] = $this->resolveManager($request);
         $connections->connect($organization, $user, $provider, $request->all());
 
@@ -186,6 +187,7 @@ class IntegrationsController extends Controller
 
     public function testConnection(Request $request, string $provider, IntegrationConnectionService $connections): RedirectResponse
     {
+        abort_unless(isset(IntegrationConnectionService::available()[$provider]), 404);
         [$organization, $user] = $this->resolveManager($request);
 
         return back()->with('workspace_notice', $connections->test($organization, $user, $provider));
@@ -193,6 +195,7 @@ class IntegrationsController extends Controller
 
     public function oauthRedirect(Request $request, string $provider, IntegrationOAuthService $oauth): RedirectResponse
     {
+        abort_unless(isset(IntegrationConnectionService::available()[$provider]), 404);
         [$organization, $user] = $this->resolveManager($request);
 
         return redirect()->away($oauth->authorizationUrl($organization, $user, $provider));
@@ -200,6 +203,7 @@ class IntegrationsController extends Controller
 
     public function oauthCallback(Request $request, string $provider, IntegrationOAuthService $oauth): RedirectResponse
     {
+        abort_unless(isset(IntegrationConnectionService::available()[$provider]), 404);
         [$organization, $user] = $this->resolveManager($request);
 
         if ($request->filled('error')) {
@@ -215,6 +219,7 @@ class IntegrationsController extends Controller
 
     public function backup(Request $request, string $provider, IntegrationConnectionService $connections): RedirectResponse
     {
+        abort_unless(isset(IntegrationConnectionService::available()[$provider]), 404);
         [$organization, $user] = $this->resolveManager($request);
 
         return back()->with('workspace_notice', $connections->backup($organization, $user, $provider));
@@ -222,6 +227,7 @@ class IntegrationsController extends Controller
 
     public function syncHubspot(Request $request, IntegrationConnectionService $connections): RedirectResponse
     {
+        abort_unless(isset(IntegrationConnectionService::available()['hubspot']), 404);
         [$organization, $user] = $this->resolveManager($request);
 
         return back()->with('workspace_notice', $connections->syncHubspot($organization, $user));
@@ -237,6 +243,7 @@ class IntegrationsController extends Controller
 
     public function disconnect(Request $request, string $provider, IntegrationConnectionService $connections): RedirectResponse
     {
+        abort_unless(isset(IntegrationConnectionService::available()[$provider]), 404);
         [$organization, $user] = $this->resolveManager($request);
         $connections->disconnect($organization, $user, $provider);
 

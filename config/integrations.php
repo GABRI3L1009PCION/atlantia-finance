@@ -4,13 +4,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Public API
+    | Hidden connections and Public API
     |--------------------------------------------------------------------------
     |
-    | Requests allowed per minute and per key, maximum page size and how long
+    | hidden_providers lists the firm connections that are built and tested but not offered yet (comma separated in
+    | INTEGRATIONS_HIDDEN_PROVIDERS; empty shows all). Requests allowed per minute and per key, maximum page size and how long
     | the request log is kept.
     |
     */
+
+    'hidden_providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('INTEGRATIONS_HIDDEN_PROVIDERS', 'gmail,outlook,dropbox,hubspot'))))),
 
     'api' => [
         'rate_limit_per_minute' => (int) env('INTEGRATIONS_API_RATE_LIMIT', 120),

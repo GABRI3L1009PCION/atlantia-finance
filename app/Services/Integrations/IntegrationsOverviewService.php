@@ -63,7 +63,7 @@ class IntegrationsOverviewService
         return [
             'kpis' => [
                 'connected' => collect($connected)->where('status', 'connected')->count() + collect($this->connections->states($organization))->where('connected', true)->count(),
-                'available' => count($connected) + count(self::COMING_SOON) + count(IntegrationConnectionService::PROVIDERS),
+                'available' => count($connected) + count(self::COMING_SOON) + count(IntegrationConnectionService::available()),
                 'automations' => $endpoints->where('status', 'active')->count(),
                 'syncs_month' => $deliveries->filter(fn (object $row): bool => $row->created_at >= $monthStart->toDateTimeString())->count() + $requests->filter(fn (object $row): bool => $row->created_at >= $monthStart->toDateTimeString())->count(),
                 'availability' => $total30 > 0 ? round($good30 / $total30 * 100, 1) : null,
@@ -73,7 +73,7 @@ class IntegrationsOverviewService
             'tokens' => $tokens->take(6)->map(fn (array $token): array => ['name' => $token['name'], 'prefix' => $token['prefix'], 'abilities' => $token['abilities'], 'created_at' => $token['created_at'], 'owner' => $token['owner'], 'status' => $token['status'], 'status_label' => $token['status_label'], 'expires_at' => $token['expires_at']])->values()->all(),
             'endpoints' => $endpoints->take(6)->map(fn (array $endpoint): array => ['name' => $endpoint['name'], 'url' => $endpoint['url'], 'events' => $endpoint['events'], 'status' => $endpoint['status'], 'failures' => $endpoint['consecutive_failures']])->values()->all(),
             'history' => $history,
-            'providers' => collect(IntegrationConnectionService::PROVIDERS)->map(fn (array $definition, string $key): array => [...$definition, 'key' => $key, ...($this->connections->states($organization)[$key])])->values()->all(),
+            'providers' => collect(IntegrationConnectionService::available())->map(fn (array $definition, string $key): array => [...$definition, 'key' => $key, ...($this->connections->states($organization)[$key])])->values()->all(),
             'connection_events' => $this->connections->recentEvents($organization),
             'generated_at' => Carbon::now()->toIso8601String(),
         ];
