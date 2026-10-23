@@ -285,7 +285,7 @@ GitHub Actions ejecuta en cada *push* y *pull request* la suite de pruebas contr
 
 Documentos relacionados: [matriz de autorización](docs/security/authorization-matrix-purchases.md) y [modelo de amenazas](docs/security/threat-model-purchases.md).
 
-Si encuentras una vulnerabilidad, repórtala de forma privada al equipo de Atlantia Systems en lugar de abrir un *issue* público.
+Si encuentras una vulnerabilidad, repórtala de forma privada a [soporte@atlantiasystems.com](mailto:soporte@atlantiasystems.com) en lugar de abrir un *issue* público.
 
 ---
 
