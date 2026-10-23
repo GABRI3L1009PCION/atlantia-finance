@@ -767,7 +767,7 @@ test('the firm administrator manages the commercial portfolio and the supervisin
     $this->get(route('office.crm'))->assertOk()->assertInertia(fn ($page) => $page->where('canManage', false));
     $this->get(route('audit.dashboard'))->assertOk()->assertInertia(fn ($page) => $page->component('work/director-audit')->has('kpis')->has('office_scores'));
     $this->get(route('office.subscription'))->assertOk()->assertInertia(fn ($page) => $page->component('work/subscription')->has('plan')->has('usage', 5)->has('modules', 8));
-    $this->get(route('integrations.index'))->assertOk()->assertInertia(fn ($page) => $page->component('office/integrations-overview')->has('kpis')->has('coming_soon', 0)->has('providers', 10));
+    $this->get(route('integrations.index'))->assertOk()->assertInertia(fn ($page) => $page->component('office/integrations-overview')->has('kpis')->has('coming_soon', 0)->has('providers', 6));
     $this->get(route('integrations.index', ['tab' => 'keys']))->assertOk()->assertInertia(fn ($page) => $page->component('office/integrations'));
     $this->get(route('office.reports'))->assertOk()->assertInertia(fn ($page) => $page->component('work/director-reports')->has('reports')->where('kpis.exports_month', 0));
     $this->withoutMiddleware(ThrottleRequests::class);
