@@ -21,7 +21,7 @@ class PublicPlanCatalog
 
     /**
      * @return list<array{code: string, name: string, tagline: string|null, description: string, monthly_price: float, annual_price: float, currency: string,
-     *     months_included: int, annual_savings: float, recommended: bool, price_prefix: string|null, cta_label: string|null,
+     *     months_included: int, annual_savings: float, recommended: bool, price_prefix: string|null, cta_label: string|null, contact_only: bool,
      *     features: list<array{text: string, hint: string|null}>}>
      */
     public function plans(): array
@@ -52,6 +52,7 @@ class PublicPlanCatalog
                     'recommended' => (bool) $plan->is_recommended,
                     'price_prefix' => $plan->price_prefix,
                     'cta_label' => $plan->cta_label,
+                    'contact_only' => in_array($plan->code, (array) config('atlantia-plans.contact_only', []), true),
                     'features' => [...$this->capacity($version), ...$this->payrollNote($version, $payrollFrom), ...array_map(
                         fn (string $text): array => ['text' => $text, 'hint' => null],
                         array_values(array_filter((array) json_decode((string) ($plan->highlights ?? '[]'), true), 'is_string')),

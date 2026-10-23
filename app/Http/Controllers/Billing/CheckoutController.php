@@ -190,6 +190,10 @@ class CheckoutController extends Controller
             'plan' => ['required', 'string', Rule::exists('plans', 'code')->where('is_active', true)],
             'billing_period' => ['required', Rule::in(['monthly', 'annual'])],
         ]);
+        if (in_array($validated['plan'], (array) config('atlantia-plans.contact_only', []), true)) {
+            throw ValidationException::withMessages(['plan' => 'El plan Empresarial se cotiza a la medida: escríbenos por WhatsApp o a soporte@atlantiasystems.com.']);
+        }
+
         $organization = $this->ownerOrganization($request);
         if (self::payableSubscription($organization) !== null || $organization->subscriptions()->whereIn('status', PlatformStatus::SUBSCRIPTION_ACCESS)->exists()) {
             return redirect()->route('billing.checkout.show');
@@ -218,6 +222,7 @@ class CheckoutController extends Controller
 
         return array_values(Plan::query()
             ->where('is_active', true)
+            ->whereNotIn('code', (array) config('atlantia-plans.contact_only', []))
             ->with(['prices' => fn ($query) => $query
                 ->where('is_active', true)
                 ->where('currency_code', 'GTQ')
@@ -253,6 +258,10 @@ class CheckoutController extends Controller
             'plan' => ['required', 'string', Rule::exists('plans', 'code')->where('is_active', true)],
             'billing_period' => ['required', Rule::in(['monthly', 'annual'])],
         ]);
+
+        if (in_array($validated['plan'], (array) config('atlantia-plans.contact_only', []), true)) {
+            throw ValidationException::withMessages(['plan' => 'El plan Empresarial se cotiza a la medida: escríbenos por WhatsApp o a soporte@atlantiasystems.com.']);
+        }
 
         [$organization, $subscription] = $this->pendingSubscription($request);
 

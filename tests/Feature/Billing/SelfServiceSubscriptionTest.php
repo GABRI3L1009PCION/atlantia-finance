@@ -45,7 +45,7 @@ test('una firma con la suscripción terminada es llevada a reactivarla y no a un
 
     $this->actingAs($owner)->get(route('billing.checkout.show'))->assertRedirect(route('billing.reactivate'));
     $this->get(route('billing.reactivate'))->assertOk()->assertInertia(fn (Assert $page) => $page
-        ->component('billing/plans')->where('mode', 'reactivate')->has('plans', 5));
+        ->component('billing/plans')->where('mode', 'reactivate')->has('plans', 4));
 })->with(['cancelled', 'expired']);
 
 test('el dueño reactiva eligiendo un plan: se crea una suscripción nueva por pagar y se conservan los datos', function () {
@@ -99,4 +99,27 @@ test('solo el propietario puede cambiar el plan', function () {
 
     $this->actingAs($member)->getJson(route('office.subscription.preview', ['plan_price_id' => selfServicePriceId('professional')]))->assertForbidden();
     $this->post(route('office.subscription.plan'), ['plan_price_id' => selfServicePriceId('professional')])->assertForbidden();
+});
+
+test('el plan Empresarial no se puede reactivar por cuenta propia', function () {
+    [$owner, $organization] = selfServiceFirm(null);
+
+    $this->actingAs($owner)->post(route('billing.reactivate.store'), ['plan' => 'enterprise', 'billing_period' => 'monthly'])->assertSessionHasErrors('plan');
+
+    expect(Subscription::query()->where('organization_id', $organization->id)->where('status', 'incomplete')->exists())->toBeFalse();
+});
+
+test('el plan Empresarial no se puede elegir al cambiar de plan', function () {
+    [$owner] = selfServiceFirm('professional');
+
+    $this->actingAs($owner)->postJson(route('office.subscription.plan'), ['plan_price_id' => selfServicePriceId('enterprise')])->assertUnprocessable()->assertJsonValidationErrors('plan_price_id');
+});
+
+test('el plan Empresarial no se puede contratar desde el registro', function () {
+    $this->post(route('register.store'), [
+        'name' => 'Firma Grande', 'email' => 'grande@example.com', 'password' => 'una-clave-segura-2026', 'password_confirmation' => 'una-clave-segura-2026',
+        'plan' => 'enterprise', 'billing_period' => 'monthly', 'organization_name' => 'Firma Grande, S.A.', 'terms' => true,
+    ])->assertSessionHasErrors('plan');
+
+    $this->assertDatabaseMissing('users', ['email' => 'grande@example.com']);
 });
