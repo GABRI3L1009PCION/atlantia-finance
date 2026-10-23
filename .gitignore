@@ -32,3 +32,4 @@ yarn-error.log
 **/__pycache__/
 *.py[cod]
 *.gguf
+/.claude
