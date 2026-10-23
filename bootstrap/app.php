@@ -12,6 +12,7 @@ use App\Http\Middleware\EnsurePlanFeature;
 use App\Http\Middleware\EnsurePlatformStaff;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RedirectToHttps;
 use App\Http\Middleware\RestrictClientPortalUsers;
 use App\Http\Middleware\RestrictSupervisingDirector;
 use App\Http\Middleware\SetTenantDatabaseContext;
@@ -49,6 +50,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
         $middleware->prepend(AssignCorrelationId::class);
+        // After the proxy trust (global stack) so a balancer's "already HTTPS" notice is believed, and before the session starts.
+        $middleware->append(RedirectToHttps::class);
 
         $middleware->api(prepend: [AddSecurityHeaders::class]);
 
