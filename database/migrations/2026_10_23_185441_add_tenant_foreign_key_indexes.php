@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Indexes the foreign keys that tenant queries filter on. Every Row Level Security policy compares organization_id, so
@@ -104,6 +105,10 @@ return new class extends Migration
         }
         foreach (self::COLUMNS as $table => $columns) {
             foreach ($columns as $column) {
+                // A database created from an older schema may lack a table or column: there is nothing to index then.
+                if (! Schema::hasColumn($table, $column)) {
+                    continue;
+                }
                 DB::statement('CREATE INDEX IF NOT EXISTS '.$table.'_'.$column.'_fk_index ON '.$table.' ('.$column.')');
             }
         }

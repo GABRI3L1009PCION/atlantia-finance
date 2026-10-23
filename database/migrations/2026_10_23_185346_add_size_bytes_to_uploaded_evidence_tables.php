@@ -22,6 +22,9 @@ return new class extends Migration
     public function up(): void
     {
         foreach (self::COLUMNS as $table => $column) {
+            if (! Schema::hasTable($table) || Schema::hasColumn($table, $column)) {
+                continue;
+            }
             Schema::table($table, function (Blueprint $blueprint) use ($column): void {
                 $blueprint->unsignedBigInteger($column)->nullable();
             });
@@ -31,6 +34,9 @@ return new class extends Migration
     public function down(): void
     {
         foreach (self::COLUMNS as $table => $column) {
+            if (! Schema::hasColumn($table, $column)) {
+                continue;
+            }
             Schema::table($table, function (Blueprint $blueprint) use ($column): void {
                 $blueprint->dropColumn($column);
             });

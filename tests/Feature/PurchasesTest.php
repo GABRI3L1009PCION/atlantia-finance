@@ -294,3 +294,14 @@ test('supplier workspace shows only real portfolio balances and supports safe ed
         'email' => 'cuentas@discentral.com',
     ]);
 });
+
+test('the factura especial migration also runs on databases created from the legacy schema, which lack the fiscal rule', function () {
+    DB::statement('ALTER TABLE purchase_documents DROP CONSTRAINT IF EXISTS purchase_document_fiscal_breakdown');
+    $migration = require database_path('migrations/2026_10_21_031059_allow_factura_especial_on_purchase_documents.php');
+
+    $migration->up();
+    $migration->up();
+
+    $rule = DB::selectOne("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'purchase_documents'::regclass AND conname = 'purchase_document_fiscal_breakdown'");
+    expect($rule)->not->toBeNull()->and($rule->definition)->toContain('FESP');
+});
