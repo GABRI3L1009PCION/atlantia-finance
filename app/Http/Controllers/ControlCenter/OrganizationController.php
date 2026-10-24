@@ -46,6 +46,8 @@ class OrganizationController extends ControlCenterController
         return $this->render($request, 'organization', [
             'detail' => $organizations->detail($organization),
             'impact' => $status->impact($organization),
+            'owner_invitation' => $organizations->pendingOwnerInvitation($organization),
+            'deletion_blocker' => $organizations->deletionBlocker($organization),
             'tab' => (string) $request->query('tab', 'summary'),
             'features' => DB::table('features')->orderBy('name')->get(['code', 'name'])->all(),
             'plans' => $this->sellablePrices(),
@@ -92,6 +94,21 @@ class OrganizationController extends ControlCenterController
         };
 
         return back()->with('workspace_notice', ['suspend' => 'Organización suspendida. Sus datos se conservan.', 'reactivate' => 'Organización reactivada.', 'archive' => 'Organización archivada.'][$action]);
+    }
+
+    public function resendInvitation(Request $request, int $organization, OrganizationManagementService $organizations): RedirectResponse
+    {
+        $organizations->resendOwnerInvitation($this->staff($request, 'saas.organizations.manage'), $organization);
+
+        return back()->with('workspace_notice', 'Invitación reenviada al dueño. El nuevo enlace vence en 14 días y el anterior dejó de funcionar.');
+    }
+
+    public function destroy(Request $request, int $organization, OrganizationManagementService $organizations): RedirectResponse
+    {
+        $user = $this->staff($request, 'saas.organizations.suspend');
+        $organizations->delete($user, $organization, $this->confirmSensitive($request, $user));
+
+        return to_route('controlCenter.organizations')->with('workspace_notice', 'Organización eliminada.');
     }
 
     public function storeOverride(Request $request, int $organization, FeatureCatalogService $features): RedirectResponse

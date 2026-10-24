@@ -1,5 +1,6 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeft, Building2, KeyRound } from 'lucide-react';
+import { ArrowLeft, Building2, KeyRound, Mail, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import {
     CCPage,
     Field,
@@ -162,6 +163,15 @@ type Props = {
     features: { code: string; name: string }[];
     plans: { id: number; label: string }[];
     can: Record<string, boolean>;
+    owner_invitation: {
+        email: string;
+        name: string | null;
+        sent_count: number;
+        last_sent_at: string | null;
+        expires_at: string;
+        expired: boolean;
+    } | null;
+    deletion_blocker: string | null;
 };
 
 const tabs: Record<string, string> = {
@@ -229,7 +239,10 @@ export default function OrganizationDetail({
     features,
     plans,
     can,
+    owner_invitation: ownerInvitation,
+    deletion_blocker: deletionBlocker,
 }: Props) {
+    const [resending, setResending] = useState(false);
     const o = detail.organization;
     const s = detail.subscription;
     const base = `/control-center/organizations/${o.id}`;
@@ -318,9 +331,79 @@ export default function OrganizationDetail({
                                     description="Estado final controlado: se conserva el historial comercial y la auditoría."
                                 />
                             )}
+                        {can.suspend && deletionBlocker === null && (
+                            <SensitiveAction
+                                danger
+                                method="delete"
+                                url={base}
+                                label={
+                                    <>
+                                        <Trash2 className="size-3.5" /> Eliminar
+                                    </>
+                                }
+                                title={`Eliminar ${o.name}`}
+                                description={
+                                    <>
+                                        Solo para una organización creada por
+                                        error: nunca se activó, no tiene pagos
+                                        ni empresas. Desaparece de las listas,
+                                        su suscripción se cancela y el enlace de
+                                        invitación deja de funcionar. Queda el
+                                        registro en la auditoría.
+                                    </>
+                                }
+                            />
+                        )}
                     </>
                 }
             >
+                {ownerInvitation && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#fbbf24]/30 bg-[#fbbf24]/10 p-3 text-sm text-[#fde68a]">
+                        <div className="flex items-start gap-2">
+                            <Mail className="mt-0.5 size-4 shrink-0" />
+                            <div>
+                                <p className="font-semibold">
+                                    El dueño aún no activa su cuenta
+                                </p>
+                                <p className="text-xs text-[#fde68a]/80">
+                                    {ownerInvitation.email} · enviada{' '}
+                                    {ownerInvitation.sent_count}{' '}
+                                    {ownerInvitation.sent_count === 1
+                                        ? 'vez'
+                                        : 'veces'}
+                                    · último envío:{' '}
+                                    {ago(ownerInvitation.last_sent_at)} ·{' '}
+                                    {ownerInvitation.expired
+                                        ? 'el enlace ya venció'
+                                        : `el enlace vence el ${date(ownerInvitation.expires_at)}`}
+                                </p>
+                            </div>
+                        </div>
+                        {can.manage && (
+                            <button
+                                type="button"
+                                className={ccGhost}
+                                disabled={resending}
+                                onClick={() =>
+                                    router.post(
+                                        `${base}/invitation/resend`,
+                                        {},
+                                        {
+                                            preserveScroll: true,
+                                            onStart: () => setResending(true),
+                                            onFinish: () => setResending(false),
+                                        },
+                                    )
+                                }
+                            >
+                                <Mail className="size-3.5" />
+                                {resending
+                                    ? 'Enviando…'
+                                    : 'Reenviar invitación'}
+                            </button>
+                        )}
+                    </div>
+                )}
                 {o.suspension_reason && (
                     <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 p-3 text-sm text-[#fca5a5]">
                         Suspendida:{' '}

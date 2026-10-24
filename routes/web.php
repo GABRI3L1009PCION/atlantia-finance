@@ -282,6 +282,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('organizations/{organization}', 'show')->whereNumber('organization')->name('organizations.show');
             Route::put('organizations/{organization}', 'update')->whereNumber('organization')->name('organizations.update');
             Route::post('organizations/{organization}/status/{action}', 'status')->whereNumber('organization')->whereIn('action', ['suspend', 'reactivate', 'archive'])->middleware('throttle:20,1')->name('organizations.status');
+            Route::post('organizations/{organization}/invitation/resend', 'resendInvitation')->whereNumber('organization')->middleware('throttle:10,1')->name('organizations.invitation.resend');
+            Route::delete('organizations/{organization}', 'destroy')->whereNumber('organization')->middleware('throttle:10,1')->name('organizations.destroy');
             Route::post('organizations/{organization}/overrides', 'storeOverride')->whereNumber('organization')->name('organizations.overrides');
             Route::post('overrides/{override}/revoke', 'revokeOverride')->whereNumber('override')->name('overrides.revoke');
             Route::post('organizations/{organization}/credits', 'storeCredit')->whereNumber('organization')->name('organizations.credits');

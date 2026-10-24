@@ -171,6 +171,85 @@ class OrganizationManagementService
         return ['organization_id' => $result['organization_id'], 'invitation_id' => $result['invitation_id']];
     }
 
+    /**
+     * The owner invitation that has not been accepted yet, if any.
+     *
+     * @return array{email: string, name: string|null, sent_count: int, last_sent_at: string|null, expires_at: string, expired: bool}|null
+     */
+    public function pendingOwnerInvitation(int $organizationId): ?array
+    {
+        $invitation = DB::table('invitations')->where('organization_id', $organizationId)->where('role', 'owner')->where('status', 'pending')->orderByDesc('id')->first();
+        if ($invitation === null) {
+            return null;
+        }
+
+        return ['email' => (string) $invitation->email, 'name' => $invitation->name, 'sent_count' => (int) $invitation->sent_count,
+            'last_sent_at' => $invitation->last_sent_at === null ? null : Carbon::parse($invitation->last_sent_at)->toIso8601String(),
+            'expires_at' => Carbon::parse($invitation->expires_at)->toIso8601String(), 'expired' => Carbon::parse($invitation->expires_at)->isPast()];
+    }
+
+    /**
+     * Sends the owner a fresh activation link (the previous one stops working) valid for another 14 days.
+     */
+    public function resendOwnerInvitation(User $actor, int $organizationId): void
+    {
+        $organization = $this->find($organizationId);
+        if (in_array($organization->status, ['suspended', 'archived', 'cancelled'], true)) {
+            throw ValidationException::withMessages(['invitation' => 'La organización no está activa: reactívala antes de reenviar la invitación.']);
+        }
+        $invitation = Invitation::query()->where('organization_id', $organizationId)->where('role', 'owner')->where('status', 'pending')->orderByDesc('id')->first();
+        if ($invitation === null) {
+            throw ValidationException::withMessages(['invitation' => 'El dueño ya activó su cuenta; no hay invitación pendiente.']);
+        }
+        $token = Str::random(64);
+        $invitation->forceFill(['token_hash' => hash('sha256', $token), 'expires_at' => now()->addDays(14), 'sent_count' => (int) $invitation->sent_count + 1, 'last_sent_at' => now()])->save();
+
+        try {
+            $url = URL::temporarySignedRoute('invitations.show', $invitation->expires_at, ['invitation' => $invitation->public_id, 'token' => $token]);
+            Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitation((string) $organization->name, $url, $invitation->expires_at, true));
+        } catch (Throwable $exception) {
+            report($exception);
+            throw ValidationException::withMessages(['invitation' => 'No se pudo enviar el correo. Revisa la configuración de correo e intenta de nuevo.']);
+        }
+        $this->audit->record($actor, 'organization.owner_invitation_resent', 'invitations', (int) $invitation->id, null, ['email' => $invitation->email, 'sent_count' => $invitation->sent_count], null, $organizationId);
+    }
+
+    /**
+     * Whether a firm was never used and can be removed (one created by mistake): its owner never joined, nobody paid
+     * and no client company was registered. Anything else is suspended or archived instead, keeping its history.
+     */
+    public function deletionBlocker(int $organizationId): ?string
+    {
+        return match (true) {
+            DB::table('organization_user')->where('organization_user.organization_id', $organizationId)->exists() => 'Ya tiene usuarios que activaron su cuenta.',
+            DB::table('payments')->where('payments.organization_id', $organizationId)->exists() || DB::table('saas_invoices')->where('organization_id', $organizationId)->where('status', 'paid')->exists() => 'Ya tiene pagos registrados.',
+            DB::table('companies')->where('companies.organization_id', $organizationId)->exists() => 'Ya tiene empresas registradas.',
+            default => null,
+        };
+    }
+
+    /**
+     * Removes a firm created by mistake: it disappears from every list, its subscription is cancelled, open invoices are
+     * voided and the owner link stops working. The rows stay (soft delete) so the platform audit keeps the trace.
+     */
+    public function delete(User $actor, int $organizationId, string $reason): void
+    {
+        DB::transaction(function () use ($actor, $organizationId, $reason): void {
+            $organization = DB::table('organizations')->where('id', $organizationId)->whereNull('deleted_at')->where('id', '<>', PlatformIssuer::organizationId())->lockForUpdate()->first() ?? abort(404);
+            if (($blocker = $this->deletionBlocker($organizationId)) !== null) {
+                throw ValidationException::withMessages(['organization' => $blocker.' Suspéndela o archívala en lugar de eliminarla.']);
+            }
+            DB::table('invitations')->where('organization_id', $organizationId)->where('status', 'pending')->update(['status' => 'canceled', 'canceled_at' => now(), 'canceled_by' => $actor->id, 'updated_at' => now()]);
+            DB::table('saas_invoices')->where('organization_id', $organizationId)->whereIn('status', ['draft', 'open', 'past_due'])->update(['status' => 'void', 'voided_at' => now(), 'void_reason' => 'Organización eliminada: '.$reason, 'updated_at' => now()]);
+            DB::table('subscriptions')->where('organization_id', $organizationId)->whereNotIn('status', ['cancelled', 'expired'])
+                ->update(['status' => 'cancelled', 'canceled_at' => now(), 'ended_at' => now(), 'cancel_at_period_end' => false, 'cancel_reason' => 'Organización eliminada', 'cancel_requested_by' => $actor->id, 'updated_at' => now()]);
+            DB::table('offices')->where('offices.organization_id', $organizationId)->whereNull('deleted_at')->update(['deleted_at' => now(), 'updated_at' => now()]);
+            DB::table('organizations')->where('id', $organizationId)->update(['status' => 'archived', 'archived_at' => now(), 'deleted_at' => now(), 'updated_at' => now()]);
+            $this->entitlements->forget($organizationId);
+            $this->audit->record($actor, 'organization.deleted', 'organizations', $organizationId, ['name' => $organization->name, 'status' => $organization->status], ['status' => 'deleted'], $reason, $organizationId, [], true);
+        });
+    }
+
     /** @param array{name?: string, legal_name?: string|null, tax_identifier?: string|null, timezone?: string|null, beta_program?: bool} $data */
     public function update(User $actor, int $organizationId, array $data): void
     {

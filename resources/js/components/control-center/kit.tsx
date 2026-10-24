@@ -501,7 +501,7 @@ export function SensitiveAction({
     buttonClassName,
 }: {
     url: string;
-    method?: 'post' | 'put';
+    method?: 'post' | 'put' | 'delete';
     label: ReactNode;
     title: string;
     description?: ReactNode;
@@ -550,6 +550,8 @@ export function SensitiveAction({
 
                             if (method === 'put') {
                                 form.put(url, options);
+                            } else if (method === 'delete') {
+                                form.delete(url, options);
                             } else {
                                 form.post(url, options);
                             }

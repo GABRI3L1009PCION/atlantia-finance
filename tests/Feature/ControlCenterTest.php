@@ -107,7 +107,7 @@ test('a service is never reported healthy without a recent real check', function
     expect($database['status'])->toBe('unknown')->and($database['latest_error'])->toContain('Sin chequeos recientes');
 });
 
-test('organizations are onboarded, then suspended with re-authentication, reactivated and archived without ever being deleted', function () {
+test('organizations are onboarded, then suspended with re-authentication, reactivated and archived, and deleting needs re-authentication', function () {
     $owner = ccOwner();
     $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Contadores Unidos', 'tax_identifier' => '1234567-8', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
         'owner_name' => 'Ana Cliente', 'owner_email' => 'ana@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
@@ -139,8 +139,9 @@ test('organizations are onboarded, then suspended with re-authentication, reacti
     expect(DB::table('organizations')->where('id', $organization->id)->value('status'))->toBe('archived')
         ->and(DB::table('platform_audit_events')->where('entity_id', (string) $organization->id)->whereIn('action', ['organization.created', 'organization.suspended', 'organization.reactivated', 'organization.archived'])->count())->toBe(5)
         ->and(DB::table('platform_audit_events')->where('action', 'organization.suspended')->value('sensitive'))->toBeTrue();
-    // There is no delete endpoint for organizations.
-    $this->actingAs($owner)->delete('/control-center/organizations/'.$organization->id)->assertStatus(405);
+    // Deleting is a sensitive action too: without re-authentication nothing happens.
+    $this->actingAs($owner)->delete('/control-center/organizations/'.$organization->id, ['reason' => 'Creada por error'])->assertSessionHasErrors('password');
+    expect(DB::table('organizations')->where('id', $organization->id)->value('deleted_at'))->toBeNull();
 });
 
 test('the last SaaS owner is protected and nobody escalates to owner or changes their own role', function () {
@@ -425,4 +426,58 @@ test('collaborator invitations keep the collaborator wording', function () {
     $mail = (string) (new WorkspaceInvitation('Firma', 'https://example.test', now()->addDays(3)))->toMail(new stdClass)->render();
 
     expect($mail)->toContain('Aceptar invitación')->toContain('colaborador')->toContain('vence en 3 días');
+});
+
+test('the owner invitation can be resent from the Control Center with a fresh link that replaces the old one', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Reenvío', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+        'owner_name' => 'Ana Dueña', 'owner_email' => 'ana@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $organizationId = (int) DB::table('organizations')->where('name', 'Reenvío')->value('id');
+    $this->get('/control-center/organizations/'.$organizationId)->assertInertia(fn (Assert $page) => $page->where('owner_invitation.email', 'ana@cliente.test')->where('owner_invitation.sent_count', 1));
+
+    $this->travel(20)->days();
+    $this->post('/control-center/organizations/'.$organizationId.'/invitation/resend')->assertSessionHasNoErrors();
+
+    $urls = [];
+    Notification::assertSentOnDemand(WorkspaceInvitation::class, function (WorkspaceInvitation $notification) use (&$urls): bool {
+        $urls[] = $notification->invitationUrl;
+
+        return $notification->asOwner;
+    });
+    $invitation = DB::table('invitations')->where('organization_id', $organizationId)->where('role', 'owner')->first();
+    expect($urls)->toHaveCount(2)
+        ->and((int) $invitation->sent_count)->toBe(2)
+        ->and(Carbon\Carbon::parse($invitation->expires_at)->isFuture())->toBeTrue()
+        ->and(DB::table('platform_audit_events')->where('action', 'organization.owner_invitation_resent')->exists())->toBeTrue();
+
+    auth()->logout();
+    $this->get($urls[0])->assertStatus(403);
+    $this->get($urls[1])->assertOk();
+
+    // Once the owner has joined there is nothing to resend.
+    DB::table('invitations')->where('id', $invitation->id)->update(['status' => 'accepted', 'accepted_at' => now()]);
+    $this->actingAs($owner)->post('/control-center/organizations/'.$organizationId.'/invitation/resend')->assertSessionHasErrors('invitation');
+});
+
+test('a firm created by mistake can be deleted, but not one that was already used', function () {
+    $owner = ccOwner();
+    foreach (['Por Error', 'En Uso'] as $index => $name) {
+        $this->actingAs($owner)->post('/control-center/organizations', ['name' => $name, 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+            'owner_name' => 'Dueño', 'owner_email' => "dueno{$index}@cliente.test", 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    }
+    $mistake = (int) DB::table('organizations')->where('name', 'Por Error')->value('id');
+    $used = (int) DB::table('organizations')->where('name', 'En Uso')->value('id');
+    DB::table('organization_user')->insert(['organization_id' => $used, 'user_id' => User::factory()->create()->id, 'role' => 'owner', 'status' => 'active', 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+
+    $this->get('/control-center/organizations/'.$used)->assertInertia(fn (Assert $page) => $page->where('deletion_blocker', 'Ya tiene usuarios que activaron su cuenta.'));
+    $this->delete('/control-center/organizations/'.$used, ccConfirm())->assertSessionHasErrors('organization');
+    expect(DB::table('organizations')->where('id', $used)->value('deleted_at'))->toBeNull();
+
+    $this->delete('/control-center/organizations/'.$mistake, ccConfirm())->assertRedirect('/control-center/organizations')->assertSessionHasNoErrors();
+    expect(DB::table('organizations')->where('id', $mistake)->first())->deleted_at->not->toBeNull()->status->toBe('archived')
+        ->and(DB::table('subscriptions')->where('organization_id', $mistake)->value('status'))->toBe('cancelled')
+        ->and(DB::table('invitations')->where('organization_id', $mistake)->value('status'))->toBe('canceled')
+        ->and(DB::table('platform_audit_events')->where('action', 'organization.deleted')->value('sensitive'))->toBeTrue();
+    $this->get('/control-center/organizations')->assertInertia(fn (Assert $page) => $page->has('organizations', 1)->where('organizations.0.name', 'En Uso'));
+    $this->get('/control-center/organizations/'.$mistake)->assertNotFound();
 });
