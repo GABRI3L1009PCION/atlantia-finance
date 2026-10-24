@@ -368,3 +368,19 @@ test('the administrator who owns the FEL issuer lands in the Control Center and 
     $this->get(route('controlCenter.offices'))->assertOk()->assertInertia(fn (Assert $page) => $page
         ->where('offices', fn ($rows) => ! collect($rows)->pluck('organization_id')->contains($issuerOrganization)));
 });
+
+test('with Luzma\'s own engine the Control Center answers with the official figures, including the plans on sale', function () {
+    $owner = ccOwner();
+    ccOrganization($owner, 'professional', false, 'Firma Con Plan');
+    Http::fake([
+        '*/health' => Http::response(['status' => 'healthy', 'model' => 'luzma-brain', 'engine' => 'brain', 'model_loaded' => true, 'model_resident' => true]),
+        '*' => Http::response(['status' => 'ok', 'response' => '**Resumen:** No tengo datos oficiales para responder eso con precisión.']),
+    ]);
+
+    $answer = app(PlatformLuzmaAssistant::class)->ask($owner, '¿Cuáles son mis planes de suscripción?');
+
+    expect($answer['tool'])->toBe('get_subscription_summary')->and($answer['source'])->toBe('facts')
+        ->and($answer['answer'])->toContain('Plan Esencial: GTQ 399.00 al mes o GTQ 3,990.00 al año')
+        ->and($answer['answer'])->toContain('Plan Profesional')->toContain('1 suscripción(es) vigente(s)')
+        ->and($answer['answer'])->not->toContain('No tengo datos');
+});

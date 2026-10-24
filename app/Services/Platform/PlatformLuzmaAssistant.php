@@ -29,7 +29,7 @@ class PlatformLuzmaAssistant
         'get_active_incidents' => ['permission' => 'saas.incidents.view', 'keywords' => ['incidente', 'incidentes', 'caida'], 'label' => 'Incidentes activos'],
         'get_support_queue' => ['permission' => 'saas.tickets.view', 'keywords' => ['ticket', 'tickets', 'soporte'], 'label' => 'Cola de soporte'],
         'get_luzma_health' => ['permission' => 'saas.luzma.view', 'keywords' => ['luzma', 'modelo', 'ollama', 'ia'], 'label' => 'Estado de Luzma'],
-        'get_subscription_summary' => ['permission' => 'saas.subscriptions.view', 'keywords' => ['suscripcion', 'suscripciones', 'mrr', 'clientes', 'planes', 'organizaciones'], 'label' => 'Suscripciones'],
+        'get_subscription_summary' => ['permission' => 'saas.subscriptions.view', 'keywords' => ['suscripcion', 'suscripciones', 'mrr', 'clientes', 'plan', 'planes', 'precio', 'precios', 'organizaciones'], 'label' => 'Suscripciones'],
         'get_attention' => ['permission' => 'saas.dashboard.view', 'keywords' => ['atencion', 'hoy', 'pendiente', 'resumen'], 'label' => 'Requiere atención'],
     ];
 
@@ -173,10 +173,21 @@ class PlatformLuzmaAssistant
     {
         $mrr = $this->billing->mrr();
         $byStatus = DB::table('subscriptions')->where('provider', '!=', 'internal')->groupBy('status')->selectRaw('status, CAST(COUNT(*) AS BIGINT) as total')->pluck('total', 'status');
+        $facts = ['MRR GTQ '.number_format($mrr['mrr'], 2).' (ARR GTQ '.number_format($mrr['arr'], 2).') de '.$mrr['subscriptions'].' suscripción(es) recurrente(s).',
+            $byStatus->isEmpty() ? 'Todavía no hay suscripciones de clientes.' : 'Por estado: '.$byStatus->map(fn ($total, $status): string => (PlatformStatus::SUBSCRIPTION_LABELS[$status] ?? $status).' '.$total)->implode(', ').'.'];
 
-        return [['MRR GTQ '.number_format($mrr['mrr'], 2).' (ARR GTQ '.number_format($mrr['arr'], 2).') de '.$mrr['subscriptions'].' suscripción(es) recurrente(s).',
-            'Por estado: '.$byStatus->map(fn ($total, $status): string => (PlatformStatus::SUBSCRIPTION_LABELS[$status] ?? $status).' '.$total)->implode(', ').'.'],
-            [['label' => 'Suscripciones', 'href' => '/control-center/subscriptions']]];
+        // The catalog on sale: each active plan with its prices and how many client subscriptions are running on it.
+        $running = DB::table('subscriptions')->join('subscription_items', 'subscription_items.subscription_id', '=', 'subscriptions.id')
+            ->join('plan_prices', 'plan_prices.id', '=', 'subscription_items.plan_price_id')->where('subscription_items.item_type', 'base_plan')
+            ->where('subscriptions.provider', '!=', 'internal')->whereIn('subscriptions.status', PlatformStatus::SUBSCRIPTION_ACCESS)
+            ->groupBy('plan_prices.plan_id')->selectRaw('plan_prices.plan_id, CAST(COUNT(*) AS BIGINT) as total')->pluck('total', 'plan_id');
+        foreach (DB::table('plans')->where('is_active', true)->orderBy('display_order')->get(['id', 'name']) as $plan) {
+            $prices = DB::table('plan_prices')->where('plan_id', $plan->id)->where('is_active', true)->where('currency_code', 'GTQ')->pluck('amount', 'billing_period');
+            $facts[] = 'Plan '.$plan->name.': '.(isset($prices['monthly']) ? 'GTQ '.number_format((float) $prices['monthly'], 2).' al mes' : 'sin precio mensual')
+                .(isset($prices['annual']) ? ' o GTQ '.number_format((float) $prices['annual'], 2).' al año' : '').' · '.(int) ($running[$plan->id] ?? 0).' suscripción(es) vigente(s).';
+        }
+
+        return [$facts, [['label' => 'Suscripciones', 'href' => '/control-center/subscriptions'], ['label' => 'Planes', 'href' => '/control-center/plans']]];
     }
 
     /** @return array{0: list<string>, 1: list<array{label: string, href: string}>} */
@@ -195,6 +206,11 @@ class PlatformLuzmaAssistant
     private function compose(string $question, string $tool, array $facts): array
     {
         $fallback = implode("\n", array_map(fn (string $fact): string => '• '.$fact, $facts));
+        // Luzma's own engine (brain) is built for the firms' questions and cannot word platform data: the official facts are
+        // the answer then, so the administrator always gets the figures instead of a generic reply.
+        if (str_contains((string) ($this->model->health()['model'] ?? ''), 'brain')) {
+            return ['text' => 'Esto es lo que veo en Atlantia ('.mb_strtolower(self::TOOLS[$tool]['label']).'):'."\n".$fallback, 'source' => 'facts'];
+        }
         try {
             $text = $this->model->answer('Eres Luzma en el Atlantia Control Center (superadministración SaaS). Responde en español, breve, usando solo los datos entregados. No inventes cifras. '
                 .'No accedes a datos internos de las organizaciones cliente. No ejecutas cambios: indica la pantalla donde hacerlos.', [['role' => 'user', 'content' => $question."\n\nDatos (".self::TOOLS[$tool]['label']."):\n".$fallback]]);
