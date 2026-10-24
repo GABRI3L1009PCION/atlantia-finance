@@ -163,7 +163,7 @@ class OrganizationManagementService
 
         try {
             $url = URL::temporarySignedRoute('invitations.show', $result['invitation']->expires_at, ['invitation' => $result['invitation']->public_id, 'token' => $token]);
-            Notification::route('mail', $email)->notify(new WorkspaceInvitation($result['organization']->name, $url));
+            Notification::route('mail', $email)->notify(new WorkspaceInvitation($result['organization']->name, $url, $result['invitation']->expires_at, true));
         } catch (Throwable $exception) {
             report($exception);
         }

@@ -2,6 +2,7 @@ import { Form, Head, Link } from '@inertiajs/react';
 import { Users } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import PasswordInput from '@/components/password-input';
 import PasswordRequirements from '@/components/password-requirements';
 import { meetsPasswordRules } from '@/lib/password-rules';
 import { login } from '@/routes';
@@ -12,30 +13,45 @@ export default function AcceptInvitation({
     existingAccount,
     signedIn,
     acceptUrl,
+    asOwner,
 }: {
     organizationName: string;
     email: string;
     existingAccount: boolean;
     signedIn: boolean;
     acceptUrl: string;
+    asOwner: boolean;
 }) {
     const [password, setPassword] = useState('');
     const [confirmation, setConfirmation] = useState('');
     const ready =
         existingAccount ||
         (meetsPasswordRules(password) && password === confirmation);
-    const input =
-        'mt-2 h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-slate-900 focus:outline-[#640000]';
+    const field =
+        'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-slate-900 focus:outline-[#640000]';
+    const input = `mt-2 ${field}`;
 
     return (
         <>
             <Head title="Únete a tu equipo" />
             <div className="text-slate-900">
                 <Users className="mb-4 size-8 text-[#640000]" />
-                <h1 className="text-3xl font-semibold">Tu equipo te espera</h1>
+                <h1 className="text-3xl font-semibold">
+                    {asOwner ? 'Tu firma está lista' : 'Tu equipo te espera'}
+                </h1>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                    Te invitaron a <strong>{organizationName}</strong> como
-                    colaborador.
+                    {asOwner ? (
+                        <>
+                            Activa tu cuenta como propietario de{' '}
+                            <strong>{organizationName}</strong>. Desde ahí
+                            administras tu oficina e invitas a tu equipo.
+                        </>
+                    ) : (
+                        <>
+                            Te invitaron a <strong>{organizationName}</strong>{' '}
+                            como colaborador.
+                        </>
+                    )}
                 </p>
                 <p className="mt-2 text-sm font-semibold break-all text-[#640000]">
                     {email}
@@ -76,36 +92,38 @@ export default function AcceptInvitation({
                                         </label>
                                         <label className="block text-sm font-semibold">
                                             Contraseña
-                                            <input
-                                                name="password"
-                                                type="password"
-                                                required
-                                                autoComplete="new-password"
-                                                className={input}
-                                                onChange={(event) =>
-                                                    setPassword(
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
+                                            <div className="mt-2">
+                                                <PasswordInput
+                                                    name="password"
+                                                    required
+                                                    autoComplete="new-password"
+                                                    className={field}
+                                                    onChange={(event) =>
+                                                        setPassword(
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            </div>
                                             <InputError
                                                 message={errors.password}
                                             />
                                         </label>
                                         <label className="block text-sm font-semibold">
                                             Confirmar contraseña
-                                            <input
-                                                name="password_confirmation"
-                                                type="password"
-                                                required
-                                                autoComplete="new-password"
-                                                className={input}
-                                                onChange={(event) =>
-                                                    setConfirmation(
-                                                        event.target.value,
-                                                    )
-                                                }
-                                            />
+                                            <div className="mt-2">
+                                                <PasswordInput
+                                                    name="password_confirmation"
+                                                    required
+                                                    autoComplete="new-password"
+                                                    className={field}
+                                                    onChange={(event) =>
+                                                        setConfirmation(
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                />
+                                            </div>
                                         </label>
                                         <PasswordRequirements
                                             password={password}

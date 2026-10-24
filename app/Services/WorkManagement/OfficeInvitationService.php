@@ -292,7 +292,7 @@ class OfficeInvitationService
         $url = URL::temporarySignedRoute('invitations.show', $invitation->expires_at, ['invitation' => $invitation->public_id, 'token' => $token]);
 
         try {
-            Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitation($organization->name, $url));
+            Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitation($organization->name, $url, $invitation->expires_at, $invitation->role === 'owner'));
         } catch (Throwable $exception) {
             if ($cancelOnFailure) {
                 $invitation->update(['status' => 'canceled', 'canceled_at' => now()]);

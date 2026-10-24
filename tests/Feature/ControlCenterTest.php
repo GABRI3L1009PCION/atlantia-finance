@@ -3,6 +3,7 @@
 use App\Jobs\CertifyFelDocumentJob;
 use App\Models\Organization;
 use App\Models\User;
+use App\Notifications\WorkspaceInvitation;
 use App\Services\Platform\Billing\BillingMetricsService;
 use App\Services\Platform\IncidentManagementService;
 use App\Services\Platform\PlatformAuditService;
@@ -400,4 +401,28 @@ test('the trial length can be chosen for each firm when it is onboarded, and def
         ->where('organizations.name', $name)->value('subscriptions.trial_ends_at'));
     expect((int) round(now()->diffInDays($trialEnd('Prueba Larga'))))->toBe(30)
         ->and((int) round(now()->diffInDays($trialEnd('Prueba Normal'))))->toBe(14);
+});
+
+test('the owner of a firm onboarded from the Control Center gets an activation email and page, valid for 14 days', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Hermanos Picón', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+        'owner_name' => 'Ana Dueña', 'owner_email' => 'ana@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+
+    $url = null;
+    Notification::assertSentOnDemand(WorkspaceInvitation::class, function (WorkspaceInvitation $notification) use (&$url): bool {
+        $url = $notification->invitationUrl;
+
+        return $notification->asOwner && $notification->validity() === '14 días';
+    });
+    $mail = (string) (new WorkspaceInvitation('Hermanos Picón', 'https://example.test', now()->addDays(14), true))->toMail(new stdClass)->render();
+    expect($mail)->toContain('Activar mi cuenta')->toContain('propietario')->toContain('vence en 14 días')->not->toContain('colaborador');
+
+    auth()->logout();
+    $this->get($url)->assertInertia(fn (Assert $page) => $page->component('auth/accept-invitation')->where('asOwner', true));
+});
+
+test('collaborator invitations keep the collaborator wording', function () {
+    $mail = (string) (new WorkspaceInvitation('Firma', 'https://example.test', now()->addDays(3)))->toMail(new stdClass)->render();
+
+    expect($mail)->toContain('Aceptar invitación')->toContain('colaborador')->toContain('vence en 3 días');
 });

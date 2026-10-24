@@ -55,7 +55,7 @@ class InvitationController extends Controller
         });
         $url = URL::temporarySignedRoute('invitations.show', $invitation->expires_at, ['invitation' => $invitation->public_id, 'token' => $token]);
         try {
-            Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitation($organization->name, $url));
+            Notification::route('mail', $invitation->email)->notify(new WorkspaceInvitation($organization->name, $url, $invitation->expires_at));
         } catch (\Throwable $exception) {
             $invitation->update(['status' => 'canceled']);
             report($exception);
@@ -100,6 +100,7 @@ class InvitationController extends Controller
         return Inertia::render('auth/accept-invitation', [
             'organizationName' => $record->organization->name, 'email' => $record->email,
             'existingAccount' => $existing, 'signedIn' => (bool) $request->user(), 'acceptUrl' => $request->fullUrl(),
+            'asOwner' => $record->role === 'owner',
         ]);
     }
 
