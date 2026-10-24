@@ -481,3 +481,23 @@ test('a firm created by mistake can be deleted, but not one that was already use
     $this->get('/control-center/organizations')->assertInertia(fn (Assert $page) => $page->has('organizations', 1)->where('organizations.0.name', 'En Uso'));
     $this->get('/control-center/organizations/'.$mistake)->assertNotFound();
 });
+
+test('the link of a deleted firm shows a clear page, while the firm created again with the same owner works', function () {
+    $owner = ccOwner();
+    $create = fn () => $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Repetida', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+        'owner_name' => 'Ana Dueña', 'owner_email' => 'ana@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $create();
+    $this->delete('/control-center/organizations/'.DB::table('organizations')->where('name', 'Repetida')->value('id'), ccConfirm())->assertSessionHasNoErrors();
+    $create();
+
+    $urls = [];
+    Notification::assertSentOnDemand(WorkspaceInvitation::class, function (WorkspaceInvitation $notification) use (&$urls): bool {
+        $urls[] = $notification->invitationUrl;
+
+        return true;
+    });
+    auth()->logout();
+    $this->withoutVite()->get($urls[0])->assertStatus(410)
+        ->assertInertia(fn (Assert $page) => $page->component('error')->where('status', 410)->where('detail', fn (string $detail) => str_contains($detail, 'reemplazado o cancelado')));
+    $this->get($urls[1])->assertOk()->assertInertia(fn (Assert $page) => $page->component('auth/accept-invitation')->where('asOwner', true));
+});

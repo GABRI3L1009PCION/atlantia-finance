@@ -83,7 +83,11 @@ class InvitationController extends Controller
     {
         $invitation = Invitation::query()->where('public_id', $id)->firstOrFail();
         abort_unless(hash_equals($invitation->token_hash, hash('sha256', (string) $request->query('token'))), 403);
-        abort_unless($invitation->status === 'pending' && $invitation->expires_at->isFuture(), 410, 'Esta invitación ya no está disponible. Solicita una nueva al propietario.');
+        abort_unless($invitation->status === 'pending' && $invitation->expires_at->isFuture(), 410, match (true) {
+            $invitation->status === 'accepted' => 'Esta invitación ya se usó. Inicia sesión con tu correo y contraseña.',
+            $invitation->status === 'canceled' => 'Este enlace fue reemplazado o cancelado. Abre el correo de invitación más reciente o pide uno nuevo.',
+            default => 'Esta invitación venció. Pide que te envíen una nueva.',
+        });
 
         return $invitation;
     }

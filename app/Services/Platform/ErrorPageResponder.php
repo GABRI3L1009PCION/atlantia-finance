@@ -12,13 +12,13 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 /**
- * Friendly, professional error pages for browser requests: unauthorized access (403), not found (404), expired
- * session (419), too many attempts (429) and server errors (500/503). API and JSON clients keep their JSON errors,
+ * Friendly, professional error pages for browser requests: unauthorized access (403), not found (404), a link that
+ * is no longer valid (410), expired session (419), too many attempts (429) and server errors (500/503). API and JSON clients keep their JSON errors,
  * and debug mode keeps the developer page for server errors.
  */
 class ErrorPageResponder
 {
-    private const PAGES = [403, 404, 419, 429, 500, 503];
+    private const PAGES = [403, 404, 410, 419, 429, 500, 503];
 
     private const BOUNCED_AT = 'security.bounced_at';
 
@@ -44,7 +44,7 @@ class ErrorPageResponder
 
         return Inertia::render('error', [
             'status' => $status,
-            'detail' => $status === 403 ? $this->safeDetail($exception) : null,
+            'detail' => in_array($status, [403, 410], true) ? $this->safeDetail($exception) : null,
             'reference' => CorrelationId::current(),
         ])->toResponse($request)->setStatusCode($status);
     }
@@ -69,7 +69,7 @@ class ErrorPageResponder
         return now()->getTimestamp() - (int) $request->session()->get(self::BOUNCED_AT, 0) > 5;
     }
 
-    /** Only messages written on purpose for the user (abort(403, '...')); never framework or model internals. */
+    /** Only messages written on purpose for the user (abort(403|410, '...')); never framework or model internals. */
     private function safeDetail(Throwable $exception): ?string
     {
         if (! $exception instanceof HttpExceptionInterface) {

@@ -33,6 +33,12 @@ const copy: Record<
             'La dirección que buscas no existe o ya no está disponible. Revisa que esté bien escrita o vuelve a tu panel.',
         icon: FileQuestion,
     },
+    410: {
+        title: 'Este enlace ya no es válido',
+        message:
+            'El enlace venció, ya se usó o fue reemplazado por uno más reciente. Revisa tu correo más reciente o pide uno nuevo.',
+        icon: Clock3,
+    },
     419: {
         title: 'Tu sesión de formulario expiró',
         message:
