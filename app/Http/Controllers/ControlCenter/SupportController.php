@@ -7,6 +7,7 @@ namespace App\Http\Controllers\ControlCenter;
 use App\Services\Platform\IncidentManagementService;
 use App\Services\Platform\PlatformHealthService;
 use App\Services\Platform\SupportTicketService;
+use App\Support\PlatformIssuer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +28,7 @@ class SupportController extends ControlCenterController
             'tickets' => $tickets->list($filters), 'filters' => $filters, 'selected' => $selected === null ? null : $tickets->detail($selected, true),
             'statuses' => SupportTicketService::STATUS_LABELS, 'priorities' => SupportTicketService::PRIORITY_LABELS,
             'staff' => DB::table('platform_staff')->join('users', 'users.id', '=', 'platform_staff.user_id')->where('platform_staff.status', 'active')->orderBy('users.name')->get(['users.id', 'users.name'])->all(),
-            'organizations' => DB::table('organizations')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
+            'organizations' => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
             'can_manage' => $this->authorization->can($user, 'saas.tickets.manage'), 'can_request_access' => $this->authorization->can($user, 'saas.support_access.request'),
         ]);
     }
@@ -59,7 +60,7 @@ class SupportController extends ControlCenterController
             'incidents' => $incidents->list(), 'selected' => $selected === null ? null : $incidents->detail($selected),
             'statuses' => IncidentManagementService::STATUS_LABELS, 'severities' => IncidentManagementService::SEVERITY_LABELS,
             'services' => array_map(fn (array $service): string => $service['name'], PlatformHealthService::SERVICES),
-            'organizations' => DB::table('organizations')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
+            'organizations' => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
             'plans' => DB::table('plans')->orderBy('display_order')->get(['id', 'name'])->all(),
             'can_manage' => $this->authorization->can($user, 'saas.incidents.manage'),
         ]);

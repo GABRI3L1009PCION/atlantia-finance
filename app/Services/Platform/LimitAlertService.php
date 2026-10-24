@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Platform;
 
 use App\Services\Tenancy\TenantDatabaseContext;
+use App\Support\PlatformIssuer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -25,7 +26,7 @@ class LimitAlertService
     /** Checks every organization with an active plan. Returns how many notices were sent now. */
     public function run(): int
     {
-        $ids = $this->tenancy->runAsSystem(fn (): array => DB::table('organizations')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->whereNull('deleted_at')->pluck('id')->all());
+        $ids = $this->tenancy->runAsSystem(fn (): array => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->whereNull('deleted_at')->pluck('id')->all());
         $sent = 0;
         foreach ($ids as $id) {
             $sent += $this->check((int) $id);

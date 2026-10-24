@@ -6,6 +6,7 @@ namespace App\Services\Platform;
 
 use App\Models\User;
 use App\Services\Platform\Billing\BillingMetricsService;
+use App\Support\PlatformIssuer;
 use App\Support\PlatformStatus;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -48,13 +49,13 @@ class SaaSDashboardService
     /** @return array<string, mixed> */
     public function metrics(bool $billing): array
     {
-        $count = fn (array $statuses): int => DB::table('organizations')->whereNull('deleted_at')->whereIn('status', $statuses)->count();
+        $count = fn (array $statuses): int => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->whereIn('status', $statuses)->count();
         $mrr = $billing ? $this->safe('mrr', fn () => $this->billing->mrr()) : null;
         $previousMonth = now()->subMonthNoOverflow()->endOfMonth();
 
         return [
             'organizations_active' => $count(['active', 'past_due', 'grace_period']),
-            'organizations_active_previous' => DB::table('organizations')->whereNull('deleted_at')->where('created_at', '<=', $previousMonth)->whereIn('status', ['active', 'past_due', 'grace_period'])->count(),
+            'organizations_active_previous' => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->where('created_at', '<=', $previousMonth)->whereIn('status', ['active', 'past_due', 'grace_period'])->count(),
             'trials_active' => DB::table('subscriptions')->where('status', 'trialing')->count(),
             'subscriptions_active' => DB::table('subscriptions')->whereIn('status', ['active', 'past_due', 'grace_period'])->where('provider', '!=', 'internal')->count(),
             'past_due_subscriptions' => DB::table('subscriptions')->whereIn('status', ['past_due', 'grace_period'])->count(),
@@ -125,7 +126,7 @@ class SaaSDashboardService
         $totals = ['users' => [0, 0], 'active_cases' => [0, 0], 'storage_bytes' => [0, 0], 'ai_queries' => [0, 0]];
         $unlimited = [];
         $alerts = 0;
-        foreach (DB::table('organizations')->whereNull('deleted_at')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->pluck('id') as $organizationId) {
+        foreach (DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->pluck('id') as $organizationId) {
             foreach ($this->usage->usage((int) $organizationId) as $row) {
                 if (! isset($totals[$row['metric']])) {
                     continue;

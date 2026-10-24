@@ -93,6 +93,19 @@ opcache.validate_timestamps = 0
 8. Correr el worker de colas como servicio (systemd o Supervisor): `php artisan queue:work --tries=3 --max-time=3600`
 9. Cachear la configuración: `php artisan config:cache && php artisan route:cache && php artisan view:cache`
 
+## Luzma (asistente)
+
+Luzma necesita su servicio local, Atlantia AI (`services/atlantia-ai`), escuchando en `127.0.0.1:8100` (`ATLANTIA_AI_URL`). Con `AI_ENGINE=brain` responde con su motor propio, sin Ollama y con poca memoria, así que funciona en una instancia pequeña. Si el servicio no está corriendo, Luzma aparece caída.
+
+```bash
+sudo apt-get install -y python3-venv
+cd /var/www/atlantia-finance/services/atlantia-ai
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+printf 'APP_ENV=production\nAI_ENGINE=brain\n' > .env
+```
+
+Servicio de systemd (`/etc/systemd/system/luzma-gateway.service`) con `User=ubuntu`, `WorkingDirectory` en esa carpeta, `EnvironmentFile` apuntando a su `.env` y `ExecStart=.../.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100`; luego `sudo systemctl enable --now luzma-gateway`. Queda encendida siempre y solo se apaga desde el interruptor del Control Center.
+
 ## Verificación
 
 1. `php artisan production:preflight` debe terminar en "passed". Revisa HTTPS, proxies, correo, servicios compartidos, respaldos, FEL, Recurrente en vivo, `bcmath` y el programador.

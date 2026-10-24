@@ -8,6 +8,7 @@ use App\Services\Platform\GlobalConfigurationService;
 use App\Services\Platform\LegalDocumentService;
 use App\Services\Platform\NotificationTemplateService;
 use App\Services\Platform\PlatformLogReader;
+use App\Support\PlatformIssuer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -50,7 +51,7 @@ class ControlController extends ControlCenterController
             'search' => 'nullable|string|max:100', 'correlation_id' => 'nullable|string|max:64', 'organization_id' => 'nullable|integer', 'date' => 'nullable|date_format:Y-m-d']);
 
         return $this->render($request, 'logs', ['entries' => $logs->entries($filters), 'filters' => $filters, 'environment' => app()->environment(),
-            'organizations' => DB::table('organizations')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all()]);
+            'organizations' => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all()]);
     }
 
     public function settings(Request $request, GlobalConfigurationService $settings, NotificationTemplateService $templates): Response

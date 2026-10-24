@@ -8,6 +8,7 @@ use App\Services\Platform\EntitlementResolverService;
 use App\Services\Platform\FeatureCatalogService;
 use App\Services\Platform\FeatureFlagService;
 use App\Services\Platform\UsageMeterService;
+use App\Support\PlatformIssuer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +24,7 @@ class ProductController extends ControlCenterController
 
         return $this->render($request, 'features', [
             'features' => $features->catalog(), 'overrides' => $features->overrides(), 'stages' => FeatureCatalogService::STAGES,
-            'organizations' => DB::table('organizations')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
+            'organizations' => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
             'can_manage' => $this->authorization->can($user, 'saas.features.manage'),
         ]);
     }
@@ -44,7 +45,7 @@ class ProductController extends ControlCenterController
         $this->staff($request, 'saas.usage.view');
         $filters = $request->validate(['status' => 'nullable|string|max:20', 'search' => 'nullable|string|max:100']);
         $rows = [];
-        foreach (DB::table('organizations')->whereNull('deleted_at')->whereNotIn('status', ['archived'])
+        foreach (DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->whereNotIn('status', ['archived'])
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->where('name', 'ilike', '%'.$search.'%'))->orderBy('name')->get(['id', 'name', 'status']) as $organization) {
             $metrics = $usage->usage((int) $organization->id);
             $worst = collect($metrics)->sortByDesc(fn (array $m): int => ['over_limit' => 5, 'at_limit' => 4, 'high' => 3, 'warning' => 2, 'ok' => 1][$m['status']] ?? 0)->first();
@@ -65,7 +66,7 @@ class ProductController extends ControlCenterController
         return $this->render($request, 'feature-flags', [
             'flags' => $flags->all(), 'targets' => FeatureFlagService::TARGETS, 'affected' => $flags->affectedCount(),
             'plans' => DB::table('plans')->orderBy('display_order')->get(['id', 'name'])->all(),
-            'organizations' => DB::table('organizations')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name', 'beta_program'])->all(),
+            'organizations' => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')->get(['id', 'name', 'beta_program'])->all(),
             'can_manage' => $this->authorization->can($user, 'saas.flags.manage'),
         ]);
     }

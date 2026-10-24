@@ -10,6 +10,7 @@ use App\Services\Platform\OrganizationManagementService;
 use App\Services\Platform\OrganizationStatusService;
 use App\Services\Platform\PlatformAuthorization;
 use App\Services\Platform\SaaSUserService;
+use App\Support\PlatformIssuer;
 use App\Support\PlatformStatus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -123,7 +124,7 @@ class OrganizationController extends ControlCenterController
 
         return $this->render($request, 'offices', [
             'filters' => $filters,
-            'offices' => DB::table('offices')->join('organizations', 'organizations.id', '=', 'offices.organization_id')->whereNull('offices.deleted_at')
+            'offices' => DB::table('offices')->join('organizations', 'organizations.id', '=', 'offices.organization_id')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('offices.deleted_at')
                 ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($inner) => $inner->where('offices.name', 'ilike', '%'.$search.'%')->orWhere('organizations.name', 'ilike', '%'.$search.'%')))
                 ->when($filters['organization_id'] ?? null, fn ($q, $id) => $q->where('offices.organization_id', $id))->orderBy('organizations.name')->orderBy('offices.name')->limit(500)
                 ->get(['offices.id', 'offices.code', 'offices.name', 'offices.city', 'offices.status', 'offices.is_primary', 'offices.created_at', 'organizations.id as organization_id', 'organizations.name as organization'])

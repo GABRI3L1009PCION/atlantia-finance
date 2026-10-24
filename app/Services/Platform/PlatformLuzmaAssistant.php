@@ -7,6 +7,7 @@ namespace App\Services\Platform;
 use App\Models\User;
 use App\Services\Luzma\Contracts\LuzmaModelProvider;
 use App\Services\Platform\Billing\BillingMetricsService;
+use App\Support\PlatformIssuer;
 use App\Support\PlatformStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -126,7 +127,7 @@ class PlatformLuzmaAssistant
     {
         $facts = [];
         $usage = app(UsageMeterService::class);
-        foreach (DB::table('organizations')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->get(['id', 'name']) as $organization) {
+        foreach (DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->get(['id', 'name']) as $organization) {
             foreach ($usage->usage((int) $organization->id) as $row) {
                 if (in_array($row['status'], ['high', 'at_limit', 'over_limit'], true)) {
                     $facts[] = $organization->name.': '.$row['label'].' '.$row['value'].'/'.$row['limit'].' ('.$row['percent'].' %'.($row['status'] === 'over_limit' ? ', por encima del límite' : '').').';

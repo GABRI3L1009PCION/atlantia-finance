@@ -6,6 +6,7 @@ namespace App\Services\Platform;
 
 use App\Models\User;
 use App\Services\Tenancy\TenantDatabaseContext;
+use App\Support\PlatformIssuer;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -64,7 +65,7 @@ class IncidentManagementService
      */
     public function affectedOrganizations(array $services): array
     {
-        $active = DB::table('organizations')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period']);
+        $active = DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereIn('status', ['active', 'trial', 'past_due', 'grace_period']);
         if (array_intersect($services, ['app', 'database', 'queues', 'storage', 'scheduler', 'cache', 'redis']) !== []) {
             return array_values(array_map('intval', $active->pluck('id')->all()));
         }
@@ -176,7 +177,7 @@ class IncidentManagementService
     private function audience(stdClass $incident): array
     {
         if ($incident->audience === 'all') {
-            return array_values(array_map('intval', DB::table('organizations')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->pluck('id')->all()));
+            return array_values(array_map('intval', DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->pluck('id')->all()));
         }
 
         return array_values(array_map('intval', DB::table('system_incident_organizations')->where('system_incident_id', $incident->id)->pluck('organization_id')->all()));

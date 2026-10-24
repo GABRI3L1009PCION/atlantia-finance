@@ -6,6 +6,7 @@ namespace App\Services\Platform;
 
 use App\Models\User;
 use App\Services\Tenancy\TenantDatabaseContext;
+use App\Support\PlatformIssuer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use stdClass;
@@ -124,6 +125,6 @@ class FeatureFlagService
     /** Organizations that would be affected by a global change (preview). */
     public function affectedCount(): int
     {
-        return DB::table('organizations')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->count();
+        return DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->count();
     }
 }

@@ -352,3 +352,19 @@ test('SaaS staff without a firm are sent to the Control Center instead of a plan
     $this->actingAs($owner)->get('/office/executive-dashboard')->assertRedirect('/control-center');
     $this->get('/luzma/context?module=global')->assertRedirect('/control-center');
 });
+
+test('the administrator who owns the FEL issuer lands in the Control Center and the issuer is not listed as a client', function () {
+    ccRelaxTwoFactor();
+    $admin = ccStaff('saas_owner');
+    $admin->forceFill(['email_verified_at' => now()])->save();
+    $this->artisan('fel:setup-platform', ['owner' => $admin->email, '--address' => config('fel.platform.address')])->assertSuccessful();
+    $issuerOrganization = (int) DB::table('organization_user')->where('user_id', $admin->id)->value('organization_id');
+    $client = ccOrganization($admin, 'professional', false, 'Firma Cliente Real');
+
+    $this->actingAs($admin)->get(route('dashboard'))->assertRedirect('/control-center');
+    $this->get(route('controlCenter.organizations'))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->where('organizations', fn ($rows) => collect($rows)->pluck('id')->map(fn ($id) => (int) $id)->contains($client)
+            && ! collect($rows)->pluck('id')->map(fn ($id) => (int) $id)->contains($issuerOrganization)));
+    $this->get(route('controlCenter.offices'))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->where('offices', fn ($rows) => ! collect($rows)->pluck('organization_id')->contains($issuerOrganization)));
+});

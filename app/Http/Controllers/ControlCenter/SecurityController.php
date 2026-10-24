@@ -8,6 +8,7 @@ use App\Services\Platform\GlobalConfigurationService;
 use App\Services\Platform\SecurityCenterService;
 use App\Services\Platform\SupportAccessService;
 use App\Services\Platform\SupportViewerService;
+use App\Support\PlatformIssuer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -45,7 +46,7 @@ class SecurityController extends ControlCenterController
 
         return $this->render($request, 'support-access', [
             'requests' => $access->list(), 'scopes' => SupportAccessService::SCOPES, 'statuses' => SupportAccessService::STATUS_LABELS,
-            'organizations' => DB::table('organizations')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
+            'organizations' => DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')->get(['id', 'name'])->all(),
             'tickets' => DB::table('support_tickets')->whereNotIn('status', ['closed'])->orderByDesc('id')->limit(100)->get(['id', 'code', 'subject', 'organization_id'])->all(),
             'max_minutes' => (int) app(GlobalConfigurationService::class)->get('support.max_access_minutes', 120),
             'can' => ['request' => $this->authorization->can($user, 'saas.support_access.request'), 'approve' => $this->authorization->can($user, 'saas.support_access.approve')],

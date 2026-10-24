@@ -6,6 +6,7 @@ use App\Models\Feature;
 use App\Models\Organization;
 use App\Services\AccountingService;
 use App\Services\ExecutiveDashboardService;
+use App\Services\Platform\PlatformAuthorization;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +20,11 @@ class WorkspaceController extends Controller
 {
     public function show(Request $request, WorkspaceContext $context, AccountingService $accounting, ExecutiveDashboardService $dashboard, WorkAuthorizationService $authorization): Response|RedirectResponse
     {
+        // Atlantia's staff work in the Control Center; the internal organization of the FEL issuer is not their workspace.
+        if (app(PlatformAuthorization::class)->isStaff($request->user())) {
+            return redirect('/control-center');
+        }
+
         $organization = $context->organization($request->user());
         $owner = $organization->pivot->role === 'owner';
         $office = $organization->offices()->where('is_primary', true)->first();

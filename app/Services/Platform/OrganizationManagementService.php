@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\WorkspaceInvitation;
 use App\Services\Platform\Billing\SubscriptionService;
 use App\Services\WorkManagement\WorkAuthorizationService;
+use App\Support\PlatformIssuer;
 use App\Support\PlatformStatus;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
@@ -186,7 +187,7 @@ class OrganizationManagementService
             ->selectRaw('DISTINCT ON (s.organization_id) s.organization_id, s.status as subscription_status, s.current_period_ends_at, p.id as plan_id, p.name as plan_name, pv.version as plan_version')
             ->orderBy('s.organization_id')->orderByDesc('s.id');
 
-        return DB::table('organizations')->leftJoinSub($current, 'current', 'current.organization_id', '=', 'organizations.id')->whereNull('organizations.deleted_at')
+        return DB::table('organizations')->leftJoinSub($current, 'current', 'current.organization_id', '=', 'organizations.id')->whereNull('organizations.deleted_at')->where('organizations.id', '<>', PlatformIssuer::organizationId())
             ->select('organizations.*', 'current.subscription_status', 'current.current_period_ends_at', 'current.plan_id', 'current.plan_name', 'current.plan_version');
     }
 

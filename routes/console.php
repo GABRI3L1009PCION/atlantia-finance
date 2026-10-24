@@ -18,6 +18,7 @@ use App\Services\WorkManagement\CrmAlertService;
 use App\Services\WorkManagement\OfficeStaffingAlertService;
 use App\Services\WorkManagement\ReminderService;
 use App\Services\WorkManagement\TaskSyncService;
+use App\Support\PlatformIssuer;
 use Database\Seeders\NormativeLibrarySeeder;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -93,7 +94,7 @@ Artisan::command('support:expire-access', function (SupportAccessService $access
 Schedule::command('support:expire-access')->everyMinute()->withoutOverlapping();
 
 Artisan::command('usage:snapshot', function (UsageMeterService $usage) {
-    $ids = DB::table('organizations')->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->pluck('id');
+    $ids = DB::table('organizations')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereIn('status', ['active', 'trial', 'past_due', 'grace_period'])->pluck('id');
     foreach ($ids as $id) {
         $usage->snapshot((int) $id);
     }
