@@ -384,3 +384,20 @@ test('with Luzma\'s own engine the Control Center answers with the official figu
         ->and($answer['answer'])->toContain('Plan Profesional')->toContain('1 suscripción(es) vigente(s)')
         ->and($answer['answer'])->not->toContain('No tengo datos');
 });
+
+test('the trial length can be chosen for each firm when it is onboarded, and defaults to the platform setting', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->get('/control-center/organizations')->assertInertia(fn (Assert $page) => $page->where('default_trial_days', 14));
+
+    $this->post('/control-center/organizations', ['name' => 'Prueba Larga', 'plan_price_id' => ccPrice('professional'), 'trial' => true, 'trial_days' => 30,
+        'owner_name' => 'Luis Cliente', 'owner_email' => 'luis@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $this->post('/control-center/organizations', ['name' => 'Prueba Normal', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+        'owner_name' => 'Rosa Cliente', 'owner_email' => 'rosa@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $this->post('/control-center/organizations', ['name' => 'Prueba Excesiva', 'plan_price_id' => ccPrice('professional'), 'trial' => true, 'trial_days' => 365,
+        'owner_name' => 'Juan Cliente', 'owner_email' => 'juan@cliente.test', 'office_name' => 'Central'])->assertSessionHasErrors('trial_days');
+
+    $trialEnd = fn (string $name) => Carbon\Carbon::parse(DB::table('subscriptions')->join('organizations', 'organizations.id', '=', 'subscriptions.organization_id')
+        ->where('organizations.name', $name)->value('subscriptions.trial_ends_at'));
+    expect((int) round(now()->diffInDays($trialEnd('Prueba Larga'))))->toBe(30)
+        ->and((int) round(now()->diffInDays($trialEnd('Prueba Normal'))))->toBe(14);
+});

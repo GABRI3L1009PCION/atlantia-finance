@@ -35,7 +35,8 @@ class SubscriptionService
         private NotificationTemplateService $templates,
     ) {}
 
-    public function create(?User $actor, int $organizationId, int $planPriceId, bool $trial, float $discountPercent = 0, string $provider = 'manual'): int
+    /** `$trialDays` overrides the default trial length (Control Center setting) for this firm only. */
+    public function create(?User $actor, int $organizationId, int $planPriceId, bool $trial, float $discountPercent = 0, string $provider = 'manual', ?int $trialDays = null): int
     {
         $price = DB::table('plan_prices')->where('id', $planPriceId)->first() ?? throw ValidationException::withMessages(['plan_price_id' => 'Precio de plan inválido.']);
         $version = $this->publishedVersion((int) $price->plan_id);
@@ -43,8 +44,8 @@ class SubscriptionService
             throw ValidationException::withMessages(['subscription' => 'La organización ya tiene una suscripción vigente; cambia su plan en lugar de crear otra.']);
         }
 
-        return DB::transaction(function () use ($actor, $organizationId, $price, $version, $trial, $discountPercent, $provider): int {
-            $trialDays = (int) $this->settings->get('billing.trial_days', 14);
+        return DB::transaction(function () use ($actor, $organizationId, $price, $version, $trial, $discountPercent, $provider, $trialDays): int {
+            $trialDays ??= (int) $this->settings->get('billing.trial_days', 14);
             $start = now();
             $end = $trial ? now()->addDays($trialDays) : ($price->billing_period === 'annual' ? now()->addYear() : now()->addMonth());
             $id = DB::table('subscriptions')->insertGetId(['public_id' => (string) Str::uuid(), 'organization_id' => $organizationId, 'provider' => $provider, 'status' => $trial ? 'trialing' : 'active',

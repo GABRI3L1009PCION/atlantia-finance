@@ -122,7 +122,7 @@ class OrganizationManagementService
     }
 
     /**
-     * @param  array{name: string, legal_name?: string|null, tax_identifier?: string|null, country_code?: string|null, timezone?: string|null, plan_price_id: int, trial: bool, discount_percent?: float|null,
+     * @param  array{name: string, legal_name?: string|null, tax_identifier?: string|null, country_code?: string|null, timezone?: string|null, plan_price_id: int, trial: bool, trial_days?: int|null, discount_percent?: float|null,
      *     owner_name: string, owner_email: string, office_name: string, office_city?: string|null, beta_program?: bool, billing_email?: string|null}  $data
      * @return array{organization_id: int, invitation_id: int}
      */
@@ -149,7 +149,7 @@ class OrganizationManagementService
                 'country_code' => $data['country_code'] ?? 'GT', 'timezone' => $data['timezone'] ?? 'America/Guatemala', 'status' => 'active', 'is_primary' => true]);
             // A new firm starts strict: unreconciled banks and unfiled obligations stop the close until the office decides otherwise.
             DB::table('offices')->where('id', $office->id)->update(['treasury_close_policy' => 'block', 'fiscal_close_policy' => 'block']);
-            $subscriptionId = $this->subscriptions->create($actor, (int) $organization->id, (int) $data['plan_price_id'], (bool) $data['trial'], (float) ($data['discount_percent'] ?? 0));
+            $subscriptionId = $this->subscriptions->create($actor, (int) $organization->id, (int) $data['plan_price_id'], (bool) $data['trial'], (float) ($data['discount_percent'] ?? 0), trialDays: $data['trial_days'] ?? null);
             app(WorkAuthorizationService::class)->ensureDefaults($organization);
             $invitation = Invitation::query()->create(['public_id' => (string) Str::uuid(), 'organization_id' => $organization->id, 'invited_by' => $actor->id, 'email' => $email, 'name' => trim($data['owner_name']),
                 'role' => 'owner', 'workspace_role_id' => null, 'token_hash' => hash('sha256', $token), 'status' => 'pending', 'metadata' => json_encode(['companies' => [], 'source' => 'control_center']),

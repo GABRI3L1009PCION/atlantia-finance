@@ -45,9 +45,11 @@ type Price = { id: number; label: string };
 
 function CreateOrganization({
     plans,
+    defaultTrialDays,
     onClose,
 }: {
     plans: Price[];
+    defaultTrialDays: number;
     onClose: () => void;
 }) {
     const form = useForm({
@@ -58,6 +60,7 @@ function CreateOrganization({
         timezone: 'America/Guatemala',
         plan_price_id: plans[0]?.id ?? 0,
         trial: true,
+        trial_days: String(defaultTrialDays || 14),
         discount_percent: '',
         owner_name: '',
         owner_email: '',
@@ -165,6 +168,21 @@ function CreateOrganization({
                         />{' '}
                         Iniciar en prueba
                     </label>
+                    {form.data.trial && (
+                        <Field label="Días de prueba">
+                            <input
+                                type="number"
+                                min={1}
+                                max={90}
+                                className={ccInput}
+                                value={form.data.trial_days}
+                                onChange={(e) =>
+                                    form.setData('trial_days', e.target.value)
+                                }
+                                required
+                            />
+                        </Field>
+                    )}
                     <Field label="Dueño · nombre">
                         <input
                             className={ccInput}
@@ -265,12 +283,14 @@ export default function Organizations({
     statuses,
     plans,
     can_create,
+    default_trial_days,
 }: {
     organizations: Organization[];
     filters: { search?: string; status?: string };
     statuses: Record<string, string>;
     plans: Price[];
     can_create: boolean;
+    default_trial_days: number;
 }) {
     const [creating, setCreating] = useState(false);
     const [search, setSearch] = useState(filters.search ?? '');
@@ -451,6 +471,7 @@ export default function Organizations({
             {creating && (
                 <CreateOrganization
                     plans={plans}
+                    defaultTrialDays={default_trial_days}
                     onClose={() => setCreating(false)}
                 />
             )}

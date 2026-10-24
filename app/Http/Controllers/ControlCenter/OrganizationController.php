@@ -6,6 +6,7 @@ namespace App\Http\Controllers\ControlCenter;
 
 use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\FeatureCatalogService;
+use App\Services\Platform\GlobalConfigurationService;
 use App\Services\Platform\OrganizationManagementService;
 use App\Services\Platform\OrganizationStatusService;
 use App\Services\Platform\PlatformAuthorization;
@@ -34,6 +35,7 @@ class OrganizationController extends ControlCenterController
             'statuses' => PlatformStatus::ORGANIZATION_LABELS,
             'plans' => $this->sellablePrices(),
             'can_create' => $this->authorization->can($user, 'saas.organizations.manage'),
+            'default_trial_days' => (int) app(GlobalConfigurationService::class)->get('billing.trial_days', 14),
         ]);
     }
 
@@ -57,11 +59,12 @@ class OrganizationController extends ControlCenterController
     {
         $user = $this->staff($request, 'saas.organizations.manage');
         $data = $request->validate(['name' => 'required|string|max:150', 'legal_name' => 'nullable|string|max:200', 'tax_identifier' => 'nullable|string|max:30',
-            'country_code' => 'nullable|string|size:2', 'timezone' => 'nullable|timezone', 'plan_price_id' => 'required|integer', 'trial' => 'boolean', 'discount_percent' => 'nullable|numeric|min:0|max:100',
+            'country_code' => 'nullable|string|size:2', 'timezone' => 'nullable|timezone', 'plan_price_id' => 'required|integer', 'trial' => 'boolean', 'trial_days' => 'nullable|integer|min:1|max:90', 'discount_percent' => 'nullable|numeric|min:0|max:100',
             'owner_name' => 'required|string|max:150', 'owner_email' => 'required|email|max:255', 'office_name' => 'required|string|max:120', 'office_city' => 'nullable|string|max:100',
             'beta_program' => 'boolean', 'billing_email' => 'nullable|email|max:255']);
         $result = $organizations->onboard($user, ['name' => (string) $data['name'], 'legal_name' => $data['legal_name'] ?? null, 'tax_identifier' => $data['tax_identifier'] ?? null,
             'country_code' => $data['country_code'] ?? null, 'timezone' => $data['timezone'] ?? null, 'plan_price_id' => (int) $data['plan_price_id'], 'trial' => (bool) ($data['trial'] ?? false),
+            'trial_days' => isset($data['trial_days']) ? (int) $data['trial_days'] : null,
             'discount_percent' => isset($data['discount_percent']) ? (float) $data['discount_percent'] : null, 'owner_name' => (string) $data['owner_name'], 'owner_email' => (string) $data['owner_email'],
             'office_name' => (string) $data['office_name'], 'office_city' => $data['office_city'] ?? null, 'beta_program' => (bool) ($data['beta_program'] ?? false), 'billing_email' => $data['billing_email'] ?? null]);
 
