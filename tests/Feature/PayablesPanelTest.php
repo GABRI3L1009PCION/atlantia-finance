@@ -278,8 +278,8 @@ function payablesFixture(): array
         DB::table('company_fiscal_profiles')->insert(['company_id' => $companyId, 'organization_id' => $org->id, 'vat_regime' => 'general', 'income_tax_regime' => 'utilities', 'created_at' => now(), 'updated_at' => now()]);
         app(AccountingAutomationService::class)->ensureMapping($companyId);
     }
-    $f['bankId'] = payablesBankAccount($f, $f['mayaId'], '1110', 'Banco Industrial');
-    $f['otherBankId'] = payablesBankAccount($f, $f['otherCompanyId'], '1110', 'Banco G&T');
+    $f['bankId'] = payablesBankAccount($f, $f['mayaId'], '1150', 'Banco Industrial');
+    $f['otherBankId'] = payablesBankAccount($f, $f['otherCompanyId'], '1150', 'Banco G&T');
 
     return $f;
 }

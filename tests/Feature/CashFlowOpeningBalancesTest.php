@@ -82,3 +82,18 @@ test('the statement of changes in equity opens with the capital of the opening b
 
     expect($rows[0]['capital_cents'])->toBe(5000000)->and($rows[1]['capital_cents'])->toBe(0)->and($rows[4]['capital_cents'])->toBe(5000000);
 });
+
+test('petty cash, foreign currency banks and funds to deposit of the detailed catalog count as cash in the cash flow', function () {
+    $f = openingFlowFixture($this);
+    $periodId = DB::table('accounting_periods')->insertGetId(['company_id' => $f['companyId'], 'name' => '2026-11', 'starts_on' => '2026-11-01', 'ends_on' => '2026-11-30']);
+
+    openingFlowPost($this, $f, $periodId, '2026-11-01', 'opening', [['1104', '1000', '0'], ['1106', '20000', '0'], ['1115', '3000', '0'], ['3101', '0', '24000']]);
+    openingFlowPost($this, $f, $periodId, '2026-11-10', 'standard', [['5226', '500', '0'], ['1104', '0', '500']]);
+
+    $flow = app(FinancialStatementService::class)->set($f['companyId'], '2026-11-01', '2026-11-30')['cash_flow'];
+
+    expect($flow['totals']['cash_open'])->toBe(2400000)
+        ->and($flow['totals']['cash_out'])->toBe(50000)
+        ->and($flow['totals']['cash_close'])->toBe(2350000)
+        ->and($flow['totals']['difference'])->toBe(0);
+});

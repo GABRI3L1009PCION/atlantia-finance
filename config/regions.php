@@ -73,7 +73,7 @@ return [
         ]],
         'guatemala_services' => ['label' => 'Guatemala · servicios', 'accounts' => [
             ['1302', 'Retenciones de ISR soportadas', 'asset'], ['2203', 'ISR retenido por pagar', 'liability'], ['2204', 'IVA retenido por pagar', 'liability'], ['2205', 'ISR por pagar', 'liability'],
-            ['2206', 'Cuotas IGSS por pagar', 'liability'], ['3202', 'Reserva legal', 'equity'], ['4102', 'Honorarios profesionales', 'income'], ['5208', 'Subcontratación de servicios', 'expense'], ['5301', 'Gasto de ISR', 'expense'],
+            ['2206', 'Cuotas IGSS por pagar', 'liability'], ['3202', 'Reserva legal', 'equity'], ['4102', 'Honorarios profesionales', 'income'], ['5253', 'Subcontratación de servicios', 'expense'], ['5301', 'Gasto de ISR', 'expense'],
         ]],
         'guatemala_commerce' => ['label' => 'Guatemala · comercio', 'accounts' => [
             ['1202', 'Mercaderías en tránsito', 'asset'], ['1302', 'Retenciones de ISR soportadas', 'asset'], ['2203', 'ISR retenido por pagar', 'liability'], ['2204', 'IVA retenido por pagar', 'liability'],

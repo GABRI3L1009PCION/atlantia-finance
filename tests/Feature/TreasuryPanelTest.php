@@ -201,7 +201,7 @@ test('treasury feeds the close checklist following the office policy and cash di
     $row = collect(app(AccountingPeriodCloseChecklistService::class)->forPeriod($f['mayaId'], $f['periodId']))->firstWhere('key', 'bank_reconciliation');
     expect($row['status'])->toBe('blocked');
 
-    $cashLedger = DB::table('ledger_accounts')->insertGetId(['organization_id' => $f['org']->id, 'company_id' => $f['mayaId'], 'code' => '1109', 'name' => 'Caja chica', 'type' => 'asset', 'created_at' => now(), 'updated_at' => now()]);
+    $cashLedger = DB::table('ledger_accounts')->insertGetId(['organization_id' => $f['org']->id, 'company_id' => $f['mayaId'], 'code' => '1151', 'name' => 'Caja chica', 'type' => 'asset', 'created_at' => now(), 'updated_at' => now()]);
     $entries = DB::table('journal_entries')->count();
     $this->actingAs($f['treasury'])->post(route('treasury.cash.store'), ['company_id' => $f['mayaId'], 'ledger_account_id' => $cashLedger, 'counted_on' => '2026-09-27', 'counted' => '120.00'])->assertSessionHasNoErrors();
     $count = DB::table('cash_counts')->where('ledger_account_id', $cashLedger)->first();
@@ -233,9 +233,9 @@ function treasuryFixture(): array
     }
     app(AccountingAutomationService::class)->ensureMapping($f['mayaId']);
     app(AccountingAutomationService::class)->ensureMapping($f['otherCompanyId']);
-    [$f['bankId'], $f['bankLedgerId']] = treasuryBankAccount($f, $f['mayaId'], '1110', 'Banco Industrial', 'checking', '4521');
-    [$f['savingsId'], $f['savingsLedgerId']] = treasuryBankAccount($f, $f['mayaId'], '1111', 'Banrural', 'savings', '9913');
-    [$f['otherBankId']] = treasuryBankAccount($f, $f['otherCompanyId'], '1110', 'Banco G&T', 'checking', '1188');
+    [$f['bankId'], $f['bankLedgerId']] = treasuryBankAccount($f, $f['mayaId'], '1150', 'Banco Industrial', 'checking', '4521');
+    [$f['savingsId'], $f['savingsLedgerId']] = treasuryBankAccount($f, $f['mayaId'], '1152', 'Banrural', 'savings', '9913');
+    [$f['otherBankId']] = treasuryBankAccount($f, $f['otherCompanyId'], '1150', 'Banco G&T', 'checking', '1188');
 
     return $f;
 }

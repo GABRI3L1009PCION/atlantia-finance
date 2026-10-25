@@ -194,7 +194,7 @@ function payrollFixture(): array
         DB::table('company_assignments')->insert(['organization_id' => $org->id, 'office_id' => $office->id, 'company_id' => $f['mayaId'], 'user_id' => $user->id, 'assignment_role' => $role, 'is_primary' => true, 'status' => 'active', 'starts_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
     }
     app(AccountingAutomationService::class)->ensureMapping($f['mayaId']);
-    $ledger = DB::table('ledger_accounts')->insertGetId(['organization_id' => $org->id, 'company_id' => $f['mayaId'], 'code' => '1110', 'name' => 'Banco Industrial', 'type' => 'asset', 'created_at' => now(), 'updated_at' => now()]);
+    $ledger = DB::table('ledger_accounts')->insertGetId(['organization_id' => $org->id, 'company_id' => $f['mayaId'], 'code' => '1150', 'name' => 'Banco Industrial', 'type' => 'asset', 'created_at' => now(), 'updated_at' => now()]);
     $f['bankId'] = DB::table('bank_accounts')->insertGetId(['public_id' => (string) Str::uuid(), 'organization_id' => $org->id, 'company_id' => $f['mayaId'], 'ledger_account_id' => $ledger, 'bank_name' => 'Banco Industrial', 'account_name' => 'Planillas', 'account_type' => 'checking', 'last_four' => '4521', 'currency' => 'GTQ', 'bank_balance_cents' => 0, 'status' => 'active', 'created_by' => $owner->id, 'created_at' => now(), 'updated_at' => now()]);
 
     return $f;

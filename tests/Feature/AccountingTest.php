@@ -30,7 +30,11 @@ test('owner installs the professional starter chart without creating duplicates'
         ->assertRedirect()
         ->assertSessionHasNoErrors();
 
-    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(27);
+    // 27 starter accounts plus the 200 of the detailed catalog; the company's own "Capital" (3101) keeps its name.
+    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(227)
+        ->and(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->where('code', '3101')->value('name'))->toBe('Capital');
+    $this->assertDatabaseHas('ledger_accounts', ['company_id' => $f['companyId'], 'code' => '5211', 'name' => 'Cuota patronal IGSS', 'type' => 'expense']);
+    $this->assertDatabaseHas('ledger_accounts', ['company_id' => $f['companyId'], 'code' => '5401', 'name' => 'Sueldos de ventas', 'type' => 'expense']);
     $this->assertDatabaseHas('ledger_accounts', [
         'company_id' => $f['companyId'],
         'code' => '2102',
@@ -39,7 +43,7 @@ test('owner installs the professional starter chart without creating duplicates'
     ]);
 
     $this->post(route('accounting.accountTemplate', $f['uuid']))->assertSessionHasNoErrors();
-    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(27);
+    expect(DB::table('ledger_accounts')->where('company_id', $f['companyId'])->count())->toBe(227);
 });
 
 test('draft entries keep references and secure support documents that become immutable after posting', function () {

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Accounting\ChartOfAccountsCatalog;
 use App\Services\Accounting\CostCenterService;
 use App\Services\Integrations\WebhookDispatcher;
 use Illuminate\Database\Query\Builder;
@@ -76,7 +77,7 @@ class AccountingService
         ['code' => '5209', 'name' => 'Intereses y gastos financieros', 'type' => 'expense'],
     ];
 
-    /** Install an idempotent starter chart without overwriting custom accounts. */
+    /** Install an idempotent starter chart, with the detailed catalog, without overwriting custom accounts. */
     public function installDefaultChart(int $companyId): int
     {
         $now = now();
@@ -85,7 +86,7 @@ class AccountingService
             'company_id' => $companyId,
             'created_at' => $now,
             'updated_at' => $now,
-        ], self::DEFAULT_CHART);
+        ], [...self::DEFAULT_CHART, ...ChartOfAccountsCatalog::ACCOUNTS]);
 
         return DB::table('ledger_accounts')->insertOrIgnore($rows);
     }

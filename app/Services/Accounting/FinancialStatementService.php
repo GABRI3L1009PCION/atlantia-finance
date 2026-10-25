@@ -24,6 +24,9 @@ class FinancialStatementService
     public const TITLES = ['position' => 'Estado de situación financiera', 'income' => 'Estado de resultado integral', 'cash_flow' => 'Estado de flujos de efectivo',
         'equity' => 'Estado de cambios en el patrimonio', 'notes' => 'Notas a los estados financieros'];
 
+    /** Cash accounts of the detailed catalog besides cash (1101) and banks (1102): petty cash, foreign currency banks and funds to deposit. */
+    private const CASH_CODES = ['1104', '1106', '1115'];
+
     public function __construct(private FinancialReportService $reports) {}
 
     /**
@@ -429,7 +432,7 @@ class FinancialStatementService
     {
         $ids = DB::table('bank_accounts')->where('company_id', $companyId)->pluck('ledger_account_id')->all();
         $mapped = DB::table('company_accounting_mappings')->where('company_id', $companyId)->value('cash_account_id');
-        $byCode = DB::table('ledger_accounts')->where('company_id', $companyId)->where(fn ($query) => $query->where('code', 'like', '1101%')->orWhere('code', 'like', '1102%'))->pluck('id')->all();
+        $byCode = DB::table('ledger_accounts')->where('company_id', $companyId)->where(fn ($query) => $query->whereIn('code', self::CASH_CODES)->orWhere('code', 'like', '1101%')->orWhere('code', 'like', '1102%'))->pluck('id')->all();
 
         return array_values(array_unique(array_map('intval', [...$ids, ...($mapped === null ? [] : [$mapped]), ...$byCode])));
     }
