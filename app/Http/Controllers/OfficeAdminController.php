@@ -9,6 +9,7 @@ use App\Services\AccountingService;
 use App\Services\Notifications\ClientMailIdentityService;
 use App\Services\WorkManagement\CompanyAdministrationService;
 use App\Services\WorkManagement\CompanyAssignmentService;
+use App\Services\WorkManagement\CompanyDeletionService;
 use App\Services\WorkManagement\OfficeAdminService;
 use App\Services\WorkManagement\OfficeInvitationService;
 use App\Services\WorkManagement\OfficeScopeService;
@@ -109,6 +110,8 @@ class OfficeAdminController extends Controller
             'incomplete' => $this->admin->incompleteAssignments($organization, $companies),
             'assignmentRoles' => collect(CompanyAssignmentService::LABELS)->map(fn (string $label, string $code): array => ['code' => $code, 'name' => $label])->values()->all(),
             'permissions' => $this->permissions($organization, $request, $selected),
+            'canDeleteCompanies' => $owner = CompanyDeletionService::isOwner($organization, $request->user()),
+            'trash' => $owner ? app(CompanyDeletionService::class)->trash($organization) : [],
         ]);
     }
 

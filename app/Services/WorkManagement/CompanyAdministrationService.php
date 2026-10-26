@@ -50,6 +50,9 @@ class CompanyAdministrationService
             if ((clone $all)->where('tax_id', $taxId)->exists()) {
                 throw ValidationException::withMessages(['tax_id' => 'Esta empresa ya está registrada en tu organización.']);
             }
+            if (DB::table('company_deletions')->where('company_deletions.organization_id', $organization->id)->where('company_tax_id', $taxId)->whereNull('restored_at')->whereNull('purged_at')->exists()) {
+                throw ValidationException::withMessages(['tax_id' => 'Esta empresa está en la papelera. Restáurala desde Clientes → Papelera para recuperar toda su información.']);
+            }
 
             $id = DB::table('companies')->insertGetId([
                 'public_id' => $publicId,

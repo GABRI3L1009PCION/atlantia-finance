@@ -16,6 +16,7 @@ use App\Services\Platform\PlatformHealthService;
 use App\Services\Platform\SupportAccessService;
 use App\Services\Platform\UsageMeterService;
 use App\Services\Tenancy\TenantDatabaseContext;
+use App\Services\WorkManagement\CompanyDeletionService;
 use App\Services\WorkManagement\CrmAlertService;
 use App\Services\WorkManagement\OfficeStaffingAlertService;
 use App\Services\WorkManagement\ReminderService;
@@ -214,6 +215,13 @@ Artisan::command('exchange-rates:sync {--days=7 : Días hacia atrás que se revi
 })->purpose('Descarga del Banco de Guatemala los tipos de cambio oficiales del dólar y del euro');
 
 Schedule::command('exchange-rates:sync')->twiceDailyAt(7, 17, 5)->withoutOverlapping()->onOneServer();
+
+Artisan::command('companies:deletions', function (CompanyDeletionService $deletions) {
+    $result = app(TenantDatabaseContext::class)->runAsSystem(fn (): array => $deletions->sweep());
+    $this->info('Recordatorios de papelera: '.$result['reminded'].' · empresas eliminadas definitivamente: '.$result['purged']);
+})->purpose('Recuerda a los dueños las empresas en la papelera y elimina definitivamente las que cumplieron 30 días');
+
+Schedule::command('companies:deletions')->dailyAt('08:05')->withoutOverlapping()->onOneServer();
 
 Artisan::command('luzma:morning-brief', function (TenantDatabaseContext $tenancy, LuzmaMorningBriefService $brief) {
     $sent = $tenancy->runAsSystem(fn (): int => $brief->sendAll());

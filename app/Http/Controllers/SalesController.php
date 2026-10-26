@@ -10,6 +10,7 @@ use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\Fiscal\VatBookService;
 use App\Services\FiscalConfigurationService;
+use App\Services\Receivables\CollectionReminderService;
 use App\Services\ReportExportService;
 use App\Services\SalesCreditNoteService;
 use App\Services\SalesInvoiceDraftService;
@@ -22,6 +23,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class SalesController extends Controller
 {
@@ -303,7 +305,7 @@ class SalesController extends Controller
         return back()->with('success', 'Cliente registrado.');
     }
 
-    public function customerShow(Request $request, string $company, int $customer): Response
+    public function customerShow(Request $request, string $company, int $customer, CollectionReminderService $reminders): Response
     {
         [$org, $record] = $this->scope($request, $company);
         $client = $this->customerRecord($record->id, $customer);
@@ -327,7 +329,32 @@ class SalesController extends Controller
         return Inertia::render('accounting/customer', ['company' => $record, 'customer' => $client, 'invoices' => $invoices,
             'receipts' => $receipts, 'summary' => ['invoiced' => (int) $summary->invoiced, 'collected' => (int) $summary->collected,
                 'outstanding' => (int) $summary->invoiced - (int) $summary->collected, 'overdue' => (int) $summary->overdue],
-            'canWrite' => $this->canWrite($org, $record->id, $request->user()), 'today' => now()->toDateString()]);
+            'canWrite' => $this->canWrite($org, $record->id, $request->user()), 'today' => now()->toDateString(),
+            'canRemind' => $canRemind = $this->accounting->canModule($org, $record->id, $request->user(), 'sales.manage'),
+            'reminderTemplates' => $canRemind ? array_values(array_filter(array_map(fn (array $template): array => ['id' => $template['id'], 'label' => $template['kind_label'].' · '.$template['name'], 'kind' => $template['kind']],
+                $reminders->templates($org)), fn (array $template): bool => $template['kind'] !== 'statement')) : [],
+            'reminders' => $reminders->history([$record->id], $client->id, 10)]);
+    }
+
+    /** The collection reminder exactly as the customer would receive it, opened in a new tab before sending. */
+    public function customerReminderPreview(Request $request, string $company, int $customer, CollectionReminderService $reminders): HttpResponse
+    {
+        [$org, $record] = $this->scope($request, $company, 'sales.manage');
+        $client = $this->customerRecord($record->id, $customer);
+        $data = $request->validate(['template_id' => 'required|integer']);
+
+        return response($reminders->preview($org, $request->user(), $record->id, $client->id, (int) $data['template_id']));
+    }
+
+    public function customerReminder(Request $request, string $company, int $customer, CollectionReminderService $reminders): RedirectResponse
+    {
+        [$org, $record] = $this->scope($request, $company, 'sales.manage');
+        $client = $this->customerRecord($record->id, $customer);
+        $data = $request->validate(['template_id' => 'required|integer']);
+        $id = $reminders->send($org, $request->user(), $record->id, $client->id, (int) $data['template_id']);
+        $status = (string) DB::table('collection_reminders')->where('id', $id)->value('status');
+
+        return back()->with($status === 'failed' ? 'error' : 'success', $status === 'failed' ? 'No se pudo enviar el recordatorio. Puedes reintentarlo más tarde.' : 'Recordatorio enviado a '.$client->email.'.');
     }
 
     public function customerUpdate(Request $request, string $company, int $customer): RedirectResponse
@@ -491,7 +518,7 @@ class SalesController extends Controller
         return back()->with('success', 'Nota de crédito anulada; el saldo vuelve a estar pendiente.');
     }
 
-    public function pdf(Request $request, string $company, string $invoice, ReportExportService $exporter): \Symfony\Component\HttpFoundation\Response
+    public function pdf(Request $request, string $company, string $invoice, ReportExportService $exporter): HttpResponse
     {
         [, $record] = $this->scope($request, $company);
         $doc = $this->invoice($record->id, $invoice);

@@ -4,10 +4,16 @@ import {
     Building2,
     ExternalLink,
     Plus,
+    Trash2,
     UserCheck,
     UserRoundX,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import {
+    CompanyTrash,
+    DeleteCompanyDialog,
+} from '@/components/office-admin/delete-company-dialog';
+import type { TrashedCompany } from '@/components/office-admin/delete-company-dialog';
 import {
     AssignDialog,
     EmptyRow,
@@ -83,6 +89,8 @@ export default function OfficeCompanies({
     incomplete,
     assignmentRoles,
     permissions,
+    canDeleteCompanies,
+    trash,
     notice,
 }: {
     officeScope: OfficeScope;
@@ -90,8 +98,11 @@ export default function OfficeCompanies({
     incomplete: Incomplete[];
     assignmentRoles: { code: string; name: string }[];
     permissions: Record<string, boolean>;
+    canDeleteCompanies: boolean;
+    trash: TrashedCompany[];
     notice: string | null;
 }) {
+    const [deleting, setDeleting] = useState<CompanyRow | null>(null);
     const [assignTarget, setAssignTarget] = useState<AssignTarget | null>(null);
     const [companyOpen, setCompanyOpen] = useState(false);
     const [moving, setMoving] = useState<{
@@ -403,6 +414,19 @@ export default function OfficeCompanies({
                                                             <ArrowRightLeft className="size-4" />
                                                         </button>
                                                     )}
+                                                {canDeleteCompanies && (
+                                                    <button
+                                                        type="button"
+                                                        className={iconButton}
+                                                        title="Eliminar empresa"
+                                                        aria-label={`Eliminar ${company.name}`}
+                                                        onClick={() =>
+                                                            setDeleting(company)
+                                                        }
+                                                    >
+                                                        <Trash2 className="size-4" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -487,10 +511,15 @@ export default function OfficeCompanies({
                         </div>
                     </section>
                 )}
+                <CompanyTrash trash={trash} />
             </Shell>
             <AssignDialog
                 target={assignTarget}
                 onClose={() => setAssignTarget(null)}
+            />
+            <DeleteCompanyDialog
+                company={deleting}
+                onClose={() => setDeleting(null)}
             />
             <NewCompanyDialog
                 open={companyOpen}

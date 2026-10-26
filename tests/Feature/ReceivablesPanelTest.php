@@ -345,6 +345,28 @@ test('a reminder leaves under the company name and replies reach the firm, and c
     });
 });
 
+test('from the company customer page a reminder can be previewed and sent in any plan', function () {
+    Mail::fake();
+    Queue::fake();
+    $f = receivablesFixture();
+    $invoice = receivablesInvoice($f, 'Cliente ABC', 100000, '2026-08-01', '2026-08-31');
+    $customer = (int) DB::table('sales_invoices')->where('id', $invoice)->value('sales_customer_id');
+    DB::table('sales_customers')->where('id', $customer)->update(['email' => 'pagos@clienteabc.test']);
+    $company = (string) DB::table('companies')->where('id', $f['mayaId'])->value('public_id');
+    $overdue = collect(app(CollectionReminderService::class)->templates($f['org']))->firstWhere('kind', 'overdue')['id'];
+
+    $this->actingAs($f['owner'])->get(route('accounting.salesCustomerShow', [$company, $customer]))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('canRemind', true)->where('reminderTemplates', fn ($rows) => collect($rows)->pluck('kind')->doesntContain('statement')));
+    $this->get(route('accounting.salesCustomerReminderPreview', [$company, $customer, 'template_id' => $overdue]))->assertOk()->assertSee('Q 1,000.00');
+    $this->post(route('accounting.salesCustomerReminder', [$company, $customer]), ['template_id' => $overdue])->assertSessionHasNoErrors();
+
+    expect(DB::table('collection_reminders')->where('sales_customer_id', $customer)->value('recipient'))->toBe('pagos@clienteabc.test');
+    Queue::assertPushed(SendCollectionReminderJob::class);
+    // Someone with no access to the company cannot see its customers' reminders.
+    $outsider = receivablesMember($f, 'auditor');
+    $this->actingAs($outsider)->get(route('accounting.salesCustomerReminderPreview', [$company, $customer, 'template_id' => $overdue]))->assertNotFound();
+});
+
 test('the director sees portfolio problems per company without adding companies together', function () {
     $f = receivablesFixture();
     receivablesInvoice($f, 'Cliente ABC', 250000, '2026-09-05', '2026-10-05');

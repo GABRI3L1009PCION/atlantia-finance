@@ -22,6 +22,7 @@ use App\Http\Controllers\ClientEmailController;
 use App\Http\Controllers\ClientPortalController;
 use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\CompanyDashboardController;
+use App\Http\Controllers\CompanyDeletionController;
 use App\Http\Controllers\ControlCenter as CC;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\EssentialController;
@@ -128,6 +129,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/receivables', [SalesController::class, 'receivables'])->name('receivables');
         Route::post('companies/{company}/sales/customers', [SalesController::class, 'customer'])->middleware('throttle:30,1')->name('salesCustomer');
         Route::get('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerShow'])->whereNumber('customer')->name('salesCustomerShow');
+        Route::get('companies/{company}/sales/customers/{customer}/reminder-preview', [SalesController::class, 'customerReminderPreview'])->whereNumber('customer')->middleware('throttle:30,1')->name('salesCustomerReminderPreview');
+        Route::post('companies/{company}/sales/customers/{customer}/reminders', [SalesController::class, 'customerReminder'])->whereNumber('customer')->middleware('throttle:20,1')->name('salesCustomerReminder');
         Route::patch('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerUpdate'])->whereNumber('customer')->middleware('throttle:30,1')->name('salesCustomerUpdate');
         Route::post('companies/{company}/sales/invoices', [SalesController::class, 'store'])->middleware('throttle:30,1')->name('salesStore');
         Route::get('companies/{company}/sales/invoices/{invoice}', [SalesController::class, 'show'])->name('invoice');
@@ -906,6 +909,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('office/subscription/plan', [SubscriptionController::class, 'changePlan'])->middleware('throttle:10,1')->name('office.subscription.plan');
         Route::post('office/subscription/cancel', [SubscriptionController::class, 'cancel'])->middleware('throttle:5,1')->name('office.subscription.cancel');
         Route::post('office/subscription/keep', [SubscriptionController::class, 'keep'])->middleware('throttle:5,1')->name('office.subscription.keep');
+        Route::get('office/companies/{company}/deletion', [CompanyDeletionController::class, 'preview'])->whereNumber('company')->middleware('throttle:30,1')->name('office.companies.deletion');
+        Route::delete('office/companies/{company}', [CompanyDeletionController::class, 'destroy'])->whereNumber('company')->middleware('throttle:5,1')->name('office.companies.destroy');
+        Route::post('office/company-deletions/{deletion}/restore', [CompanyDeletionController::class, 'restore'])->whereNumber('deletion')->middleware('throttle:10,1')->name('office.companyDeletions.restore');
         Route::post('office/client-email', [ClientEmailController::class, 'store'])->middleware('throttle:6,1')->name('office.clientEmail.store');
         Route::delete('office/client-email', [ClientEmailController::class, 'destroy'])->middleware('throttle:10,1')->name('office.clientEmail.destroy');
         Route::post('office/client-email/test', [ClientEmailController::class, 'test'])->middleware('throttle:6,1')->name('office.clientEmail.test');

@@ -1,4 +1,5 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 import AccountingSection from '@/components/accounting-section';
 import type { Company } from '@/components/accounting-section';
 import {
@@ -42,6 +43,9 @@ export default function Customer({
     summary,
     canWrite,
     today,
+    canRemind,
+    reminderTemplates,
+    reminders,
 }: {
     company: Company;
     customer: {
@@ -61,7 +65,29 @@ export default function Customer({
     };
     canWrite: boolean;
     today: string;
+    canRemind: boolean;
+    reminderTemplates: { id: number; label: string; kind: string }[];
+    reminders: {
+        id: number;
+        kind: string;
+        recipient: string;
+        subject: string;
+        status: string;
+        status_label: string;
+        sender: string;
+        at: string;
+    }[];
 }) {
+    const [template, setTemplate] = useState<number | null>(
+        reminderTemplates.find((row) =>
+            summary.overdue > 0
+                ? row.kind === 'overdue'
+                : row.kind === 'upcoming',
+        )?.id ??
+            reminderTemplates[0]?.id ??
+            null,
+    );
+    const [sending, setSending] = useState(false);
     const edit = useForm({
         name: customer.name,
         tax_id: customer.tax_id || '',
@@ -297,6 +323,90 @@ export default function Customer({
                 )}
                 <Pager page={invoices} />
             </Card>
+            {canRemind && (
+                <Card title="Recordatorios de cobro">
+                    {customer.email ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <select
+                                aria-label="Plantilla del recordatorio"
+                                className={`${field} max-w-sm`}
+                                value={template ?? ''}
+                                onChange={(event) =>
+                                    setTemplate(Number(event.target.value))
+                                }
+                            >
+                                {reminderTemplates.map((row) => (
+                                    <option key={row.id} value={row.id}>
+                                        {row.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <a
+                                className={secondary}
+                                href={`/accounting/companies/${company.public_id}/sales/customers/${customer.id}/reminder-preview?template_id=${template ?? ''}`}
+                                target="_blank"
+                                rel="noopener"
+                            >
+                                Vista previa
+                            </a>
+                            <button
+                                type="button"
+                                className={primary}
+                                disabled={template === null || sending}
+                                onClick={() =>
+                                    router.post(
+                                        `/accounting/companies/${company.public_id}/sales/customers/${customer.id}/reminders`,
+                                        { template_id: template },
+                                        {
+                                            preserveScroll: true,
+                                            onStart: () => setSending(true),
+                                            onFinish: () => setSending(false),
+                                        },
+                                    )
+                                }
+                            >
+                                Enviar recordatorio a {customer.email}
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500">
+                            Agrega el correo del cliente en Datos del cliente
+                            para enviarle recordatorios.
+                        </p>
+                    )}
+                    {reminders.length > 0 && (
+                        <ul className="mt-4 divide-y divide-slate-100 text-sm">
+                            {reminders.map((reminder) => (
+                                <li
+                                    key={reminder.id}
+                                    className="flex flex-wrap justify-between gap-2 py-2"
+                                >
+                                    <span>
+                                        {reminder.kind} · {reminder.recipient}
+                                        <span className="block text-xs text-slate-500">
+                                            {new Date(
+                                                reminder.at,
+                                            ).toLocaleString('es-GT')}{' '}
+                                            · {reminder.sender}
+                                        </span>
+                                    </span>
+                                    <span
+                                        className={
+                                            reminder.status === 'failed'
+                                                ? 'font-semibold text-red-700'
+                                                : reminder.status === 'sent'
+                                                  ? 'font-semibold text-emerald-700'
+                                                  : 'text-slate-500'
+                                        }
+                                    >
+                                        {reminder.status_label}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </Card>
+            )}
             <Card title="Historial de cobros del cliente">
                 <div className="space-y-3">
                     {receipts.data.map((receipt) => (
