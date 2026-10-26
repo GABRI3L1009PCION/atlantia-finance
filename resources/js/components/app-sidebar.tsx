@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
+    BookCheck,
     Handshake,
     MessagesSquare,
     ListChecks,
@@ -471,6 +472,7 @@ export function AppSidebar() {
                       'financial-statements',
                       FileChartColumn,
                   ],
+                  ['Cierre anual y libros legales', 'year-end', BookCheck],
                   ['ISR y retenciones', 'tax-reports', Calculator],
                   ['Cheques', 'checks', FileCheck2],
                   ['Configuración regional', 'regional', Globe2],

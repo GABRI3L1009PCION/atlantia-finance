@@ -66,6 +66,7 @@ use App\Http\Controllers\Webhooks\RecurrenteWebhookController;
 use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\WorkManagementController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\YearEndController;
 use App\Services\Audit\AuditEngagementService;
 use App\Services\Platform\LegalDocumentService;
 use Illuminate\Support\Facades\Route;
@@ -158,6 +159,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/banks/accounts', [BankController::class, 'storeAccount'])->middleware('throttle:20,1')->name('bankAccountStore');
         Route::post('companies/{company}/banks/transactions', [BankController::class, 'storeTransaction'])->middleware('throttle:30,1')->name('bankTransactionStore');
 
+        Route::get('companies/{company}/year-end', [YearEndController::class, 'index'])->name('yearEnd');
+        Route::post('companies/{company}/year-end/close', [YearEndController::class, 'closeYear'])->middleware('throttle:10,1')->name('yearEndClose');
+        Route::post('companies/{company}/year-end/revaluation', [YearEndController::class, 'revalue'])->middleware('throttle:10,1')->name('exchangeRevaluation');
+        Route::get('companies/{company}/legal-books/{book}', [YearEndController::class, 'book'])->whereIn('book', ['diario', 'mayor', 'inventarios', 'estados'])->middleware('throttle:20,1')->name('legalBook');
         Route::get('companies/{company}/fixed-assets', [FixedAssetController::class, 'index'])->name('fixedAssets');
         Route::post('companies/{company}/fixed-assets', [FixedAssetController::class, 'store'])->middleware('throttle:30,1')->name('fixedAssetStore');
         Route::post('companies/{company}/fixed-assets/depreciation', [FixedAssetController::class, 'depreciate'])->middleware('throttle:10,1')->name('fixedAssetDepreciate');
