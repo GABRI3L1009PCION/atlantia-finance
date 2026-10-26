@@ -444,11 +444,18 @@ class FiscalConfigurationService
         return $tax;
     }
 
+    /**
+     * The rate valid on a date: the most recent one up to that day between the company's own rates and the official
+     * Banguat rates shared by the platform. On the same day the company's rate wins, so a firm can always correct it.
+     */
     public function exchangeRate(int $companyId, string $currency, string $date): stdClass
     {
-        $rate = DB::table('company_exchange_rates')->where('company_id', $companyId)
+        $own = DB::table('company_exchange_rates')->where('company_id', $companyId)
             ->where('currency', strtoupper($currency))->where('quote_currency', 'GTQ')
             ->where('effective_on', '<=', $date)->orderByDesc('effective_on')->first();
+        $official = DB::table('reference_exchange_rates')->where('currency', strtoupper($currency))->where('quote_currency', 'GTQ')
+            ->where('effective_on', '<=', $date)->orderByDesc('effective_on')->first();
+        $rate = $official !== null && ($own === null || (string) $official->effective_on > (string) $own->effective_on) ? $official : $own;
 
         if ($rate === null) {
             throw ValidationException::withMessages([

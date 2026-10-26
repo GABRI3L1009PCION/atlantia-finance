@@ -22,6 +22,14 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
+    // Banco de Guatemala: free SOAP service with the official reference exchange rates (no key). The euro code is looked
+    // up in its catalog of currencies unless it is set here.
+    'banguat' => [
+        'url' => env('BANGUAT_URL', 'https://www.banguat.gob.gt/variables/ws/TipoCambio.asmx'),
+        'timeout' => (int) env('BANGUAT_TIMEOUT', 20),
+        'eur_code' => env('BANGUAT_EUR_CODE'),
+    ],
+
     'recurrente' => [
         'url' => env('RECURRENTE_API_URL', 'https://app.recurrente.com/api'),
         'secret' => env('RECURRENTE_SECRET_KEY'),

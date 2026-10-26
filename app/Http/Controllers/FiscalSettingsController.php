@@ -6,10 +6,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Services\AccountingService;
+use App\Services\Fiscal\BanguatExchangeRateService;
 use App\Services\FiscalConfigurationService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -40,8 +42,7 @@ class FiscalSettingsController extends Controller
             'taxes' => $this->fiscal->taxes($record->id, $today),
             'accounts' => DB::table('ledger_accounts')->where('company_id', $record->id)->where('is_active', true)
                 ->where('is_group', false)->orderBy('code')->get(['id', 'code', 'name', 'type']),
-            'exchangeRates' => DB::table('company_exchange_rates')->where('company_id', $record->id)
-                ->orderByDesc('effective_on')->orderBy('currency')->limit(40)->get(),
+            'exchangeRates' => $this->exchangeRates($record->id),
             'canManage' => $this->accounting->canModule($organization, $record->id, $request->user(), 'fiscal.manage'),
             'overview' => $this->overview($record, $today),
         ]);
@@ -262,6 +263,40 @@ class FiscalSettingsController extends Controller
         });
 
         return back()->with('accounting_notice', 'Tipo de cambio registrado con fecha, fuente y trazabilidad.');
+    }
+
+    /** Downloads the official Banguat rates of the last week now, instead of waiting for the scheduled synchronization. */
+    public function syncExchangeRates(Request $request, string $company, BanguatExchangeRateService $banguat): RedirectResponse
+    {
+        $this->scope($request, $company, 'fiscal.manage');
+        $result = $banguat->sync(Carbon::today()->subDays(7), Carbon::today());
+        $failed = array_filter($result['currencies'], fn (int|string $outcome): bool => is_string($outcome));
+        if (count($failed) === count($result['currencies'])) {
+            throw ValidationException::withMessages(['exchange_rate' => 'Banguat no respondió. Intenta más tarde o registra el tipo de cambio manualmente.']);
+        }
+
+        return back()->with('accounting_notice', $failed === []
+            ? 'Tipos de cambio oficiales de Banguat actualizados.'
+            : 'Se actualizó una parte de los tipos de cambio de Banguat; '.implode(', ', array_keys($failed)).' no respondió.');
+    }
+
+    /**
+     * The company's own rates and the official Banguat rates, newest first; on the same day the company's rate is the one in use.
+     *
+     * @return list<array{id: string, currency: string, quote_currency: string, rate: string, source: string, effective_on: string, reference: string|null, origin: string}>
+     */
+    private function exchangeRates(int $companyId): array
+    {
+        $row = fn (stdClass $rate, string $origin): array => ['id' => ($origin === 'company' ? 'c' : 'o').$rate->id, 'currency' => (string) $rate->currency,
+            'quote_currency' => (string) $rate->quote_currency, 'rate' => (string) $rate->rate, 'source' => (string) $rate->source,
+            'effective_on' => (string) $rate->effective_on, 'reference' => $rate->reference === null ? null : (string) $rate->reference, 'origin' => $origin];
+        $columns = ['id', 'currency', 'quote_currency', 'rate', 'source', 'effective_on', 'reference'];
+        $own = DB::table('company_exchange_rates')->where('company_id', $companyId)->orderByDesc('effective_on')->limit(40)->get($columns)
+            ->map(fn (stdClass $rate): array => $row($rate, 'company'));
+        $official = DB::table('reference_exchange_rates')->orderByDesc('effective_on')->limit(40)->get($columns)
+            ->map(fn (stdClass $rate): array => $row($rate, 'official'));
+
+        return array_values($own->concat($official)->sortBy([['effective_on', 'desc'], ['currency', 'asc'], ['origin', 'asc']])->take(40)->all());
     }
 
     /** @return array<string, list<mixed>> */

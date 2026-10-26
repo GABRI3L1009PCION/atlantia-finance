@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import {
     BadgeCheck,
     Banknote,
@@ -6,12 +6,20 @@ import {
     CircleDollarSign,
     FileCheck2,
     Landmark,
+    RefreshCw,
     ReceiptText,
     Save,
     ShieldCheck,
 } from 'lucide-react';
+import { useState } from 'react';
 import type { Company } from '@/components/accounting-section';
-import { Card, Errors, field, primary } from '@/components/accounting-ui';
+import {
+    Card,
+    Errors,
+    field,
+    primary,
+    secondary,
+} from '@/components/accounting-ui';
 import { TaxCatalog } from '@/components/fiscal/tax-catalog';
 import type {
     FiscalTax,
@@ -30,13 +38,14 @@ type FiscalProfile = {
 };
 
 type ExchangeRate = {
-    id: number;
+    id: string;
     currency: string;
     quote_currency: string;
     rate: string;
     source: string;
     effective_on: string;
     reference: string | null;
+    origin: 'company' | 'official';
 };
 
 type Overview = {
@@ -80,6 +89,7 @@ export default function FiscalSettings({
 }) {
     const endpoint = `/accounting/companies/${company.public_id}/fiscal-settings`;
     const profileForm = useForm({ ...profile });
+    const [syncing, setSyncing] = useState(false);
     const exchangeForm = useForm({
         currency: 'USD',
         rate: '',
@@ -590,7 +600,40 @@ export default function FiscalSettings({
                                     </div>
                                 )}
                             </form>
-                            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-sm text-slate-600">
+                                    Atlantia descarga cada día el tipo de cambio
+                                    oficial del Banco de Guatemala. Si registras
+                                    uno propio para la misma fecha, se usa el
+                                    tuyo.
+                                </p>
+                                {canManage && (
+                                    <button
+                                        type="button"
+                                        className={secondary}
+                                        disabled={syncing}
+                                        onClick={() =>
+                                            router.post(
+                                                `${endpoint}/exchange-rates/sync`,
+                                                {},
+                                                {
+                                                    preserveScroll: true,
+                                                    onStart: () =>
+                                                        setSyncing(true),
+                                                    onFinish: () =>
+                                                        setSyncing(false),
+                                                },
+                                            )
+                                        }
+                                    >
+                                        <RefreshCw className="size-4" />{' '}
+                                        {syncing
+                                            ? 'Consultando Banguat…'
+                                            : 'Actualizar desde Banguat'}
+                                    </button>
+                                )}
+                            </div>
+                            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
                                         <tr>
@@ -619,7 +662,12 @@ export default function FiscalSettings({
                                                     )}
                                                 </td>
                                                 <td className="p-3">
-                                                    {rate.source}
+                                                    {rate.origin === 'official'
+                                                        ? 'Banguat · automático'
+                                                        : rate.source ===
+                                                            'MANUAL'
+                                                          ? 'Manual'
+                                                          : `${rate.source} · registrado por la empresa`}
                                                 </td>
                                             </tr>
                                         ))}
@@ -629,10 +677,10 @@ export default function FiscalSettings({
                                                     colSpan={4}
                                                     className="p-4 text-center text-slate-500"
                                                 >
-                                                    Registra la tasa publicada
-                                                    por BANGUAT antes de
-                                                    contabilizar moneda
-                                                    extranjera.
+                                                    Aún no hay tipos de cambio.
+                                                    Pulsa «Actualizar desde
+                                                    Banguat» o registra uno
+                                                    manualmente.
                                                 </td>
                                             </tr>
                                         )}

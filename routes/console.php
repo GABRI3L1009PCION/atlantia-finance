@@ -3,6 +3,7 @@
 use App\Jobs\LuzmaMaintenanceJob;
 use App\Models\Organization;
 use App\Services\Fel\SatPendingAlertService;
+use App\Services\Fiscal\BanguatExchangeRateService;
 use App\Services\Integrations\WebhookDeliveryService;
 use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Notifications\AlertDispatchService;
@@ -21,6 +22,7 @@ use App\Services\WorkManagement\TaskSyncService;
 use App\Support\PlatformIssuer;
 use Database\Seeders\NormativeLibrarySeeder;
 use Illuminate\Foundation\Inspiring;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
@@ -200,3 +202,14 @@ Artisan::command('alerts:dispatch', function (AlertDispatchService $alerts) {
 })->purpose('Envía las alertas de vencimientos fiscales, cobros y pagos según las preferencias de cada persona');
 
 Schedule::command('alerts:dispatch')->hourly()->withoutOverlapping()->onOneServer();
+
+Artisan::command('exchange-rates:sync {--days=7 : Días hacia atrás que se revisan}', function (BanguatExchangeRateService $banguat) {
+    $result = $banguat->sync(Carbon::today()->subDays(max(0, (int) $this->option('days'))), Carbon::today());
+    foreach ($result['currencies'] as $currency => $outcome) {
+        is_int($outcome) ? $this->info("{$currency}: {$outcome} tipo(s) de cambio nuevo(s) o corregido(s).") : $this->error("{$currency}: {$outcome}");
+    }
+
+    return collect($result['currencies'])->every(fn ($outcome): bool => is_int($outcome)) ? 0 : 1;
+})->purpose('Descarga del Banco de Guatemala los tipos de cambio oficiales del dólar y del euro');
+
+Schedule::command('exchange-rates:sync')->twiceDailyAt(7, 17, 5)->withoutOverlapping()->onOneServer();

@@ -30,7 +30,10 @@ class RegionalService
         $stored = $profile->tax_structure === null ? null : json_decode((string) $profile->tax_structure, true);
         $secondary = $profile->secondary_currencies === null ? [] : (array) json_decode((string) $profile->secondary_currencies, true);
         $installed = DB::table('ledger_accounts')->where('company_id', $companyId)->pluck('code')->all();
-        $rates = DB::table('company_exchange_rates')->where('company_id', $companyId)->orderByDesc('effective_on')->get(['currency', 'quote_currency', 'rate', 'effective_on', 'source'])->unique('currency')->values();
+        // The rate in use per currency: the newest between the company's own and the official Banguat one (the company's on the same day).
+        $rates = DB::table('company_exchange_rates')->where('company_id', $companyId)->orderByDesc('effective_on')->get(['currency', 'quote_currency', 'rate', 'effective_on', 'source'])
+            ->concat(DB::table('reference_exchange_rates')->orderByDesc('effective_on')->limit(60)->get(['currency', 'quote_currency', 'rate', 'effective_on', 'source']))
+            ->sortByDesc(fn ($row): string => $row->effective_on)->unique('currency')->values();
 
         return [
             'country_code' => $country, 'country_name' => $info['name'] ?? $country, 'authority' => $info['authority'] ?? null, 'legislation' => $info['legislation'] ?? [], 'base_currency' => (string) $profile->base_currency,

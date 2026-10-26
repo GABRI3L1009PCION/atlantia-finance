@@ -145,6 +145,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('companies/{company}/fiscal-settings', [FiscalSettingsController::class, 'update'])->middleware('throttle:20,1')->name('fiscalSettingsUpdate');
         Route::post('companies/{company}/fiscal-settings/tax-rules', [FiscalSettingsController::class, 'storeRule'])->middleware('throttle:20,1')->name('fiscalTaxRuleStore');
         Route::post('companies/{company}/fiscal-settings/exchange-rates', [FiscalSettingsController::class, 'storeExchangeRate'])->middleware('throttle:20,1')->name('fiscalExchangeRateStore');
+        Route::post('companies/{company}/fiscal-settings/exchange-rates/sync', [FiscalSettingsController::class, 'syncExchangeRates'])->middleware('throttle:3,10')->name('fiscalExchangeRateSync');
         Route::get('companies/{company}/vat-books', [VatBookController::class, 'index'])->name('vatBooks');
         Route::get('companies/{company}/vat-books/export', [VatBookController::class, 'export'])->middleware('throttle:10,1')->name('vatBooksExport');
         Route::post('companies/{company}/vat-books/close', [VatBookController::class, 'close'])->middleware('throttle:10,1')->name('vatBooksClose');
