@@ -8,6 +8,7 @@ import {
     CheckCheck,
     ChevronDown,
     CircleHelp,
+    Compass,
     Loader2,
     MessageSquare,
     Search,
@@ -21,6 +22,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { startProductTour } from '@/components/product-tour';
 import { EXECUTIVE_HOME } from '@/lib/executive-workspace';
 
 export type Inbox = {
@@ -167,7 +169,10 @@ export function ExecutiveSearch() {
     };
 
     return (
-        <div className="relative hidden max-w-lg min-w-40 flex-1 lg:block">
+        <div
+            data-tour="search"
+            className="relative hidden max-w-lg min-w-40 flex-1 lg:block"
+        >
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5f789c]" />
             <input
                 ref={inputRef}
@@ -524,6 +529,7 @@ export function NotificationsMenu({ inbox }: { inbox: Inbox | undefined }) {
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
+                    data-tour="notifications"
                     aria-label={`Notificaciones${unread > 0 ? ` (${unread} sin leer)` : ''}`}
                     className={iconButton}
                 >
@@ -659,6 +665,7 @@ export function MessagesMenu({ inbox }: { inbox: Inbox | undefined }) {
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
+                    data-tour="messages"
                     aria-label="Comentarios recientes"
                     className={iconButton}
                 >
@@ -732,7 +739,12 @@ export function HelpMenu() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <button type="button" aria-label="Ayuda" className={iconButton}>
+                <button
+                    type="button"
+                    data-tour="help"
+                    aria-label="Ayuda"
+                    className={iconButton}
+                >
                     <CircleHelp className="size-[19px]" />
                 </button>
             </DropdownMenuTrigger>
@@ -754,6 +766,13 @@ export function HelpMenu() {
                         </Link>
                     </DropdownMenuItem>
                 ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    onSelect={startProductTour}
+                    className="flex items-center gap-2 rounded-lg p-2 text-sm font-bold text-[#640000]"
+                >
+                    <Compass className="size-4" /> Ver recorrido guiado
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <p className="px-2 py-1.5 text-xs text-[#526b92]">
                     Atajo: <strong>Ctrl K</strong> para buscar empresas,

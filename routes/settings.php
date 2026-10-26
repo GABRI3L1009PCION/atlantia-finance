@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\NotificationPreferenceController;
+use App\Http\Controllers\Settings\ProductTourController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -22,6 +23,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/notifications', [NotificationPreferenceController::class, 'edit'])->name('notification-preferences.edit');
     Route::put('settings/notifications', [NotificationPreferenceController::class, 'update'])->middleware('throttle:30,1')->name('notification-preferences.update');
+
+    Route::post('settings/product-tours/{tour}', [ProductTourController::class, 'update'])->whereIn('tour', ProductTourController::TOURS)
+        ->middleware('throttle:30,1')->name('product-tours.update');
 
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1')

@@ -539,3 +539,13 @@ html {
         animation: none;
     }
 }
+
+/* Progress of each step of the guided tour; when it ends the tour moves on. */
+@keyframes atlantia-tour-progress {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}

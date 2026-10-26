@@ -3,6 +3,7 @@ import {
     Building2,
     CalendarDays,
     ChevronDown,
+    CircleHelp,
     Plus,
     Search,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import {
 } from '@/components/executive-header-tools';
 import type { Inbox } from '@/components/executive-header-tools';
 import { LuzmaButton } from '@/components/luzma/luzma-button';
+import { ProductTour, startProductTour } from '@/components/product-tour';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -162,6 +164,9 @@ export function AppSidebarHeader({
                     <MessagesMenu inbox={navigation?.inbox} />
                     <HelpMenu />
                 </div>
+                {workspace !== 'client' && !page.props.isPlatformStaff && (
+                    <ProductTour tour="firm" />
+                )}
 
                 <div className="hidden max-w-44 min-w-0 items-center border-l border-[#dfe6ee] pl-3 xl:flex">
                     <UserInfo user={user} />
@@ -223,7 +228,10 @@ export function AppSidebarHeader({
                 </kbd>
             </form>
 
-            <label className="relative hidden min-w-44 xl:block">
+            <label
+                data-tour="company-select"
+                className="relative hidden min-w-44 xl:block"
+            >
                 <Building2 className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#7a4f2c]" />
                 <select
                     aria-label="Empresa actual"
@@ -244,7 +252,10 @@ export function AppSidebarHeader({
                 <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-400" />
             </label>
 
-            <div className="hidden h-10 items-center gap-2 rounded-xl border border-[#ded8d4] px-3 text-xs font-semibold text-[#172033] 2xl:flex">
+            <div
+                data-tour="period"
+                className="hidden h-10 items-center gap-2 rounded-xl border border-[#ded8d4] px-3 text-xs font-semibold text-[#172033] 2xl:flex"
+            >
                 <CalendarDays className="size-4 text-[#7a4f2c]" />
                 <span>
                     {isClientPortal
@@ -256,6 +267,7 @@ export function AppSidebarHeader({
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <button
+                        data-tour="new-transaction"
                         className={`ml-auto flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-white transition hover:brightness-105 sm:px-4 ${
                             isClientPortal
                                 ? 'bg-[#730009] shadow-[0_8px_22px_-12px_#730009]'
@@ -323,7 +335,20 @@ export function AppSidebarHeader({
             <div className="hidden items-center gap-1 md:flex">
                 <NotificationsMenu inbox={navigation?.inbox} />
                 <MessagesMenu inbox={navigation?.inbox} />
+                <button
+                    type="button"
+                    data-tour="help"
+                    aria-label="Ver recorrido guiado"
+                    title="Ver recorrido guiado"
+                    onClick={startProductTour}
+                    className="grid size-9 place-items-center rounded-lg text-[#426083] transition hover:bg-[#eef4fa] hover:text-[#640000]"
+                >
+                    <CircleHelp className="size-[19px]" />
+                </button>
             </div>
+            {!isClientPortal && (
+                <ProductTour tour="company" companyName={company?.name} />
+            )}
 
             <div className="hidden max-w-52 min-w-0 items-center border-l border-[#e6dfdc] pl-3 xl:flex">
                 <UserInfo user={user} />

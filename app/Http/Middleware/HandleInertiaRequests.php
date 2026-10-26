@@ -100,6 +100,8 @@ class HandleInertiaRequests extends Middleware
             'executiveReadOnly' => fn (): bool => $this->executiveReadOnly($request),
             'platformNotices' => fn (): array => $this->platformNotices($request),
             'isPlatformStaff' => fn (): bool => app(PlatformAuthorization::class)->isStaff($request->user()),
+            // Guided tours the user already finished or skipped; the others are offered once.
+            'productTours' => fn (): array => array_keys($request->user()?->product_tours ?? []),
         ];
     }
 

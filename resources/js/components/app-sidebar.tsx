@@ -2406,7 +2406,11 @@ export function AppSidebar() {
                     />
                 ) : companyId ? (
                     <>
-                        <NavMain items={home} label={company?.name} />
+                        <NavMain
+                            items={home}
+                            label={company?.name}
+                            tourId="company-home"
+                        />
                         <NavMain items={accountingItems} label="Contabilidad" />
                         <NavMain items={operationItems} label="Operaciones" />
                         {advancedItems.length > 0 && (
@@ -2603,7 +2607,11 @@ export function AppSidebar() {
             </SidebarContent>
             <SidebarFooter className="border-t border-white/10 pt-2">
                 {!isPlatformStaff && (
-                    <OrganizationSwitcher planName={navigation?.plan?.name} />
+                    <div data-tour="plan">
+                        <OrganizationSwitcher
+                            planName={navigation?.plan?.name}
+                        />
+                    </div>
                 )}
                 <NavUser />
             </SidebarFooter>

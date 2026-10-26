@@ -99,6 +99,7 @@ export function LuzmaButton() {
         <>
             <button
                 type="button"
+                data-tour="luzma"
                 onClick={() => {
                     setQuestion(null);
                     setOpen(true);

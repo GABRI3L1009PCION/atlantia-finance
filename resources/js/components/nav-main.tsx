@@ -15,9 +15,12 @@ import type { NavItem } from '@/types';
 export function NavMain({
     items = [],
     label = 'Espacio de trabajo',
+    tourId,
 }: {
     items: NavItem[];
     label?: string;
+    /** Name of the group in the guided tour; the label by default. */
+    tourId?: string;
 }) {
     const { isCurrentUrl } = useCurrentUrl();
     const { state, isMobile } = useSidebar();
@@ -38,7 +41,10 @@ export function NavMain({
     const expanded = open || iconOnly;
 
     return (
-        <SidebarGroup className="px-2 py-0">
+        <SidebarGroup
+            className="px-2 py-0"
+            data-tour={`group:${tourId ?? label}`}
+        >
             <SidebarGroupLabel asChild>
                 <button
                     type="button"

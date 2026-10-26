@@ -29,13 +29,14 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property bool $must_enroll_two_factor
  * @property Carbon|null $temporary_password_expires_at
  * @property Carbon|null $password_changed_at
+ * @property array<string, array{status: string, at: string}>|null $product_tours
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read OrganizationUser|OfficeUser $pivot
  */
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'current_organization_id'])]
+#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'current_organization_id', 'product_tours'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
@@ -56,6 +57,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'must_enroll_two_factor' => 'boolean',
             'temporary_password_expires_at' => 'datetime',
             'password_changed_at' => 'datetime',
+            'product_tours' => 'array',
         ];
     }
 
