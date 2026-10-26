@@ -30,6 +30,12 @@ class BanguatExchangeRateService
     /** Quetzales per unit outside these bounds are treated as a wrong answer. */
     private const SANE_RANGE = ['USD' => ['5', '12'], 'EUR' => ['5', '15']];
 
+    /**
+     * Currencies Banguat publishes in US dollars per unit (1 euro = 1.12 dollars), with the bounds of that quote. They are
+     * turned into quetzales with the official dollar rate of the same day.
+     */
+    private const QUOTED_IN_DOLLARS = ['EUR' => ['0.7', '1.8']];
+
     public function __construct(private TenantDatabaseContext $tenancy) {}
 
     /**
@@ -70,12 +76,19 @@ class BanguatExchangeRateService
             'moneda' => $this->currencyCode($currency),
         ]);
 
+        $dollars = isset(self::QUOTED_IN_DOLLARS[$currency]) ? $this->rates('USD', $from->copy()->subDays(7), $to) : [];
         $rates = [];
         foreach ($result->xpath('//*[local-name()="Var"]') ?: [] as $var) {
             $date = Carbon::createFromFormat('d/m/Y', trim((string) $this->child($var, 'fecha')));
             $value = $this->normalize((string) ($this->child($var, 'venta') ?? $this->child($var, 'referencia') ?? ''));
             if ($date === null || $value === null) {
                 continue;
+            }
+            if (isset(self::QUOTED_IN_DOLLARS[$currency])) {
+                $value = $this->inQuetzales($currency, $value, $date, $dollars);
+                if ($value === null) {
+                    continue;
+                }
             }
             [$min, $max] = self::SANE_RANGE[$currency];
             if (bccomp($value, $min, 8) < 0 || bccomp($value, $max, 8) > 0) {
@@ -91,6 +104,32 @@ class BanguatExchangeRateService
         }
 
         return $rates;
+    }
+
+    /**
+     * A quote in US dollars per unit, in quetzales: times the official dollar rate of that day (or the last one published
+     * before it). Null when the quote is out of bounds or there is no dollar rate to convert it.
+     *
+     * @param  numeric-string  $dollarsPerUnit
+     * @param  array<string, numeric-string>  $dollars
+     * @return numeric-string|null
+     */
+    private function inQuetzales(string $currency, string $dollarsPerUnit, Carbon $date, array $dollars): ?string
+    {
+        [$min, $max] = self::QUOTED_IN_DOLLARS[$currency];
+        if (bccomp($dollarsPerUnit, $min, 8) < 0 || bccomp($dollarsPerUnit, $max, 8) > 0) {
+            Log::warning('banguat.rate_out_of_range', ['currency' => $currency, 'date' => $date->toDateString(), 'dollars_per_unit' => $dollarsPerUnit]);
+
+            return null;
+        }
+        $dollar = null;
+        foreach ($dollars as $day => $rate) {
+            if ($day <= $date->toDateString() && ($dollar === null || $day > $dollar[0])) {
+                $dollar = [$day, $rate];
+            }
+        }
+
+        return $dollar === null ? null : bcmul($dollarsPerUnit, $dollar[1], 8);
     }
 
     /** @param array<string, numeric-string> $rates */

@@ -69,7 +69,8 @@ function banguatCompany(): array
 }
 
 test('the scheduled sync stores the official dollar and euro rates once and only rewrites a corrected one', function () {
-    fakeBanguat(['2' => ['24/10/2026' => '7.71234', '25/10/2026' => '7.71234', '26/10/2026' => '7.70011'], '24' => ['26/10/2026' => '8.95510']]);
+    // Banguat publishes the euro in dollars per euro: it is stored in quetzales with the dollar of the same day.
+    fakeBanguat(['2' => ['24/10/2026' => '7.71234', '25/10/2026' => '7.71234', '26/10/2026' => '7.70011'], '24' => ['26/10/2026' => '1.1630']]);
 
     $this->artisan('exchange-rates:sync')->expectsOutputToContain('USD: 3')->expectsOutputToContain('EUR: 1')->assertSuccessful();
     $this->artisan('exchange-rates:sync')->expectsOutputToContain('USD: 0')->assertSuccessful();
@@ -77,19 +78,27 @@ test('the scheduled sync stores the official dollar and euro rates once and only
     $rates = DB::table('reference_exchange_rates')->orderBy('currency')->orderBy('effective_on')->get(['currency', 'rate', 'effective_on', 'source']);
     expect($rates)->toHaveCount(4)
         ->and($rates->pluck('source')->unique()->all())->toBe(['BANGUAT'])
-        ->and((string) $rates->firstWhere('currency', 'EUR')->rate)->toBe('8.95510000')
+        ->and((string) $rates->firstWhere('currency', 'EUR')->rate)->toBe('8.95522793')
         ->and((string) $rates->where('currency', 'USD')->last()->rate)->toBe('7.70011000');
 
     // Banguat corrects a published rate: only that day changes.
-    fakeBanguat(['2' => ['26/10/2026' => '7.70500'], '24' => ['26/10/2026' => '8.95510']]);
-    $this->artisan('exchange-rates:sync')->expectsOutputToContain('USD: 1')->expectsOutputToContain('EUR: 0')->assertSuccessful();
-    expect((string) DB::table('reference_exchange_rates')->where('currency', 'USD')->where('effective_on', '2026-10-26')->value('rate'))->toBe('7.70500000');
+    fakeBanguat(['2' => ['26/10/2026' => '7.70500'], '24' => ['26/10/2026' => '1.1630']]);
+    $this->artisan('exchange-rates:sync')->expectsOutputToContain('USD: 1')->expectsOutputToContain('EUR: 1')->assertSuccessful();
+    expect((string) DB::table('reference_exchange_rates')->where('currency', 'USD')->where('effective_on', '2026-10-26')->value('rate'))->toBe('7.70500000')
+        ->and((string) DB::table('reference_exchange_rates')->where('currency', 'EUR')->where('effective_on', '2026-10-26')->value('rate'))->toBe('8.96091500');
 });
 
 test('a rate outside a sane range or a failing Banguat never stores anything and never breaks the other currency', function () {
-    fakeBanguat(['2' => ['26/10/2026' => '770.0'], '24' => ['26/10/2026' => '8.95']]);
-    $this->artisan('exchange-rates:sync')->expectsOutputToContain('USD: Banguat no devolvió tipos de cambio válidos')->assertFailed();
-    expect(DB::table('reference_exchange_rates')->pluck('currency')->all())->toBe(['EUR']);
+    fakeBanguat(['2' => ['25/10/2026' => '7.7', '26/10/2026' => '770.0'], '24' => ['26/10/2026' => '1.16']]);
+    $this->artisan('exchange-rates:sync')->expectsOutputToContain('USD: 1')->expectsOutputToContain('EUR: 1')->assertSuccessful();
+    // The euro of the 26th uses the last valid dollar (the 25th), never the wrong one.
+    expect((string) DB::table('reference_exchange_rates')->where('currency', 'EUR')->value('rate'))->toBe('8.93200000');
+    DB::table('reference_exchange_rates')->delete();
+
+    // A euro already in quetzales (not in dollars) is out of bounds and is not stored.
+    fakeBanguat(['2' => ['26/10/2026' => '7.7'], '24' => ['26/10/2026' => '8.95']]);
+    $this->artisan('exchange-rates:sync')->expectsOutputToContain('EUR: Banguat no devolvió tipos de cambio válidos')->assertFailed();
+    expect(DB::table('reference_exchange_rates')->pluck('currency')->all())->toBe(['USD']);
 
     fakeBanguat([], 500);
     $this->artisan('exchange-rates:sync')->assertFailed();
@@ -134,7 +143,7 @@ test('every firm reads the official rates but only the platform can write them',
 
 test('the fiscal settings list the official rates and the owner can refresh them from Banguat', function () {
     $f = banguatCompany();
-    fakeBanguat(['2' => ['26/10/2026' => '7.70011'], '24' => ['26/10/2026' => '8.95510']]);
+    fakeBanguat(['2' => ['26/10/2026' => '7.70011'], '24' => ['26/10/2026' => '1.1630']]);
 
     $this->actingAs($f['owner'])->post(route('accounting.fiscalExchangeRateSync', $f['uuid']))->assertRedirect()->assertSessionHasNoErrors()
         ->assertSessionHas('accounting_notice', 'Tipos de cambio oficiales de Banguat actualizados.');
