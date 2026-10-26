@@ -924,9 +924,10 @@ export function NewCompanyDialog({
         <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
-                    <DialogTitle>Nueva empresa</DialogTitle>
+                    <DialogTitle>Nuevo cliente</DialogTitle>
                     <DialogDescription>
-                        Se crea con su catálogo contable inicial. Los parámetros
+                        La empresa a la que le llevarás la contabilidad. Se crea
+                        con su catálogo contable inicial; los parámetros
                         fiscales y períodos los configura el equipo contable.
                     </DialogDescription>
                 </DialogHeader>
@@ -969,27 +970,29 @@ export function NewCompanyDialog({
                             }
                         />
                     </label>
-                    <label className="text-sm font-semibold sm:col-span-2">
-                        Oficina
-                        <select
-                            className={`${input} mt-1`}
-                            value={form.data.office_id}
-                            onChange={(event) =>
-                                form.setData({
-                                    ...form.data,
-                                    office_id: event.target.value,
-                                    accountant_id: '',
-                                    assistant_id: '',
-                                })
-                            }
-                        >
-                            {scope.offices.map((office) => (
-                                <option key={office.id} value={office.id}>
-                                    {office.name}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                    {scope.offices.length > 1 && (
+                        <label className="text-sm font-semibold sm:col-span-2">
+                            Oficina que lo atiende
+                            <select
+                                className={`${input} mt-1`}
+                                value={form.data.office_id}
+                                onChange={(event) =>
+                                    form.setData({
+                                        ...form.data,
+                                        office_id: event.target.value,
+                                        accountant_id: '',
+                                        assistant_id: '',
+                                    })
+                                }
+                            >
+                                {scope.offices.map((office) => (
+                                    <option key={office.id} value={office.id}>
+                                        {office.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    )}
                     <label className="text-sm font-semibold">
                         Contador encargado
                         <select
@@ -1045,7 +1048,7 @@ export function NewCompanyDialog({
                             ) : (
                                 <Plus className="size-4" />
                             )}{' '}
-                            Crear empresa
+                            Crear cliente
                         </button>
                     </DialogFooter>
                 </form>

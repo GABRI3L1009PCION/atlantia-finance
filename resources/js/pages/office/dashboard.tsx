@@ -217,7 +217,7 @@ export default function OfficeAdminDashboard({
             action: () => router.visit('/office/offices'),
         },
         {
-            label: 'Nueva empresa',
+            label: 'Nuevo cliente',
             icon: BriefcaseBusiness,
             visible: data.permissions.canCreateCompany,
             action: () => setCompanyOpen(true),

@@ -144,7 +144,7 @@ export default function OfficeCompanies({
                                 className={primaryButton}
                                 onClick={() => setCompanyOpen(true)}
                             >
-                                <Plus className="size-4" /> Nueva empresa
+                                <Plus className="size-4" /> Nuevo cliente
                             </button>
                         )
                     }

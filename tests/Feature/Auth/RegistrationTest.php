@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Organization;
 use App\Models\User;
 use Database\Seeders\PlanCatalogSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -87,7 +88,7 @@ test('new users can register', function () {
     $this->assertDatabaseHas('offices', [
         'organization_id' => $organizationId,
         'code' => 'MAIN',
-        'name' => 'Oficina principal',
+        'name' => 'Despacho Contable de Prueba',
         'email' => 'test@example.com',
         'is_primary' => true,
         'status' => 'pending',
@@ -177,4 +178,15 @@ test('el registro pide el nombre del despacho y lo usa como nombre de la organiz
 
     $this->assertGuest();
     $this->assertDatabaseMissing('users', ['email' => 'sin-despacho@example.com']);
+});
+
+test('a firm\'s generic primary office takes the firm\'s name', function () {
+    $organization = Organization::query()->create(['name' => 'Hermanos Demo Contadores', 'status' => 'active']);
+    $primary = $organization->offices()->create(['code' => 'MAIN', 'name' => 'Oficina principal', 'is_primary' => true, 'status' => 'active']);
+    $branch = $organization->offices()->create(['code' => 'NORTE', 'name' => 'Sucursal Norte', 'is_primary' => false, 'status' => 'active']);
+
+    (require database_path('migrations/2026_10_26_160526_name_primary_offices_after_their_firm.php'))->up();
+
+    expect($primary->fresh()->name)->toBe('Hermanos Demo Contadores')
+        ->and($branch->fresh()->name)->toBe('Sucursal Norte');
 });

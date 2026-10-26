@@ -105,7 +105,7 @@ export default function AccountingIndex({
                                     : setAdding(!adding)
                             }
                         >
-                            <Plus size={18} /> Nueva empresa
+                            <Plus size={18} /> Nuevo cliente
                         </button>
                     )}
                 </div>
@@ -217,32 +217,34 @@ export default function AccountingIndex({
                                             }
                                         />
                                     </label>
-                                    <label className="text-sm font-medium">
-                                        Oficina responsable
-                                        <select
-                                            required
-                                            className={field}
-                                            value={form.data.office_id}
-                                            onChange={(e) =>
-                                                form.setData(
-                                                    'office_id',
-                                                    e.target.value,
-                                                )
-                                            }
-                                        >
-                                            <option value="">
-                                                Selecciona una oficina
-                                            </option>
-                                            {offices.map((office) => (
-                                                <option
-                                                    key={office.id}
-                                                    value={office.id}
-                                                >
-                                                    {office.name}
+                                    {offices.length > 1 && (
+                                        <label className="text-sm font-medium">
+                                            Oficina que lo atiende
+                                            <select
+                                                required
+                                                className={field}
+                                                value={form.data.office_id}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        'office_id',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    Selecciona una oficina
                                                 </option>
-                                            ))}
-                                        </select>
-                                    </label>
+                                                {offices.map((office) => (
+                                                    <option
+                                                        key={office.id}
+                                                        value={office.id}
+                                                    >
+                                                        {office.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                    )}
                                 </div>
                                 <Errors errors={form.errors} />
                                 <div className="mt-5 flex gap-3">

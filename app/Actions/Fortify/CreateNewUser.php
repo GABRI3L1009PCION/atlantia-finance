@@ -98,7 +98,8 @@ class CreateNewUser implements CreatesNewUsers
                 $office = Office::query()->create([
                     'organization_id' => $organization->id,
                     'code' => 'MAIN',
-                    'name' => 'Oficina principal',
+                    // A firm starts with one office, named like the firm itself.
+                    'name' => $organization->name,
                     'email' => $user->email,
                     'country_code' => 'GT',
                     'timezone' => 'America/Guatemala',
