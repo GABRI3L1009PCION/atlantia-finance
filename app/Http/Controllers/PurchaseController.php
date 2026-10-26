@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
 use App\Services\DocumentAnnulmentService;
+use App\Services\Documents\InvoiceReader;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\Fiscal\FacturaEspecialService;
 use App\Services\Fiscal\VatBookService;
@@ -20,8 +21,10 @@ use App\Services\ReportExportService;
 use App\Services\WorkspaceContext;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -139,6 +142,7 @@ class PurchaseController extends Controller
                 'overdue_documents' => (int) $portfolio->overdue_count, 'pending_accounting' => $pendingAccounting],
             'aging' => $this->aging($record->id),
             'canWrite' => $this->canWrite($org, $record->id, $request->user()),
+            'canReadInvoices' => $this->context->hasFeature($org, 'ocr'),
             'isOwner' => $org->pivot->role === 'owner',
             'today' => now()->toDateString(),
         ]);
@@ -441,6 +445,23 @@ class PurchaseController extends Controller
         $drafts->create($org, $request->user(), $record, $data);
 
         return to_route('accounting.purchaseShow', [$company, $data['request_id']]);
+    }
+
+    /**
+     * Reads a supplier invoice (FEL XML, PDF or a photo) and answers what to prefill in the purchase form. Nothing is stored:
+     * the accountant reviews the values and saves the purchase as usual.
+     */
+    public function readInvoice(Request $request, string $company, InvoiceReader $reader): JsonResponse
+    {
+        [$org, $record] = $this->scope($request, $company, 'purchases.manage');
+        $this->context->requireFeature($org, 'ocr');
+        $request->validate(['file' => ['required', 'file', 'max:20480', 'mimes:xml,pdf,jpg,jpeg,png', 'extensions:xml,pdf,jpg,jpeg,png']],
+            ['file.mimes' => 'Sube el XML, el PDF o una foto (JPG o PNG) de la factura.', 'file.extensions' => 'Sube el XML, el PDF o una foto (JPG o PNG) de la factura.',
+                'file.max' => 'El archivo no puede pesar más de 20 MB.']);
+        $file = $request->file('file');
+        abort_unless($file instanceof UploadedFile, 422);
+
+        return response()->json(['invoice' => $reader->forCompany((int) $record->id, $record->tax_id ?? null, $reader->read($file))]);
     }
 
     public function show(Request $request, string $company, string $document): Response

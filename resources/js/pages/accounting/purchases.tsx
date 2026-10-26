@@ -40,6 +40,8 @@ import {
     FiscalDocumentFields,
     TaxTreatmentSelect,
 } from '@/components/fiscal/fiscal-document-fields';
+import { InvoiceReader } from '@/components/purchases/invoice-reader';
+import type { ReadInvoice } from '@/components/purchases/invoice-reader';
 import { statusLabel } from '@/lib/status-labels';
 import * as routes from '@/routes/accounting';
 
@@ -150,6 +152,7 @@ export default function Purchases({
     filters,
     portfolio,
     canWrite,
+    canReadInvoices,
     isOwner,
     today,
     notice,
@@ -178,6 +181,7 @@ export default function Purchases({
         pending_accounting: number;
     };
     canWrite: boolean;
+    canReadInvoices: boolean;
     isOwner: boolean;
     today: string;
     notice?: string;
@@ -185,6 +189,8 @@ export default function Purchases({
     const [panel, setPanel] = useState<
         'supplier' | 'document' | 'mapping' | null
     >(null);
+    // After registering the supplier of a read invoice, the purchase form comes back with that supplier selected.
+    const [supplierForInvoice, setSupplierForInvoice] = useState(false);
     const [selectedId, setSelectedId] = useState<string>(
         documents.data[0]?.public_id ?? '',
     );
@@ -236,6 +242,40 @@ export default function Purchases({
             mapping?.default_expense_account_id ?? '',
         ),
     });
+    const nitKey = (value: string | null) =>
+        (value ?? '')
+            .toUpperCase()
+            .replace(/[^0-9K]/g, '')
+            .replace(/^0+/, '');
+    const applyInvoice = (invoice: ReadInvoice) => {
+        const expense = mapping?.default_expense_account_id
+            ? String(mapping.default_expense_account_id)
+            : '';
+        draft.setData((current) => ({
+            ...current,
+            supplier_id: invoice.supplier.id
+                ? String(invoice.supplier.id)
+                : current.supplier_id,
+            document_date: invoice.document_date ?? current.document_date,
+            currency: invoice.currency,
+            fiscal_document_type:
+                invoice.fiscal_document_type ?? current.fiscal_document_type,
+            fiscal_series: invoice.fiscal_series ?? '',
+            fiscal_number: invoice.fiscal_number ?? '',
+            fiscal_authorization: invoice.fiscal_authorization ?? '',
+            lines:
+                invoice.lines.length > 0
+                    ? invoice.lines.map((line, index) => ({
+                          account_id:
+                              current.lines[index]?.account_id || expense,
+                          description: line.description,
+                          quantity: line.quantity,
+                          unit_price: line.unit_price,
+                          tax_treatment: line.tax_treatment,
+                      }))
+                    : current.lines,
+        }));
+    };
     const accountLabel = (id: number) => {
         const account = accounts.find((item) => item.id === id);
 
@@ -916,7 +956,33 @@ export default function Purchases({
                             event.preventDefault();
                             supplier.post(
                                 routes.purchaseSupplier.url(company.public_id),
-                                { onSuccess: () => setPanel(null) },
+                                {
+                                    onSuccess: (page) => {
+                                        if (!supplierForInvoice) {
+                                            setPanel(null);
+
+                                            return;
+                                        }
+
+                                        const created = (
+                                            page.props.suppliers as Supplier[]
+                                        ).find(
+                                            (item) =>
+                                                nitKey(item.tax_id) ===
+                                                nitKey(supplier.data.tax_id),
+                                        );
+
+                                        if (created) {
+                                            draft.setData(
+                                                'supplier_id',
+                                                String(created.id),
+                                            );
+                                        }
+
+                                        setSupplierForInvoice(false);
+                                        setPanel('document');
+                                    },
+                                },
                             );
                         }}
                         className="grid gap-4 sm:grid-cols-2"
@@ -1014,6 +1080,23 @@ export default function Purchases({
                         }}
                         className="space-y-5"
                     >
+                        {canReadInvoices && (
+                            <InvoiceReader
+                                url={routes.purchaseReadInvoice.url(
+                                    company.public_id,
+                                )}
+                                onRead={applyInvoice}
+                                onRegisterSupplier={(found) => {
+                                    supplier.setData((current) => ({
+                                        ...current,
+                                        name: found.name ?? '',
+                                        tax_id: found.tax_id ?? '',
+                                    }));
+                                    setSupplierForInvoice(true);
+                                    setPanel('supplier');
+                                }}
+                            />
+                        )}
                         <div className="grid gap-4 sm:grid-cols-2">
                             <label>
                                 Proveedor

@@ -30,6 +30,16 @@ return [
         'eur_code' => env('BANGUAT_EUR_CODE'),
     ],
 
+    // Invoice reader: text of PDFs (poppler-utils) and OCR of photos and scans (tesseract-ocr with the Spanish language),
+    // installed on the same server. No document leaves the server.
+    'ocr' => [
+        'tesseract' => env('OCR_TESSERACT_BINARY', 'tesseract'),
+        'pdftotext' => env('OCR_PDFTOTEXT_BINARY', 'pdftotext'),
+        'pdftoppm' => env('OCR_PDFTOPPM_BINARY', 'pdftoppm'),
+        'languages' => env('OCR_LANGUAGES', 'spa+eng'),
+        'timeout' => (int) env('OCR_TIMEOUT', 90),
+    ],
+
     'recurrente' => [
         'url' => env('RECURRENTE_API_URL', 'https://app.recurrente.com/api'),
         'secret' => env('RECURRENTE_SECRET_KEY'),

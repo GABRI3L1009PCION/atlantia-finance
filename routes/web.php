@@ -211,6 +211,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('companies/{company}/purchases/suppliers/{supplier}', [PurchaseController::class, 'supplierUpdate'])->whereNumber('supplier')->middleware('throttle:30,1')->name('purchaseSupplierUpdate');
         Route::patch('companies/{company}/accounting-mapping', [PurchaseController::class, 'mapping'])->middleware('throttle:20,1')->name('accountingMapping');
         Route::post('companies/{company}/purchases/documents', [PurchaseController::class, 'store'])->middleware('throttle:30,1')->name('purchaseStore');
+        Route::post('companies/{company}/purchases/read-invoice', [PurchaseController::class, 'readInvoice'])->middleware('throttle:20,1')->name('purchaseReadInvoice');
         Route::get('companies/{company}/purchases/documents/{document}', [PurchaseController::class, 'show'])->name('purchaseShow');
         Route::get('companies/{company}/purchases/documents/{document}/pdf', [PurchaseController::class, 'documentPdf'])->middleware('throttle:10,1')->name('purchasePdf');
         Route::post('companies/{company}/purchases/documents/{document}/process', [PurchaseController::class, 'process'])->middleware('throttle:30,1')->name('purchaseProcess');
