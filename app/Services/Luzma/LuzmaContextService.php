@@ -132,6 +132,12 @@ class LuzmaContextService
         return null;
     }
 
+    /** Lowercase without accents, so "Número" and "numero" read the same. */
+    public static function fold(string $text): string
+    {
+        return strtr(mb_strtolower($text), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
+    }
+
     public function normalize(string $text): string
     {
         $text = mb_strtolower($text);

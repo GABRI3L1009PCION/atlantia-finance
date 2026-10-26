@@ -2,18 +2,21 @@ import { Link } from '@inertiajs/react';
 import {
     AlertTriangle,
     Check,
+    Download,
     ExternalLink,
+    Paperclip,
     ThumbsDown,
     ThumbsUp,
     X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { luzmaRequest, severityStyle } from '@/components/luzma/client';
 import type {
     LuzmaAction,
     LuzmaInsight,
     LuzmaMessage,
+    LuzmaTable,
 } from '@/components/luzma/client';
 
 /** Inline **bold** inside a line of Luzma's answer. */
@@ -69,6 +72,140 @@ export function LuzmaText({ text }: { text: string }) {
 
                 return <p key={index}>{inline(line)}</p>;
             })}
+        </div>
+    );
+}
+
+/** Paperclip of the chat: the user uploads a supplier invoice (XML, PDF or photo) for Luzma to read. */
+export function LuzmaAttach({
+    disabled,
+    onFile,
+    className,
+}: {
+    disabled: boolean;
+    onFile: (file: File) => void;
+    className: string;
+}) {
+    const input = useRef<HTMLInputElement>(null);
+
+    return (
+        <>
+            <button
+                type="button"
+                disabled={disabled}
+                title="Subir una factura para que Luzma la lea"
+                aria-label="Subir una factura"
+                onClick={() => input.current?.click()}
+                className={className}
+            >
+                <Paperclip className="size-4" />
+            </button>
+            <input
+                ref={input}
+                type="file"
+                accept=".xml,.pdf,.jpg,.jpeg,.png,image/*"
+                className="hidden"
+                onChange={(event) => {
+                    const file = event.target.files?.[0];
+
+                    if (file) {
+                        onFile(file);
+                    }
+
+                    event.target.value = '';
+                }}
+            />
+        </>
+    );
+}
+
+/** Amount of a cell like "Q 1,234.56" or "-Q 50.00" as a number. */
+function amountOf(cell: string): number {
+    const value = Number(cell.replace(/[^\d.-]/g, ''));
+
+    return Number.isFinite(value) ? value : 0;
+}
+
+/** Bars of one column of a table: the first column names each bar. */
+function LuzmaBars({ table, column }: { table: LuzmaTable; column: number }) {
+    const values = table.rows.map((row) => amountOf(row[column] ?? ''));
+    const max = Math.max(...values.map((value) => Math.abs(value)), 1);
+
+    return (
+        <div className="space-y-1 border-b border-[#e7e1dd] px-2 py-2">
+            <p className="text-[10px] font-semibold text-slate-500">
+                {table.columns[column]}
+            </p>
+            {table.rows.map((row, index) => (
+                <div
+                    key={index}
+                    className="flex items-center gap-2 text-[10px]"
+                >
+                    <span className="w-24 shrink-0 truncate text-slate-600">
+                        {row[0]}
+                    </span>
+                    <span className="h-2.5 flex-1 rounded bg-[#f1ece8]">
+                        <span
+                            className={`block h-2.5 rounded ${values[index] < 0 ? 'bg-red-400' : 'bg-[#8a5b32]'}`}
+                            style={{
+                                width: `${(Math.abs(values[index]) / max) * 100}%`,
+                            }}
+                        />
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/** Tables computed by Atlantia under an answer (main customers, monthly trend, cash projection). */
+export function LuzmaTables({ tables }: { tables: LuzmaTable[] }) {
+    return (
+        <div className="mt-2 space-y-2">
+            {tables.map((table) => (
+                <div
+                    key={table.title}
+                    className="overflow-x-auto rounded-xl border border-[#e7e1dd]"
+                >
+                    <p className="bg-[#faf7f2] px-2 py-1 text-[11px] font-bold text-[#061633]">
+                        {table.title}
+                    </p>
+                    {table.chart && (
+                        <LuzmaBars table={table} column={table.chart.column} />
+                    )}
+                    <table className="w-full text-left text-[11px]">
+                        <thead>
+                            <tr className="border-b border-[#e7e1dd] text-slate-500">
+                                {table.columns.map((column) => (
+                                    <th
+                                        key={column}
+                                        className="px-2 py-1 font-semibold whitespace-nowrap"
+                                    >
+                                        {column}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {table.rows.map((row, index) => (
+                                <tr
+                                    key={index}
+                                    className="border-b border-[#f1ece8] last:border-0"
+                                >
+                                    {row.map((cell, column) => (
+                                        <td
+                                            key={column}
+                                            className={`px-2 py-1 ${column === 0 ? 'text-[#172033]' : 'whitespace-nowrap text-slate-700'}`}
+                                        >
+                                            {cell}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ))}
         </div>
     );
 }
@@ -198,18 +335,32 @@ export function LuzmaBubble({
                 </p>
             )}
             <LuzmaText text={message.content} />
+            {(message.tables ?? []).length > 0 && (
+                <LuzmaTables tables={message.tables ?? []} />
+            )}
             {message.references.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                    {message.references.map((reference) => (
-                        <Link
-                            key={reference.href + reference.label}
-                            href={reference.href}
-                            className="inline-flex items-center gap-1 rounded-full border border-[#d8cfc9] px-2 py-0.5 text-[11px] font-semibold text-[#640000] hover:bg-red-50"
-                        >
-                            <ExternalLink className="size-3" />{' '}
-                            {reference.label}
-                        </Link>
-                    ))}
+                    {message.references.map((reference) =>
+                        reference.download ? (
+                            <a
+                                key={reference.href + reference.label}
+                                href={reference.href}
+                                className="inline-flex items-center gap-1 rounded-full border border-[#d8cfc9] px-2 py-0.5 text-[11px] font-semibold text-[#640000] hover:bg-red-50"
+                            >
+                                <Download className="size-3" />{' '}
+                                {reference.label}
+                            </a>
+                        ) : (
+                            <Link
+                                key={reference.href + reference.label}
+                                href={reference.href}
+                                className="inline-flex items-center gap-1 rounded-full border border-[#d8cfc9] px-2 py-0.5 text-[11px] font-semibold text-[#640000] hover:bg-red-50"
+                            >
+                                <ExternalLink className="size-3" />{' '}
+                                {reference.label}
+                            </Link>
+                        ),
+                    )}
                 </div>
             )}
             {message.actions.map((action) => (

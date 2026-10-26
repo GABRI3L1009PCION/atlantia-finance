@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { luzmaRequest } from '@/components/luzma/client';
+import { luzmaRequest, luzmaUpload } from '@/components/luzma/client';
 import type { LuzmaMessage, LuzmaScreen } from '@/components/luzma/client';
 
 type ChatResponse = {
@@ -71,10 +71,13 @@ export function useLuzmaConversation({
         return () => window.clearInterval(timer);
     }, [busy]);
 
-    const ask = async (question: string, viaVoice = false) => {
-        const text = question.trim();
+    /** A question, or a supplier invoice (XML, PDF or photo) with an optional question about it. */
+    const ask = async (question: string, viaVoice = false, file?: File) => {
+        const text = file
+            ? `📎 ${file.name}${question.trim() ? `: ${question.trim()}` : ''}`
+            : question.trim();
 
-        if (text.length < 2 || busy) {
+        if ((!file && text.length < 2) || busy) {
             return;
         }
 
@@ -98,15 +101,17 @@ export function useLuzmaConversation({
         ]);
 
         try {
-            const data = await luzmaRequest<ChatResponse>(
-                '/luzma/chat',
-                'POST',
-                {
-                    message: text,
-                    conversation_id: conversationId,
-                    ...screen,
-                },
-            );
+            const data = file
+                ? await luzmaUpload<ChatResponse>('/luzma/document', file, {
+                      message: question.trim() || null,
+                      conversation_id: conversationId,
+                      ...screen,
+                  })
+                : await luzmaRequest<ChatResponse>('/luzma/chat', 'POST', {
+                      message: text,
+                      conversation_id: conversationId,
+                      ...screen,
+                  });
 
             if (data.conversation.context_changed) {
                 setNotice(

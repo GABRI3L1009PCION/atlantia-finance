@@ -605,6 +605,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/', 'index')->name('index');
             Route::post('chat', 'chat')->middleware('throttle:20,1')->name('chat');
             Route::get('context', 'screenContext')->middleware('throttle:120,1')->name('context');
+            Route::post('document', 'document')->middleware('throttle:20,1')->name('document');
             Route::get('conversations', 'conversations')->name('conversations');
             Route::get('conversations/{conversation}', 'conversation')->whereUuid('conversation')->name('conversation');
             Route::patch('conversations/{conversation}', 'updateConversation')->whereUuid('conversation')->name('conversations.update');

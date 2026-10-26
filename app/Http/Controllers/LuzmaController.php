@@ -19,6 +19,7 @@ use App\Services\Luzma\LuzmaSwitch;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -81,6 +82,21 @@ class LuzmaController extends Controller
         abort_unless($context->module === 'global' ? $context->can('luzma.global.view') : $context->can('luzma.contextual.use'), 403);
 
         return response()->json($luzma->ask($context, trim((string) $data['message']), $data['conversation_id'] ?? null));
+    }
+
+    /** POST luzma/document: a supplier invoice uploaded to the chat, read and explained by Luzma. */
+    public function document(Request $request, LuzmaService $luzma): JsonResponse
+    {
+        $data = $request->validate([
+            'file' => ['required', 'file', 'max:20480', 'mimes:xml,pdf,jpg,jpeg,png', 'extensions:xml,pdf,jpg,jpeg,png'], 'message' => 'nullable|string|max:2000', 'conversation_id' => 'nullable|uuid',
+            'company' => 'nullable|uuid', 'company_id' => 'nullable|integer', 'period_id' => 'nullable|integer', 'module' => 'nullable|string|max:40', 'route' => 'nullable|string|max:255',
+        ], ['file.max' => 'El archivo no puede pesar más de 20 MB.', 'file.mimes' => 'Sube el XML, el PDF o una foto (JPG o PNG) de la factura.', 'file.extensions' => 'Sube el XML, el PDF o una foto (JPG o PNG) de la factura.']);
+        $context = $this->context($request, $data);
+        abort_unless($context->can('luzma.contextual.use'), 403);
+        $file = $request->file('file');
+        abort_unless($file instanceof UploadedFile, 422);
+
+        return response()->json($luzma->askDocument($context, $file, isset($data['message']) ? (string) $data['message'] : null, $data['conversation_id'] ?? null));
     }
 
     public function screenContext(Request $request, LuzmaPromptService $prompts): JsonResponse

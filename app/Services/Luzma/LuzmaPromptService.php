@@ -30,7 +30,8 @@ class LuzmaPromptService
     ];
 
     private const SUGGESTIONS = [
-        'global' => ['¿Qué debo hacer hoy?', '¿Qué está bloqueando mis empresas?', 'Recuérdame revisar esto mañana a las 9'],
+        'global' => ['¿Qué debo hacer hoy?', '¿Qué empresas requieren atención?', '¿Cuál es el calendario fiscal?', 'Recuérdame revisar esto mañana a las 9'],
+        'accounting' => ['¿Cuánto vendí este mes y cuánto IVA pago?', '¿Por qué cambió la utilidad?', '¿Hay algo raro en esta empresa?', 'Proyección de caja a 90 días'],
         'dashboard' => ['¿Qué debo hacer hoy?', '¿Qué está bloqueando mis empresas?'],
         'executive' => ['¿Qué oficinas requieren atención?', '¿Qué riesgos operativos existen?', '¿Cómo va el avance del período?'],
         'operations' => ['¿Qué está atrasado?', '¿Quién está sobrecargado?', '¿Qué debo priorizar hoy?'],
@@ -68,7 +69,9 @@ class LuzmaPromptService
         - No ejecutas acciones: solo puedes ofrecer preparar tareas, recordatorios o propuestas, que el usuario confirma.
         - Con la Biblioteca Normativa: distingue el texto recuperado (cítalo con documento y artículo), tu interpretación y tu recomendación. No inventes artículos ni normas que no estén en los datos. Si un artículo tiene ADVERTENCIA DE REFORMA, menciónala. Los "Resumen de Atlantia" no son el texto oficial.
         - No das la decisión profesional final: el usuario autorizado decide sobre cierres, aprobaciones, pagos y temas fiscales.
-        - Si te saludan o preguntan qué puedes hacer, preséntate en pocas líneas: consultas los datos oficiales de Atlantia (prioridades, obligaciones fiscales, cuentas por pagar y por cobrar, tesorería, nómina, cierres, biblioteca normativa), explicas diferencias y alertas, y puedes preparar tareas, recordatorios y propuestas que el usuario confirma. No inventes otras capacidades.
+        - Si te saludan o preguntan qué puedes hacer, preséntate en pocas líneas: consultas los datos oficiales de Atlantia (ventas, compras, IVA, estados financieros, balanza, inventario, FEL, tipo de cambio, cuentas por cobrar y por pagar, bancos, nómina, impuestos, cierres y biblioteca normativa); comparas períodos y explicas qué cambió; detectas posibles anomalías; proyectas efectivo e impuestos; lees facturas que te suben; y preparas asientos, facturas, recordatorios de cobro, solicitudes al cliente, tareas, recordatorios y propuestas de pago que el usuario confirma. No inventes otras capacidades.
+        - Si preguntan un concepto general (qué es el IVA, cómo funciona la depreciación), explícalo en palabras sencillas sin dar cifras de la empresa.
+        - Si los datos traen varias secciones (—), responde cada pregunta en su propio párrafo.
         - Responde en español, breve y claro. Cuando ayude, organiza en: Resumen, Qué encontré, Por qué importa, Siguiente paso.
         - Explica en lenguaje entendible; los montos van con "Q" y dos decimales, tal como vienen en los datos.
         - Datos de Guatemala: SAT es la Superintendencia de Administración Tributaria; la moneda es el quetzal (Q).
@@ -92,7 +95,10 @@ class LuzmaPromptService
             return $scope."\nLA CONSULTA FALLÓ: ".implode(' ', $result['facts'])."\nInforma que no pudiste obtener la información. No supongas que está correcta.";
         }
 
-        return $scope."\nDATOS OFICIALES (".$result['tool']."):\n- ".implode("\n- ", $result['facts'])."\nDetalle estructurado: ".json_encode($this->minimize($result['data']), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        // Tables are shown to the user as they are; the model only needs the facts, which already carry their figures.
+        $data = array_diff_key($result['data'], ['table' => true, 'tables' => true, 'series' => true]);
+
+        return $scope."\nDATOS OFICIALES (".$result['tool']."):\n- ".implode("\n- ", $result['facts'])."\nDetalle estructurado: ".json_encode($this->minimize($data), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }
 
     /**

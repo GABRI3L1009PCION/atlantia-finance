@@ -41,9 +41,10 @@ class LuzmaIntentService
     ) {}
 
     /**
-     * @return array{kind: string, tool: string|null, arguments: array<string, mixed>, critical: string|null, source: string}
+     * @param  array<string, mixed>  $previousArguments
+     * @return array{kind: string, tool: string|null, arguments: array<string, mixed>, critical: string|null, source: string, tools?: list<array{tool: string, arguments: array<string, mixed>}>}
      */
-    public function route(LuzmaContext $context, string $message, ?string $previousTool = null): array
+    public function route(LuzmaContext $context, string $message, ?string $previousTool = null, array $previousArguments = []): array
     {
         $text = $this->contexts->normalize($message);
         $available = $this->tools->available($context);
@@ -59,20 +60,45 @@ class LuzmaIntentService
             || preg_match('/\bque (puedes|sabes) hacer\b|\bcomo me (puedes )?ayud|\bpara que sirves\b|\bquien eres\b|\bque eres\b/u', $text) === 1) {
             return ['kind' => 'general', 'tool' => null, 'arguments' => [], 'critical' => null, 'source' => 'rules'];
         }
+        // A collection reminder goes to the customer, not to the user: it is checked before the user's own reminders.
+        if (preg_match('/\b(envia|enviale|manda|mandale|prepara|escribe|escribele|redacta)\b.{0,40}\b(recordatorio de (cobro|pago)|mensaje de cobro|cobro)\b/u', $text) === 1) {
+            return $this->prepare('prepare_collection_reminder', $available);
+        }
         if (preg_match('/\b(recuerdame|recordarme|avisame|avisarme|recordatorio|notificame)\b/u', $text) === 1) {
             return $this->prepare('prepare_reminder', $available);
         }
         if (preg_match('/\b(crea|crear|asigna|asignar|prepara|preparar) (una |la )?tarea\b/u', $text) === 1) {
             return $this->prepare('prepare_task', $available);
         }
+        if (! $isQuestion && preg_match('/\b(registra|registrar|haz|hazme|crea|crear|prepara|preparar|carga|cargar)\s+(un |una |el |la )?(asiento|partida)\b|\breclasifica|\b(registra|genera|carga|calcula)\s+(la )?(depreciacion|amortizacion)\b/u', $text) === 1) {
+            return $this->prepare('prepare_journal_entry', $available);
+        }
+        if (! $isQuestion && preg_match('/^(por favor\s+)?(facturale|factura a|factura para|haz(me)? una factura|crea una factura|prepara una factura|emite una factura|elabora una factura)\b/u', $text) === 1) {
+            return $this->prepare('prepare_sales_invoice', $available);
+        }
+        if (! $isQuestion && preg_match('/^(por favor\s+)?(pidele|pedile|solicitale|solicita al cliente|pide al cliente|pidele al cliente)\b/u', $text) === 1) {
+            return $this->prepare('prepare_document_request', $available);
+        }
         if (preg_match('/\b(prepara|preparar|arma|armar|crea|crear) (una |la )?propuesta\b|\b(puedes |podrias )?pagar (estas|las|esas) (facturas|obligaciones)\b|\bpaga (estas|las|esas)\b/u', $text) === 1) {
             return $this->prepare('prepare_payment_proposal', $available);
         }
 
-        // Memory of the conversation: a short follow-up that names no topic ("¿y los vencidos?", "dame más detalle", "¿por qué?")
-        // is about the tool that answered the previous question.
+        // Memory of the conversation: a short follow-up that names no topic ("¿y los vencidos?", "dame más detalle", "¿por qué?",
+        // "¿y el mes pasado?") is about the tool that answered the previous question, with the new period when it names one.
         if ($previousTool !== null && isset($available[$previousTool]) && $this->isFollowUp($text) && $this->score($text, $available)[1] < 2) {
-            return ['kind' => 'read', 'tool' => $previousTool, 'arguments' => [], 'critical' => null, 'source' => 'memory'];
+            $arguments = $this->arguments($previousTool, $text, $message);
+            if (isset($arguments['period']) && ! self::namesPeriod($text) && isset($previousArguments['period'])) {
+                $arguments['period'] = $previousArguments['period'];
+            }
+
+            return ['kind' => 'read', 'tool' => $previousTool, 'arguments' => $arguments, 'critical' => null, 'source' => 'memory'];
+        }
+
+        // Several questions in one message ("¿cuánto vendí y cuánto IVA pago?"): each part that clearly names its own topic is
+        // answered by its tool, up to three.
+        $parts = $this->parts($text, $message, $available);
+        if (count($parts) >= 2) {
+            return ['kind' => 'read_many', 'tool' => $parts[0]['tool'], 'arguments' => $parts[0]['arguments'], 'critical' => null, 'source' => 'rules', 'tools' => $parts];
         }
 
         // The neural network of the gateway reads the question and the keyword rules read it too. When the rules are sure
@@ -105,12 +131,46 @@ class LuzmaIntentService
     /** Short messages that lean on the previous answer instead of naming a topic. */
     private function isFollowUp(string $text): bool
     {
+        $text = trim($text, " \t\n¿¡?!.");
         if (mb_strlen($text) > 70) {
             return false;
         }
 
         return preg_match('/^y (el |la |los |las |de |del |en |con |tambien |entonces )?/u', $text) === 1 && mb_strlen($text) <= 45
-            || preg_match('/\b(eso|esto|esos|esas|ese|esa|mas detalle|mas informacion|dame detalle|el detalle|explicame|explicamelo|por que|cuales son|cuales|de quien|de cual|cuanto es|cuanto son|y que mas)\b/u', $text) === 1;
+            || preg_match('/\b(eso|esto|esos|esas|ese|esa|mas detalle|mas informacion|dame detalle|el detalle|explicame|explicamelo|por que|cuales son|cuales|de quien|de cual|cuanto es|cuanto son|y que mas)\b/u', $text) === 1
+            || preg_match('/^(y |ahora |igual |lo mismo |compara(lo)? (con )?)?(el |la |en |de |del |para )?(mes pasado|mes anterior|ano pasado|este ano|este mes|trimestre|'.implode('|', LuzmaPeriod::MONTHS).')\b/u', $text) === 1;
+    }
+
+    /** Whether the words name a period ("octubre", "el año pasado", "este trimestre", "2025"). */
+    public static function namesPeriod(string $text): bool
+    {
+        return preg_match('/\b(mes|ano|anual|acumulado|trimestre|ultimos|20\d\d|'.implode('|', LuzmaPeriod::MONTHS).')\b/u', $text) === 1;
+    }
+
+    /**
+     * The parts of a message that ask different things, each with the tool that answers it.
+     *
+     * @param  array<string, LuzmaTool>  $available
+     * @return list<array{tool: string, arguments: array<string, mixed>}>
+     */
+    private function parts(string $text, string $original, array $available): array
+    {
+        $pieces = preg_split('/\?|;|\s+y\s+(?=(cuanto|cuantos|cuantas|que|como|cual|cuales|donde|quien|dame|muestrame|el |la |los |las |mis |mi |tambien))|,\s*(?=(cuanto|que|como|cual|dame|muestrame|y ))/u', $text) ?: [];
+        $parts = [];
+        foreach ($pieces as $piece) {
+            $piece = trim((string) $piece);
+            if (mb_strlen($piece) < 6) {
+                continue;
+            }
+            [$tool, $score, $tie] = $this->score($piece, $available);
+            if ($tool === null || $score < 2 || $tie || in_array($tool, array_column($parts, 'tool'), true)) {
+                continue;
+            }
+            // Each part keeps the period of the whole message when it does not name its own ("¿cuánto vendí y gasté en octubre?").
+            $parts[] = ['tool' => $tool, 'arguments' => $this->arguments($tool, $piece, self::namesPeriod($piece) ? $piece : $original)];
+        }
+
+        return array_slice($parts, 0, 3);
     }
 
     /**
@@ -145,6 +205,10 @@ class LuzmaIntentService
                 $scores[$name] = $score;
             }
         }
+        // "¿Cómo se prepara el estado de resultados?" asks the law, not the figures.
+        if (isset($available['search_normative']) && preg_match('/\b(como se prepara|como se elabora|como se hace|que dice|segun la ley|que exige|niif|nic \d|articulo|decreto)\b/u', $text) === 1) {
+            $scores['search_normative'] = ($scores['search_normative'] ?? 0) + 4;
+        }
         // "¿Por qué CxP no coincide con Mayor?" belongs to the reconciliation, not to the general summary.
         $reconciles = preg_match('/\b(mayor|cuadra|cuadrar|coincide|concilia|diferencia)\b/u', $text) === 1;
         foreach (['get_payables_reconciliation' => '/\b(cxp|pagar|proveedor)/u', 'get_receivables_reconciliation' => '/\b(cxc|cobrar|cartera|cliente)/u', 'get_payroll_reconciliation' => '/\b(nomina|planilla|sueldos)/u'] as $name => $pattern) {
@@ -165,6 +229,13 @@ class LuzmaIntentService
     /** @return array<string, mixed> */
     private function arguments(?string $tool, string $text, string $original): array
     {
+        if ($tool !== null && in_array($tool, LuzmaToolRegistry::PERIOD_TOOLS, true)) {
+            return ['period' => $original];
+        }
+        if ($tool === 'find_anomalies') {
+            return ['text' => $original];
+        }
+
         return match ($tool) {
             'search_normative' => ['text' => $original],
             'get_account_balance' => ['account' => preg_match('/\b(\d{3,8})\b/u', $text, $code) === 1 ? $code[1]
@@ -196,7 +267,7 @@ class LuzmaIntentService
         if ($tool === null || $tool->level !== LuzmaTool::READ_ONLY) {
             return null;
         }
-        $arguments = array_intersect_key($plan['arguments'], $tool->parameters);
+        $arguments = in_array($tool->name, LuzmaToolRegistry::PERIOD_TOOLS, true) ? ['period' => $message] : array_intersect_key($plan['arguments'], $tool->parameters);
 
         return ['confidence' => (float) $plan['confidence'], 'route' => ['kind' => 'read', 'tool' => $tool->name, 'arguments' => array_map(fn ($value) => is_scalar($value) ? $value : null, $arguments), 'critical' => null, 'source' => 'model']];
     }

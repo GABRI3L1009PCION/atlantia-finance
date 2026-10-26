@@ -1,7 +1,7 @@
 import { Loader2, RotateCcw, Send } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { LuzmaMessage, LuzmaScreen } from '@/components/luzma/client';
-import { LuzmaBubble } from '@/components/luzma/luzma-parts';
+import { LuzmaAttach, LuzmaBubble } from '@/components/luzma/luzma-parts';
 import {
     WORKING,
     useLuzmaConversation,
@@ -105,6 +105,11 @@ export function LuzmaChat({
                         <RotateCcw className="size-4" />
                     </button>
                 )}
+                <LuzmaAttach
+                    disabled={busy}
+                    onFile={(file) => void ask(input, false, file)}
+                    className="grid size-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:text-[#640000] disabled:opacity-50"
+                />
                 <textarea
                     aria-label="Pregunta para Luzma"
                     value={input}

@@ -27,6 +27,12 @@ class LuzmaActionService
         'create_reminder' => [LuzmaTool::LOW_RISK_WRITE, ['luzma.reminders.create'], 'Crear recordatorio'],
         'create_task' => [LuzmaTool::LOW_RISK_WRITE, ['tasks.create'], 'Crear tarea'],
         'create_payment_proposal' => [LuzmaTool::PREPARE, ['payables.payment_proposals.create'], 'Crear propuesta de pago en borrador'],
+        'create_journal_entry' => [LuzmaTool::PREPARE, ['journal.create'], 'Crear asiento en borrador'],
+        'run_depreciation' => [LuzmaTool::PREPARE, ['journal.create'], 'Preparar la depreciación del mes'],
+        'create_sales_invoice' => [LuzmaTool::PREPARE, ['sales.manage'], 'Crear factura de venta en borrador'],
+        'send_collection_reminder' => [LuzmaTool::LOW_RISK_WRITE, ['receivables.collections.create'], 'Enviar recordatorio de cobro'],
+        'create_document_request' => [LuzmaTool::LOW_RISK_WRITE, ['client_portal.requests.manage'], 'Enviar solicitud al cliente'],
+        'create_purchase_from_document' => [LuzmaTool::PREPARE, ['purchases.manage'], 'Registrar compra en borrador'],
     ];
 
     public function __construct(
@@ -34,6 +40,7 @@ class LuzmaActionService
         private LuzmaDateParser $dates,
         private LuzmaReminderService $reminders,
         private LuzmaAuditService $audit,
+        private LuzmaExtraActions $extra,
     ) {}
 
     /**
@@ -47,8 +54,46 @@ class LuzmaActionService
             'prepare_reminder' => $this->prepareReminder($context, $message, $conversationId),
             'prepare_task' => $this->prepareTask($context, $message, $conversationId),
             'prepare_payment_proposal' => $this->prepareProposal($context, $conversationId),
+            'prepare_journal_entry' => $this->prepared($context, $this->extra->journalEntry($context, $message), 'create_journal_entry', $conversationId),
+            'prepare_sales_invoice' => $this->prepared($context, $this->extra->salesInvoice($context, $message), 'create_sales_invoice', $conversationId),
+            'prepare_collection_reminder' => $this->prepared($context, $this->extra->collectionReminder($context, $message), 'send_collection_reminder', $conversationId),
+            'prepare_document_request' => $this->prepared($context, $this->extra->documentRequest($context, $message), 'create_document_request', $conversationId),
             default => ['action' => null, 'message' => 'No puedo preparar esa acción.'],
         };
+    }
+
+    /**
+     * The purchase of an invoice the user uploaded, ready to confirm.
+     *
+     * @param  array<string, mixed>  $invoice
+     * @return array{action: array<string, mixed>|null, message: string}
+     */
+    public function prepareDocumentPurchase(LuzmaContext $context, array $invoice, ?int $conversationId): array
+    {
+        if (! $context->can('luzma.actions.prepare') || ! $context->canAny(self::TYPES['create_purchase_from_document'][1])) {
+            return ['action' => null, 'message' => ''];
+        }
+
+        return $this->prepared($context, $this->extra->purchaseFromInvoice($context, $invoice), 'create_purchase_from_document', $conversationId);
+    }
+
+    /**
+     * Stores what LuzmaExtraActions prepared, or returns its explanation when data was missing.
+     *
+     * @param  array<string, mixed>  $prepared
+     * @return array{action: array<string, mixed>|null, message: string}
+     */
+    private function prepared(LuzmaContext $context, array $prepared, string $type, ?int $conversationId): array
+    {
+        if (isset($prepared['message'])) {
+            return ['action' => null, 'message' => (string) $prepared['message']];
+        }
+        $payload = (array) $prepared['payload'];
+        // A journal-entry request that names the depreciation of a month runs the depreciation instead.
+        $type = $type === 'create_journal_entry' && isset($payload['month']) ? 'run_depreciation' : $type;
+        $preview = (array) $prepared['preview'];
+
+        return ['action' => $this->store($context, $type, $payload, $preview, isset($prepared['company_id']) ? (int) $prepared['company_id'] : null, $conversationId), 'message' => (string) $preview['summary']];
     }
 
     /**
@@ -111,6 +156,18 @@ class LuzmaActionService
                 DB::table('payment_proposals')->where('id', $id)->update(['initiated_via' => 'luzma']);
 
                 return ['message' => 'Propuesta creada en borrador. Revísala y envíala a aprobación; no reduce saldos ni paga nada.', 'href' => '/payables/proposals/'.$id];
+            case 'create_journal_entry':
+                return $this->extra->executeJournalEntry($context, (int) $row->company_id, $payload);
+            case 'run_depreciation':
+                return $this->extra->executeDepreciation($context, (int) $row->company_id, $payload);
+            case 'create_sales_invoice':
+                return $this->extra->executeSalesInvoice($context, (int) $row->company_id, $payload);
+            case 'send_collection_reminder':
+                return $this->extra->executeCollectionReminder($context, (int) $row->company_id, $payload);
+            case 'create_document_request':
+                return $this->extra->executeDocumentRequest($context, $payload);
+            case 'create_purchase_from_document':
+                return $this->extra->executePurchase($context, (int) $row->company_id, $payload);
         }
 
         abort(404);

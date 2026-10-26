@@ -51,6 +51,36 @@ ALIASES: dict[str, str] = {
     "get_audit_summary": "auditoria procedimientos hallazgos evidencia papel de trabajo muestra correccion",
     "get_audit_events": "bitacora cambios importantes eventos de auditoria que paso hoy actividad",
     "get_audit_sensitive_changes": "cambios sensibles reaperturas reversiones permisos modificados",
+    "get_sales_summary": "ventas vendi vendimos facturamos facturado total de ventas ingresos por ventas ventas del mes ventas por cliente",
+    "get_purchases_summary": "compras compramos compre total de compras compras del mes compras por proveedor gastos de compras",
+    "get_vat_summary": "iva del mes iva a pagar debito fiscal credito fiscal remanente liquidacion del iva cuanto iva pago",
+    "get_income_statement": "estado de resultados utilidad perdida ganancia ganamos resultado del ejercicio perdidas y ganancias",
+    "get_balance_sheet": "balance general estado de situacion financiera activos pasivos patrimonio capital de trabajo",
+    "get_cash_flow": "flujo de efectivo flujo de caja entradas y salidas de dinero",
+    "get_trial_balance": "balanza de comprobacion balance de comprobacion sumas y saldos cuadra la contabilidad",
+    "get_inventory_summary": "inventario existencias stock productos bajo el minimo bodega mercaderia sin movimiento",
+    "get_top_rankings": "principales mejores clientes mayores proveedores top ranking mayores gastos quien compra mas",
+    "get_fel_summary": "facturas electronicas fel emitidas anuladas certificadas dte con error",
+    "get_exchange_rate": "tipo de cambio dolar euro banguat tasa de cambio a cuanto esta",
+    "get_profit_variance": "por que bajo la utilidad por que gane menos que movio el resultado variacion del resultado por que perdimos",
+    "get_trends": "tendencia mes a mes evolucion historico ultimos meses grafica",
+    "get_cash_cycle": "dias de cobro dias de pago ciclo de efectivo rotacion dias de inventario cuanto tardan en pagar",
+    "get_break_even": "punto de equilibrio cuanto debo vender para no perder ventas minimas",
+    "get_cash_projection": "proyeccion de caja proyeccion de efectivo flujo proyectado alcanza el dinero proximos meses liquidez futura",
+    "get_tax_projection": "proximos impuestos proyeccion de impuestos cuanto voy a pagar de impuestos proximo pago sat",
+    "find_anomalies": "anomalias algo raro duplicadas repetidas nit invalido salto numeracion correlativo asientos sospechosos fin de semana monto redondo gasto disparado saldo negativo pago doble anticipo sin aplicar errores",
+    "get_bank_match_suggestions": "sugerir conciliacion emparejar movimientos del banco coincidencias deposito corresponde factura",
+    "get_export_links": "exportar descargar pdf excel reporte balanza balance estado de resultados libro mayor diario",
+    "get_fiscal_calendar": "calendario fiscal que debo declarar vencimientos de impuestos declaraciones que vienen que presentar",
+    "compare_isr_regimes": "regimen isr simplificado utilidades conviene cambiar de regimen comparar opcional",
+    "get_iso_estimate": "iso impuesto de solidaridad trimestral base del iso",
+    "get_small_taxpayer_tax": "pequeno contribuyente cinco por ciento cuota sobre ventas",
+    "get_companies_at_risk": "empresas en riesgo requieren atencion problemas peor prioridad impuestos vencidos",
+    "get_client_profitability": "rentabilidad por cliente cuanto deja cada cliente margen honorarios horas no rentable",
+    "get_team_productivity": "productividad equipo rendimiento tareas terminadas desempeno contadores",
+    "get_client_vat": "cuanto iva voy a pagar mi iva pague de iva",
+    "get_client_missing_documents": "documentos me faltan entregar enviar oficina pidio contador",
+    "get_client_statements": "mis estados financieros como le fue a mi empresa mi reporte cuanto gano",
     "get_client_summary": "portal del cliente que me solicitaron documentos entregados autorizaciones reportes publicados que falta del mes",
 }
 
@@ -205,6 +235,15 @@ class Brain:
         "get_fiscal_status": "cumplimiento fiscal", "get_my_priorities": "tus prioridades", "get_executive_overview": "la visión ejecutiva",
         "get_workload": "la carga de trabajo", "get_close_checklist": "el cierre del período", "get_pending_reviews": "las revisiones pendientes",
         "search_normative": "la biblioteca normativa", "get_client_summary": "tu portal", "get_audit_summary": "los trabajos de auditoría",
+        "get_sales_summary": "las ventas", "get_purchases_summary": "las compras", "get_vat_summary": "el IVA del mes", "get_income_statement": "el estado de resultados",
+        "get_balance_sheet": "el balance general", "get_cash_flow": "el flujo de efectivo", "get_trial_balance": "la balanza de comprobación", "get_inventory_summary": "el inventario",
+        "get_top_rankings": "los principales clientes, proveedores y gastos", "get_fel_summary": "las facturas electrónicas", "get_exchange_rate": "el tipo de cambio",
+        "get_profit_variance": "lo que movió el resultado", "get_trends": "la tendencia mensual", "get_cash_cycle": "los días de cobro y pago", "get_break_even": "el punto de equilibrio",
+        "get_cash_projection": "la proyección de efectivo", "get_tax_projection": "los próximos impuestos",
+        "find_anomalies": "la revisión automática", "get_bank_match_suggestions": "las coincidencias bancarias", "get_export_links": "los reportes para descargar",
+        "get_fiscal_calendar": "el calendario fiscal", "compare_isr_regimes": "la comparación de regímenes de ISR", "get_iso_estimate": "el ISO", "get_small_taxpayer_tax": "el impuesto de pequeño contribuyente",
+        "get_companies_at_risk": "las empresas en riesgo", "get_client_profitability": "la rentabilidad por cliente", "get_team_productivity": "la productividad del equipo",
+        "get_client_vat": "tu IVA", "get_client_missing_documents": "tus documentos pendientes", "get_client_statements": "tus estados financieros",
     }
 
     NEXT_STEP = {
@@ -230,6 +269,36 @@ class Brain:
         "get_cost_centers_result": "Revisa los centros con mayor gasto y los movimientos sin centro asignado.",
         "get_account_reconciliations": "Cierra las conciliaciones en borrador y pide la revisión de otra persona para las pendientes.",
         "get_client_summary": "Atiende primero lo que la oficina te solicitó para completar el mes.",
+        "find_anomalies": "Revisa primero los puntos de prioridad alta; son señales, no errores confirmados.",
+        "get_bank_match_suggestions": "Confirma la referencia de cada movimiento antes de aplicarlo en la conciliación.",
+        "get_export_links": "Descarga el archivo desde el enlace.",
+        "get_fiscal_calendar": "Prepara primero lo que vence antes; la declaración la presenta la persona autorizada.",
+        "compare_isr_regimes": "Evalúa el cambio con la proyección completa del año; se solicita a la SAT.",
+        "get_iso_estimate": "Verifica la base del ISO con el balance del ejercicio anterior.",
+        "get_small_taxpayer_tax": "Confirma el régimen de IVA de la empresa antes de declarar.",
+        "get_companies_at_risk": "Atiende primero las empresas con impuestos vencidos.",
+        "get_client_profitability": "Revisa los clientes con margen negativo: ajusta honorarios o alcance.",
+        "get_team_productivity": "Reparte trabajo de quien tiene vencidas a quien tiene capacidad.",
+        "get_client_vat": "Consulta a tu oficina si tienes dudas sobre el monto.",
+        "get_client_missing_documents": "Entrega los documentos desde el portal antes de la fecha límite.",
+        "get_client_statements": "Descarga el reporte completo desde tu portal.",
+        "get_sales_summary": "Revisa a los clientes que más pesan y compara con el período anterior.",
+        "get_purchases_summary": "Revisa los proveedores principales y las compras que siguen en borrador.",
+        "get_vat_summary": "Revisa que todas las ventas y compras del mes estén registradas antes de cerrar el libro y declarar.",
+        "get_income_statement": "Revisa los gastos que más pesan; puedo explicarte qué movió el resultado contra el período anterior.",
+        "get_balance_sheet": "Si hay diferencia, revisa los asientos sin cuadrar; si no, vigila el capital de trabajo.",
+        "get_cash_flow": "Si la operación consume efectivo, revisa cobros y plazos de pago.",
+        "get_trial_balance": "Contabiliza los asientos pendientes y corrige cualquier diferencia antes del cierre.",
+        "get_inventory_summary": "Repón los productos bajo el mínimo y revisa los que no se mueven.",
+        "get_top_rankings": "Cuida la concentración: si pocos clientes pesan mucho, el riesgo es mayor.",
+        "get_fel_summary": "Corrige los documentos con error y registra en la SAT los pendientes.",
+        "get_exchange_rate": "Usa el tipo de cambio del día del documento para registrar en moneda extranjera.",
+        "get_profit_variance": "Revisa las cuentas que más movieron el resultado y confirma si fue algo puntual.",
+        "get_trends": "Busca los meses fuera de lo normal y revisa qué pasó en ellos.",
+        "get_cash_cycle": "Si cobras más lento de lo que pagas, negocia plazos o refuerza la cobranza.",
+        "get_break_even": "Compara las ventas de cada mes con el punto de equilibrio.",
+        "get_cash_projection": "Si el saldo proyectado baja mucho, adelanta cobros o reprograma pagos.",
+        "get_tax_projection": "Prepara las declaraciones con anticipación; la presenta la persona autorizada.",
     }
 
     def answer(self, system: str, messages: list[dict]) -> str:
@@ -316,9 +385,10 @@ class Brain:
     @staticmethod
     def _general(normalized: str) -> str:
         if GREETING.search(normalized):
-            return ("¡Hola! Soy Luzma, el asistente de Atlantia Finance. Consulto los datos oficiales del sistema (prioridades, obligaciones fiscales, "
-                    "cuentas por cobrar y por pagar, bancos, nómina, cierres y la biblioteca normativa), explico diferencias y alertas, y puedo preparar "
-                    "tareas o recordatorios que tú confirmas. ¿Qué necesitas revisar?")
+            return ("¡Hola! Soy Luzma, el asistente de Atlantia Finance. Consulto los datos oficiales del sistema: ventas, compras, IVA, estados financieros, "
+                    "cuentas por cobrar y por pagar, bancos, nómina, inventario, impuestos y la biblioteca normativa. Comparo períodos, explico qué cambió, "
+                    "detecto cosas raras y proyecto caja e impuestos. También preparo asientos, facturas, cobros, solicitudes, tareas y recordatorios que tú confirmas. "
+                    "¿Qué necesitas revisar?")
         return ("**Resumen:** No tengo datos oficiales para responder eso con precisión.\n\n"
                 "**Siguiente paso:** Pregúntame por tus prioridades, cuentas por cobrar o por pagar, bancos, obligaciones fiscales, nómina, cierres o "
                 "la normativa, y te muestro las cifras reales del sistema.")

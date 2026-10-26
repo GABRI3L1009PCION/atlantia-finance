@@ -80,7 +80,7 @@ class LuzmaConversationService
 
         return [
             'id' => (int) $message->id, 'role' => (string) $message->role, 'content' => (string) $message->content, 'status' => (string) $message->status,
-            'references' => $decode($message->references), 'actions' => $decode($message->actions), 'tools' => array_column($decode($message->tool_calls), 'tool'),
+            'references' => $decode($message->references), 'actions' => $decode($message->actions), 'tables' => $decode($message->tables ?? null), 'tools' => array_column($decode($message->tool_calls), 'tool'),
             'feedback' => $message->feedback, 'created_at' => Carbon::parse($message->created_at)->toIso8601String(),
         ];
     }
@@ -123,10 +123,21 @@ class LuzmaConversationService
     /** The read tool that answered the previous question of the conversation, so a follow-up can lean on it. */
     public function lastTool(int $conversationId): ?string
     {
-        $calls = DB::table('luzma_messages')->where('luzma_conversation_id', $conversationId)->where('role', 'assistant')->whereNotNull('tool_calls')->orderByDesc('id')->value('tool_calls');
-        $tool = is_string($calls) ? ((array) json_decode($calls, true))[0]['tool'] ?? null : null;
+        return $this->lastCall($conversationId)['tool'];
+    }
 
-        return is_string($tool) && $tool !== '' ? $tool : null;
+    /**
+     * The tool that answered the last question of the conversation and the arguments it used (its period, its search).
+     *
+     * @return array{tool: string|null, arguments: array<string, mixed>}
+     */
+    public function lastCall(int $conversationId): array
+    {
+        $calls = DB::table('luzma_messages')->where('luzma_conversation_id', $conversationId)->where('role', 'assistant')->whereNotNull('tool_calls')->orderByDesc('id')->value('tool_calls');
+        $call = is_string($calls) ? (array) (((array) json_decode($calls, true))[0] ?? []) : [];
+        $tool = $call['tool'] ?? null;
+
+        return ['tool' => is_string($tool) && $tool !== '' ? $tool : null, 'arguments' => is_array($call['arguments'] ?? null) ? $call['arguments'] : []];
     }
 
     private function own(Organization $organization, User $user, string $publicId): stdClass

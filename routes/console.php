@@ -5,6 +5,7 @@ use App\Models\Organization;
 use App\Services\Fel\SatPendingAlertService;
 use App\Services\Fiscal\BanguatExchangeRateService;
 use App\Services\Integrations\WebhookDeliveryService;
+use App\Services\Luzma\LuzmaMorningBriefService;
 use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Notifications\AlertDispatchService;
 use App\Services\Platform\Billing\SaaSBillingService;
@@ -213,3 +214,10 @@ Artisan::command('exchange-rates:sync {--days=7 : Días hacia atrás que se revi
 })->purpose('Descarga del Banco de Guatemala los tipos de cambio oficiales del dólar y del euro');
 
 Schedule::command('exchange-rates:sync')->twiceDailyAt(7, 17, 5)->withoutOverlapping()->onOneServer();
+
+Artisan::command('luzma:morning-brief', function (TenantDatabaseContext $tenancy, LuzmaMorningBriefService $brief) {
+    $sent = $tenancy->runAsSystem(fn (): int => $brief->sendAll());
+    $this->info("Avisos de la mañana enviados: {$sent}.");
+})->purpose('Envía a cada persona el aviso de la mañana de Luzma: impuestos de la semana, tareas vencidas y alertas abiertas');
+
+Schedule::command('luzma:morning-brief')->weekdays()->at('07:20')->withoutOverlapping()->onOneServer();

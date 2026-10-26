@@ -15,7 +15,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { LuzmaScreen } from '@/components/luzma/client';
 import { LuzmaCosmos } from '@/components/luzma/luzma-cosmos';
 import type { OrbState } from '@/components/luzma/luzma-orb';
-import { LuzmaBubble } from '@/components/luzma/luzma-parts';
+import { LuzmaAttach, LuzmaBubble } from '@/components/luzma/luzma-parts';
 import { useLuzmaConversation } from '@/components/luzma/use-luzma-conversation';
 import { WORKING } from '@/components/luzma/use-luzma-conversation';
 import { useLuzmaVoice } from '@/components/luzma/use-luzma-voice';
@@ -231,6 +231,14 @@ export function LuzmaOrbChat({
                             <Mic className="size-5" />
                         </button>
                     )}
+                    <LuzmaAttach
+                        disabled={busy}
+                        onFile={(file) => {
+                            voice.stopSpeaking();
+                            void ask(input, false, file);
+                        }}
+                        className="grid size-11 shrink-0 place-items-center rounded-full bg-white/10 text-white/85 hover:bg-white/20 disabled:opacity-50"
+                    />
                     <textarea
                         aria-label="Pregunta para Luzma"
                         rows={1}

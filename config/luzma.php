@@ -23,8 +23,8 @@ return [
 
     'timeouts' => [
         'health' => (int) env('LUZMA_HEALTH_TIMEOUT', 4),
-        'plan' => (int) env('LUZMA_PLAN_TIMEOUT', 45),
-        'answer' => (int) env('LUZMA_ANSWER_TIMEOUT', 120),
+        'plan' => (int) env('LUZMA_PLAN_TIMEOUT', 20),
+        'answer' => (int) env('LUZMA_ANSWER_TIMEOUT', 80),
     ],
 
     'features' => [

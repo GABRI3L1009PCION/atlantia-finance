@@ -26,7 +26,7 @@ final class LuzmaTool
      * @param  list<string>  $permissions  any of them grants the tool (plus luzma.use, checked earlier)
      * @param  list<string>  $keywords  normalized words for the deterministic router
      * @param  array<string, string>  $parameters  argument => description
-     * @param  Closure(LuzmaContext, array<string, mixed>): array{facts: list<string>, data: array<string, mixed>, references?: list<array{label: string, href: string}>, suggestions?: list<array<string, mixed>>}  $handler
+     * @param  Closure(LuzmaContext, array<string, mixed>): array{facts: list<string>, data: array<string, mixed>, references?: list<array{label: string, href: string, download?: bool}>, suggestions?: list<array<string, mixed>>}  $handler
      */
     public function __construct(
         public readonly string $name,

@@ -45,6 +45,7 @@ class OllamaService:
             "options": {
                 "temperature": settings.AI_TEMPERATURE,
                 "num_ctx": settings.AI_CONTEXT_LENGTH,
+                "num_predict": settings.AI_MAX_TOKENS,
             },
         }
         if response_format is not None:
@@ -64,7 +65,7 @@ class OllamaService:
         ])
 
     async def answer(self, system: str, messages: list[dict]) -> str:
-        return await self._chat([{"role": "system", "content": system}, *messages])
+        return await self._chat([{"role": "system", "content": system}, *messages], timeout=settings.AI_ANSWER_TIMEOUT)
 
     async def plan(self, question: str, tools: list[dict], context: dict) -> dict:
         catalog = "\n".join(
@@ -84,7 +85,7 @@ class OllamaService:
                 },
             ],
             response_format=PLAN_SCHEMA,
-            timeout=60.0,
+            timeout=settings.AI_PLAN_TIMEOUT,
         )
         data = json.loads(content)
         names = {tool["name"] for tool in tools}

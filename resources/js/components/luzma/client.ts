@@ -1,7 +1,19 @@
 import { usePage } from '@inertiajs/react';
 import { useMemo } from 'react';
 
-export type LuzmaReference = { label: string; href: string };
+export type LuzmaReference = {
+    label: string;
+    href: string;
+    download?: boolean;
+};
+
+export type LuzmaTable = {
+    title: string;
+    columns: string[];
+    rows: string[][];
+    /** Column drawn as bars next to the table (amounts like "Q 1,234.00"). */
+    chart?: { column: number };
+};
 
 export type LuzmaAction = {
     id: string;
@@ -32,6 +44,7 @@ export type LuzmaMessage = {
     status: 'ok' | 'fallback' | 'error' | 'pending';
     references: LuzmaReference[];
     actions: LuzmaAction[];
+    tables?: LuzmaTable[];
     suggestions?: { type: string; label: string }[];
     tools: string[];
     tool_status?: string | null;
@@ -85,6 +98,28 @@ function xsrfToken(): string {
     return match ? decodeURIComponent(match[1]) : '';
 }
 
+/** Readable message of a failed Luzma response: the validation error, the server message or a generic one. */
+async function failure(response: Response): Promise<LuzmaError> {
+    let message =
+        response.status === 403
+            ? 'No tienes permiso para esta consulta.'
+            : response.status === 429
+              ? 'Demasiadas consultas seguidas. Espera un momento.'
+              : 'Luzma no está disponible temporalmente.';
+
+    try {
+        const data = await response.json();
+        const errors = data?.errors
+            ? Object.values(data.errors as Record<string, string[]>).flat()
+            : [];
+        message = errors[0] ?? data?.message ?? message;
+    } catch {
+        // Keep the generic message.
+    }
+
+    return new LuzmaError(message);
+}
+
 /** JSON calls to the Luzma API with the session's CSRF token; server errors become readable messages. */
 export async function luzmaRequest<T>(
     url: string,
@@ -104,24 +139,38 @@ export async function luzmaRequest<T>(
     });
 
     if (!response.ok) {
-        let message =
-            response.status === 403
-                ? 'No tienes permiso para esta consulta.'
-                : response.status === 429
-                  ? 'Demasiadas consultas seguidas. Espera un momento.'
-                  : 'Luzma no está disponible temporalmente.';
+        throw await failure(response);
+    }
 
-        try {
-            const data = await response.json();
-            const errors = data?.errors
-                ? Object.values(data.errors as Record<string, string[]>).flat()
-                : [];
-            message = errors[0] ?? data?.message ?? message;
-        } catch {
-            // Keep the generic message.
+    return (await response.json()) as T;
+}
+
+/** Sends a file to Luzma (multipart) with the screen context and the question. */
+export async function luzmaUpload<T>(
+    url: string,
+    file: File,
+    fields: Record<string, string | number | null | undefined>,
+): Promise<T> {
+    const body = new FormData();
+    body.append('file', file);
+    Object.entries(fields).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+            body.append(key, String(value));
         }
+    });
+    const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-XSRF-TOKEN': xsrfToken(),
+        },
+        body,
+    });
 
-        throw new LuzmaError(message);
+    if (!response.ok) {
+        throw await failure(response);
     }
 
     return (await response.json()) as T;

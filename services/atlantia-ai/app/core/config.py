@@ -32,6 +32,12 @@ class Settings:
         os.getenv("AI_CONTEXT_LENGTH", "4096")
     )
 
+    # Longest answer the model may write (tokens) and how long Ollama may take to write it or to plan. Behind Cloudflare a
+    # request is cut at 100 seconds, so planning plus answering must stay below it; when the model is late, the brain answers.
+    AI_MAX_TOKENS: int = int(os.getenv("AI_MAX_TOKENS", "450"))
+    AI_ANSWER_TIMEOUT: float = float(os.getenv("AI_ANSWER_TIMEOUT", "70"))
+    AI_PLAN_TIMEOUT: float = float(os.getenv("AI_PLAN_TIMEOUT", "15"))
+
     # How long Ollama keeps the model in memory after a request. -1 keeps it loaded for good, so Luzma never
     # needs a cold start (about 50 seconds) after being idle.
     AI_KEEP_ALIVE: int | str = int(os.getenv("AI_KEEP_ALIVE", "-1")) if os.getenv("AI_KEEP_ALIVE", "-1").lstrip("-").isdigit() else os.getenv("AI_KEEP_ALIVE", "-1")
