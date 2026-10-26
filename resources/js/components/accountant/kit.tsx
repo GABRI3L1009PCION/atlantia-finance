@@ -223,12 +223,20 @@ export function CompaniesTable({
                         </span>
                     </td>
                     <td className="px-2 py-2">
-                        <Link
-                            href={href(company.review_href)}
-                            className="text-xs font-bold text-[#640000] hover:underline"
-                        >
-                            Revisar
-                        </Link>
+                        <div className="flex flex-col items-start gap-1 whitespace-nowrap">
+                            <Link
+                                href={href(company.review_href)}
+                                className="text-xs font-bold text-[#640000] hover:underline"
+                            >
+                                Revisar
+                            </Link>
+                            <Link
+                                href={`/accounting/companies/${company.public_id}/dashboard`}
+                                className="text-xs font-bold text-[#640000] hover:underline"
+                            >
+                                Abrir contabilidad
+                            </Link>
+                        </div>
                     </td>
                 </tr>
             ))}

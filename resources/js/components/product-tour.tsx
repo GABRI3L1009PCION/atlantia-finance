@@ -55,12 +55,17 @@ function firmSteps(): TourStep[] {
         {
             target: 'group:Dirección',
             title: 'Dirección',
-            body: 'El panel ejecutivo de la firma y la puesta en marcha paso a paso.',
+            body: 'El panel ejecutivo, tus oficinas y Empresas clientes: ahí entras a la contabilidad de cada cliente.',
         },
         {
             target: 'group:Administración',
             title: 'Administración',
-            body: 'Oficinas, empresas clientes y quién atiende a cada una.',
+            body: 'Oficinas, equipo y Empresas: crea clientes, asígnales responsables y entra a su contabilidad.',
+        },
+        {
+            target: 'group:Empresas',
+            title: 'Tus empresas',
+            body: 'Las empresas a tu cargo. En Contabilidad de empresas entras a los libros, ventas, compras y reportes de cada una.',
         },
         {
             target: 'group:Usuarios',

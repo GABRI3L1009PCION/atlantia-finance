@@ -87,20 +87,23 @@ export function AppSidebarHeader({
     const [syncedSearch, setSyncedSearch] = useState(currentSearch);
     // On the accounting screens the chip names the period being worked on, not the month of the calendar.
     const pagePeriods = page.props.periods as
-        { id: number; starts_on: string }[] | undefined;
+        { id?: number; starts_on?: string }[] | undefined;
     const pageFilters = page.props.filters as
         { period?: string | number } | undefined;
-    const workingPeriod = Array.isArray(pagePeriods)
-        ? pagePeriods.find(
-              (candidate) =>
-                  String(candidate.id) === String(pageFilters?.period),
-          )
-        : undefined;
+    // Only accounting periods count: other screens (the VAT books) list months without an id or start date.
+    const workingPeriod =
+        Array.isArray(pagePeriods) && pageFilters?.period !== undefined
+            ? pagePeriods.find(
+                  (candidate) =>
+                      typeof candidate.starts_on === 'string' &&
+                      String(candidate.id) === String(pageFilters.period),
+              )
+            : undefined;
     const period = new Intl.DateTimeFormat('es-GT', {
         month: 'long',
         year: 'numeric',
     }).format(
-        workingPeriod
+        workingPeriod?.starts_on
             ? new Date(`${workingPeriod.starts_on.slice(0, 10)}T12:00:00`)
             : new Date(),
     );

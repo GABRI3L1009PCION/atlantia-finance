@@ -757,6 +757,12 @@ export function AppSidebar() {
         isActive: currentPath === href.split('?')[0].split('#')[0],
         badge,
     });
+    // The accounting of each client company, for the panels whose company lists only track their work.
+    const companyBooksLink = supervisorLink(
+        'Contabilidad de empresas',
+        '/accounting',
+        Calculator,
+    );
     // Everyone who works on clients records their hours from their own work group.
     const withHours = (groups: { label: string; items: NavItem[] }[]) =>
         groups.map((group) =>
@@ -915,6 +921,7 @@ export function AppSidebar() {
                     '/supervisor/companies',
                     Building2,
                 ),
+                companyBooksLink,
                 supervisorLink(
                     'Estado de empresas',
                     '/supervisor/companies?view=status',
@@ -1235,6 +1242,7 @@ export function AppSidebar() {
             items: [
                 supervisorLink('Inicio fiscal', TAX_HOME, Home),
                 supervisorLink('Mis empresas', '/tax/companies', Building2),
+                companyBooksLink,
                 supervisorLink(
                     'Mis tareas fiscales',
                     '/tax/tasks',
@@ -1350,6 +1358,7 @@ export function AppSidebar() {
                     '/receivables/companies',
                     Building2,
                 ),
+                companyBooksLink,
                 supervisorLink(
                     'Mis tareas de cobranza',
                     '/receivables/tasks',
@@ -1473,6 +1482,7 @@ export function AppSidebar() {
                     '/payables/companies',
                     Building2,
                 ),
+                companyBooksLink,
                 supervisorLink(
                     'Mis tareas CxP',
                     '/payables/tasks',
@@ -1595,6 +1605,7 @@ export function AppSidebar() {
                     BriefcaseBusiness,
                     supervisorBadges?.engagements,
                 ),
+                companyBooksLink,
                 supervisorLink(
                     'Mis tareas',
                     '/work/audit/tasks',
@@ -1868,6 +1879,7 @@ export function AppSidebar() {
             items: [
                 supervisorLink('Inicio Nómina', PAYROLL_HOME, Home),
                 supervisorLink('Mis empresas', '/payroll/companies', Building2),
+                companyBooksLink,
                 supervisorLink(
                     'Mis tareas',
                     '/payroll/tasks',
@@ -1980,6 +1992,7 @@ export function AppSidebar() {
                     '/treasury/companies',
                     Building2,
                 ),
+                companyBooksLink,
                 supervisorLink(
                     'Mis tareas',
                     '/treasury/tasks',
@@ -2091,6 +2104,7 @@ export function AppSidebar() {
                     '/accountant/companies',
                     Building2,
                 ),
+                companyBooksLink,
                 supervisorLink(
                     'Revisión de empresas',
                     '/accountant/reviews',
@@ -2188,6 +2202,7 @@ export function AppSidebar() {
             items: [
                 operationsLink('Inicio', OPERATIONS_HOME, Home),
                 operationsLink('Empresas', '/operations/companies', Building2),
+                companyBooksLink,
                 operationsLink('Tareas', '/operations/tasks', ListTree),
                 operationsLink('Revisiones', '/operations/reviews', BadgeCheck),
                 operationsLink('Cierres', '/operations/closings', LockKeyhole),
