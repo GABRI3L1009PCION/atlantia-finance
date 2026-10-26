@@ -311,6 +311,40 @@ test('reminders go through the queue, record their delivery and can be retried a
     Queue::assertPushed(SendCollectionReminderJob::class, 2);
 });
 
+test('a reminder leaves under the company name and replies reach the firm, and can be previewed first', function () {
+    Mail::fake();
+    Queue::fake();
+    $f = receivablesFixture();
+    $invoice = receivablesInvoice($f, 'Cliente ABC', 100000, '2026-08-01', '2026-08-31');
+    $customer = (int) DB::table('sales_invoices')->where('id', $invoice)->value('sales_customer_id');
+    DB::table('sales_customers')->where('id', $customer)->update(['email' => 'pagos@clienteabc.test']);
+    $overdue = collect(app(CollectionReminderService::class)->templates($f['org']))->firstWhere('kind', 'overdue')['id'];
+
+    $this->actingAs($f['receivables'])->get(route('receivables.reminders.preview', ['customer_id' => $customer, 'template_id' => $overdue]))
+        ->assertOk()->assertSee('Comercial Maya')->assertSee('Q 1,000.00')->assertSee('Gestión de cobros por Atlantia CxC');
+    expect(DB::table('collection_reminders')->count())->toBe(0);
+
+    // Until the firm confirms its own address, replies reach whoever sent the reminder.
+    $this->post(route('receivables.reminders.send'), ['customer_id' => $customer, 'template_id' => $overdue])->assertSessionHasNoErrors();
+    $first = (int) DB::table('collection_reminders')->value('id');
+    (new SendCollectionReminderJob($first))->handle(app(TenantDatabaseContext::class));
+    Mail::assertSent(CollectionReminderMail::class, function (CollectionReminderMail $mail) use ($f): bool {
+        $mail->build();
+
+        return $mail->hasFrom((string) config('mail.from.address'), 'Comercial Maya') && $mail->hasReplyTo($f['receivables']->email);
+    });
+
+    DB::table('firm_profiles')->insert(['organization_id' => $f['org']->id, 'trade_name' => 'Atlantia CxC', 'client_reply_email' => 'cobros@atlantiacxc.test', 'client_reply_email_verified_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+    $this->post(route('receivables.reminders.send'), ['customer_id' => $customer, 'template_id' => $overdue])->assertSessionHasNoErrors();
+    $second = (int) DB::table('collection_reminders')->where('id', '>', $first)->value('id');
+    (new SendCollectionReminderJob($second))->handle(app(TenantDatabaseContext::class));
+    Mail::assertSent(CollectionReminderMail::class, function (CollectionReminderMail $mail): bool {
+        $mail->build();
+
+        return $mail->hasReplyTo('cobros@atlantiacxc.test') && $mail->hasFrom((string) config('mail.from.address'), 'Comercial Maya');
+    });
+});
+
 test('the director sees portfolio problems per company without adding companies together', function () {
     $f = receivablesFixture();
     receivablesInvoice($f, 'Cliente ABC', 250000, '2026-09-05', '2026-10-05');

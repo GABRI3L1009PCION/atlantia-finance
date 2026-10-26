@@ -442,6 +442,16 @@ export default function ReceivablesCustomer({
                                 >
                                     Enviar recordatorio
                                 </button>
+                                {customer.email && (
+                                    <a
+                                        className={secondaryButton}
+                                        href={`/receivables/reminders/preview?customer_id=${customer.id}&template_id=${template}`}
+                                        target="_blank"
+                                        rel="noopener"
+                                    >
+                                        Vista previa
+                                    </a>
+                                )}
                             </div>
                         )
                     }

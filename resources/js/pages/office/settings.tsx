@@ -1,4 +1,4 @@
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeftRight,
@@ -11,6 +11,7 @@ import {
     Code2,
     CreditCard,
     FileText,
+    Mail,
     Plug,
     Plus,
     Shield,
@@ -179,17 +180,190 @@ function SettingCard({
     );
 }
 
+type ClientEmail = {
+    email: string | null;
+    verified: boolean;
+    requested_at: string | null;
+    canManage: boolean;
+};
+
+/**
+ * The firm's address for its clients' replies. The firm only types it and confirms it from its inbox: messages leave from
+ * Atlantia's sending address under the company's name, and replies reach this address.
+ */
+function ClientEmailCard({ clientEmail }: { clientEmail: ClientEmail }) {
+    const form = useForm({ email: clientEmail.email ?? '' });
+    const [editing, setEditing] = useState(clientEmail.email === null);
+    const pending = clientEmail.email !== null && !clientEmail.verified;
+
+    const submit = (event: FormEvent) => {
+        event.preventDefault();
+        form.post('/office/client-email', {
+            preserveScroll: true,
+            onSuccess: () => setEditing(false),
+        });
+    };
+
+    return (
+        <section className={`${panel} mb-5 p-5`}>
+            <div className="flex flex-wrap items-start gap-4">
+                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#fbe9e9] text-[#8a0b0b]">
+                    <Mail className="size-6" />
+                </span>
+                <div className="min-w-0 flex-1">
+                    <h2 className="text-lg font-bold text-[#061633]">
+                        Correo para tus clientes
+                    </h2>
+                    <p className="text-sm text-[#526b92]">
+                        Los recordatorios de cobro, estados de cuenta y facturas
+                        salen con el nombre de cada empresa y, cuando el cliente
+                        responde, la respuesta llega a este correo. Solo escribe
+                        tu correo y confírmalo; no hay nada más que configurar.
+                    </p>
+
+                    {!editing && clientEmail.email !== null ? (
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <span className="font-semibold text-[#061633]">
+                                {clientEmail.email}
+                            </span>
+                            {clientEmail.verified ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+                                    <CheckCircle2 className="size-3.5" />{' '}
+                                    Confirmado
+                                </span>
+                            ) : (
+                                <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                                    Pendiente de confirmar
+                                </span>
+                            )}
+                        </div>
+                    ) : null}
+
+                    {pending && !editing && (
+                        <p className="mt-2 text-sm text-amber-800">
+                            Te enviamos un enlace a {clientEmail.email}. Ábrelo
+                            para activarlo; mientras tanto, las respuestas
+                            llegan a quien envía cada mensaje.
+                        </p>
+                    )}
+
+                    {clientEmail.canManage &&
+                        (editing ? (
+                            <form
+                                onSubmit={submit}
+                                className="mt-4 flex flex-wrap items-start gap-2"
+                            >
+                                <label className="min-w-64 flex-1 text-sm font-semibold">
+                                    <span className="sr-only">
+                                        Correo de la firma
+                                    </span>
+                                    <input
+                                        type="email"
+                                        required
+                                        className={input}
+                                        placeholder="cobros@tufirma.com"
+                                        value={form.data.email}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'email',
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                    {form.errors.email && (
+                                        <span className="mt-1 block text-xs text-red-700">
+                                            {form.errors.email}
+                                        </span>
+                                    )}
+                                </label>
+                                <button
+                                    type="submit"
+                                    className={primaryButton}
+                                    disabled={form.processing}
+                                >
+                                    Enviar enlace de confirmación
+                                </button>
+                                {clientEmail.email !== null && (
+                                    <button
+                                        type="button"
+                                        className={secondaryButton}
+                                        onClick={() => setEditing(false)}
+                                    >
+                                        Cancelar
+                                    </button>
+                                )}
+                            </form>
+                        ) : (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {clientEmail.verified && (
+                                    <button
+                                        type="button"
+                                        className={primaryButton}
+                                        onClick={() =>
+                                            router.post(
+                                                '/office/client-email/test',
+                                                {},
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        Enviarme un correo de prueba
+                                    </button>
+                                )}
+                                {pending && (
+                                    <button
+                                        type="button"
+                                        className={secondaryButton}
+                                        onClick={() =>
+                                            router.post(
+                                                '/office/client-email',
+                                                { email: clientEmail.email },
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        Reenviar enlace
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    className={secondaryButton}
+                                    onClick={() => setEditing(true)}
+                                >
+                                    Cambiar correo
+                                </button>
+                                <button
+                                    type="button"
+                                    className={secondaryButton}
+                                    onClick={() =>
+                                        router.delete('/office/client-email', {
+                                            preserveScroll: true,
+                                        })
+                                    }
+                                >
+                                    Quitar
+                                </button>
+                            </div>
+                        ))}
+                </div>
+            </div>
+        </section>
+    );
+}
+
 export default function OfficeSettings({
     offices,
     integrations,
     organization,
     permissions,
+    clientEmail,
     notice,
 }: {
     offices: Office[];
     integrations: Integration[];
     organization: { name: string; timezone: string };
     permissions: Record<string, boolean>;
+    clientEmail: ClientEmail;
     notice: string | null;
 }) {
     const [selectedId, setSelectedId] = useState<number | null>(
@@ -207,6 +381,7 @@ export default function OfficeSettings({
                     title="Configuración"
                     subtitle={`${organization.name} · administra tu sede y las reglas de operación`}
                 />
+                <ClientEmailCard clientEmail={clientEmail} />
                 {office ? (
                     <OfficeBoard
                         key={office.id}

@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Services\AccountingService;
+use App\Services\Notifications\ClientMailIdentityService;
 use App\Services\WorkManagement\CompanyAdministrationService;
 use App\Services\WorkManagement\CompanyAssignmentService;
 use App\Services\WorkManagement\OfficeAdminService;
@@ -188,6 +189,7 @@ class OfficeAdminController extends Controller
             'integrations' => $this->admin->integrations($organization->id, $officeIds),
             'organization' => ['name' => $organization->name, 'timezone' => $organization->timezone],
             'permissions' => $this->permissions($organization, $request, $selected),
+            'clientEmail' => [...app(ClientMailIdentityService::class)->status($organization->id), 'canManage' => $this->authorization->can($organization, $request->user(), 'office.settings.manage')],
         ]);
     }
 

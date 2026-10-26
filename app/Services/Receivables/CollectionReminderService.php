@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Services\Receivables;
 
 use App\Jobs\SendCollectionReminderJob;
+use App\Mail\CollectionReminderMail;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\Notifications\ClientMailIdentityService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -35,6 +37,7 @@ class CollectionReminderService
     public function __construct(
         private AccountingService $accounting,
         private ReceivableService $receivables,
+        private ClientMailIdentityService $identities,
     ) {}
 
     /** @return list<array{id: int, kind: string, kind_label: string, name: string, subject: string, body: string}> */
@@ -52,6 +55,47 @@ class CollectionReminderService
      * @param  array{from?: string, to?: string}  $range
      */
     public function send(Organization $organization, User $actor, int $companyId, int $customerId, int $templateId, ?string $attachment = null, array $range = []): int
+    {
+        ['customer' => $customer, 'template' => $template, 'company' => $company, 'subject' => $subject, 'body' => $body] = $this->compose($organization, $companyId, $customerId, $templateId, $range);
+        $id = DB::table('collection_reminders')->insertGetId([
+            'organization_id' => $organization->id, 'office_id' => $company?->office_id, 'company_id' => $companyId, 'sales_customer_id' => $customerId, 'collection_reminder_template_id' => $template->id,
+            'kind' => $template->kind, 'channel' => 'email', 'recipient' => $customer->email, 'subject' => $subject, 'body' => $body, 'status' => 'queued', 'sent_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $path = null;
+        if ($attachment !== null) {
+            $path = 'collection-reminders/'.$organization->id.'/'.$id.'.pdf';
+            Storage::disk('local')->put($path, $attachment);
+        }
+        try {
+            SendCollectionReminderJob::dispatch($id, $path);
+        } catch (Throwable $exception) {
+            // Only a synchronous queue surfaces delivery errors here; the queued job records them itself.
+            DB::table('collection_reminders')->where('id', $id)->where('status', '!=', 'sent')->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 500), 'updated_at' => now()]);
+        }
+        $this->accounting->audit($organization, $actor, $template->kind === 'statement' ? 'statement.sent' : 'reminder.sent', 'collection_reminders', $id, ['customer' => $customer->name, 'recipient' => $customer->email, 'template' => $template->name], $company === null ? null : (int) $company->office_id);
+
+        return $id;
+    }
+
+    /**
+     * The message exactly as the customer would receive it, without sending or logging anything.
+     *
+     * @param  array{from?: string, to?: string}  $range
+     */
+    public function preview(Organization $organization, User $actor, int $companyId, int $customerId, int $templateId, array $range = []): string
+    {
+        ['subject' => $subject, 'body' => $body] = $this->compose($organization, $companyId, $customerId, $templateId, $range);
+
+        return (new CollectionReminderMail($subject, $body, $this->identities->identity($organization->id, $companyId, $actor->id)))->render();
+    }
+
+    /**
+     * The template filled with the customer's real balances.
+     *
+     * @param  array{from?: string, to?: string}  $range
+     * @return array{customer: stdClass, template: stdClass, company: stdClass|null, subject: string, body: string}
+     */
+    private function compose(Organization $organization, int $companyId, int $customerId, int $templateId, array $range): array
     {
         $customer = DB::table('sales_customers')->where('id', $customerId)->where('company_id', $companyId)->first(['id', 'name', 'email']);
         if ($customer === null) {
@@ -81,24 +125,8 @@ class CollectionReminderService
         ];
         $subject = strtr((string) $template->subject, $values);
         $body = strtr((string) $template->body, $values);
-        $id = DB::table('collection_reminders')->insertGetId([
-            'organization_id' => $organization->id, 'office_id' => $company?->office_id, 'company_id' => $companyId, 'sales_customer_id' => $customerId, 'collection_reminder_template_id' => $template->id,
-            'kind' => $template->kind, 'channel' => 'email', 'recipient' => $customer->email, 'subject' => $subject, 'body' => $body, 'status' => 'queued', 'sent_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
-        ]);
-        $path = null;
-        if ($attachment !== null) {
-            $path = 'collection-reminders/'.$organization->id.'/'.$id.'.pdf';
-            Storage::disk('local')->put($path, $attachment);
-        }
-        try {
-            SendCollectionReminderJob::dispatch($id, $path);
-        } catch (Throwable $exception) {
-            // Only a synchronous queue surfaces delivery errors here; the queued job records them itself.
-            DB::table('collection_reminders')->where('id', $id)->where('status', '!=', 'sent')->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 500), 'updated_at' => now()]);
-        }
-        $this->accounting->audit($organization, $actor, $template->kind === 'statement' ? 'statement.sent' : 'reminder.sent', 'collection_reminders', $id, ['customer' => $customer->name, 'recipient' => $customer->email, 'template' => $template->name], $company === null ? null : (int) $company->office_id);
 
-        return $id;
+        return ['customer' => $customer, 'template' => $template, 'company' => $company, 'subject' => $subject, 'body' => $body];
     }
 
     public function retry(Organization $organization, User $actor, int $reminderId): void

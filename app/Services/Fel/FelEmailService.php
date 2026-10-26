@@ -6,6 +6,7 @@ namespace App\Services\Fel;
 
 use App\Mail\FelInvoiceMail;
 use App\Models\FelDocument;
+use App\Services\Notifications\ClientMailIdentityService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -15,7 +16,7 @@ use RuntimeException;
 
 class FelEmailService
 {
-    public function __construct(private FelPdfService $pdf, private FelAudit $audit) {}
+    public function __construct(private FelPdfService $pdf, private FelAudit $audit, private ClientMailIdentityService $identities) {}
 
     public function send(int $companyId, string $uuid): void
     {
@@ -56,6 +57,7 @@ class FelEmailService
                 throw new RuntimeException('El PDF del documento no está disponible.');
             }
             $content = Storage::disk('local')->get($path);
+            $identity = $this->identities->identity((int) $doc->organization_id, (int) $doc->company_id, (int) $doc->created_by);
             if (config('mail.default') === 'resend') {
                 $key = config('services.resend.key');
                 if (! is_string($key) || $key === '') {
@@ -63,7 +65,8 @@ class FelEmailService
                 }
                 $response = Http::withToken($key)->withHeaders(['Idempotency-Key' => 'fel/'.$uuid])
                     ->connectTimeout(5)->timeout(20)->post('https://api.resend.com/emails', [
-                        'from' => config('mail.from.address'), 'to' => [$email],
+                        'from' => $identity['from_name'].' <'.config('mail.from.address').'>', 'to' => [$email],
+                        ...($identity['reply_to'] === null ? [] : ['reply_to' => [$identity['reply_to']]]),
                         'subject' => FelInvoiceMail::subjectFor($doc),
                         'html' => view('fel.email', ['document' => $doc])->render(),
                         'attachments' => [['filename' => FelInvoiceMail::attachmentName($doc), 'content' => base64_encode($content)]],
@@ -72,7 +75,7 @@ class FelEmailService
                     throw new RuntimeException('Resend no confirmó la recepción del correo.');
                 }
             } else {
-                Mail::to($email)->send(new FelInvoiceMail($doc, $content));
+                Mail::to($email)->send(new FelInvoiceMail($doc, $content, $identity));
             }
             $doc->forceFill(['email_status' => 'sent', 'email_sent_at' => now()])->save();
             $this->audit->record($doc, 'email_sent');

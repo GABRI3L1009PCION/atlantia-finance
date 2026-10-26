@@ -387,6 +387,16 @@ class ReceivablesController extends Controller
         return back()->with('workspace_notice', $this->deliveryNotice((string) DB::table('collection_reminders')->where('id', $id)->value('status'), 'Recordatorio'));
     }
 
+    /** The reminder exactly as the customer would receive it, opened in a new tab before sending. */
+    public function previewReminder(Request $request, CollectionReminderService $reminders): HttpResponse
+    {
+        [$organization, $companyIds] = $this->resolve($request);
+        $this->ensure($organization, $request, 'receivables.statements.send');
+        $data = $request->validate(['customer_id' => 'required|integer', 'template_id' => 'required|integer']);
+
+        return response($reminders->preview($organization, $request->user(), $this->customerCompany((int) $data['customer_id'], $companyIds), (int) $data['customer_id'], (int) $data['template_id']));
+    }
+
     /** Re-sends a reminder whose delivery failed (the same logged message, through the queue again). */
     public function retryReminder(Request $request, int $reminder, CollectionReminderService $reminders): RedirectResponse
     {

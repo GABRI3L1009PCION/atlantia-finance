@@ -18,6 +18,7 @@ use App\Http\Controllers\Billing\CreateCheckoutController;
 use App\Http\Controllers\CalendarFeedController;
 use App\Http\Controllers\CheckController;
 use App\Http\Controllers\ClientAccessAdminController;
+use App\Http\Controllers\ClientEmailController;
 use App\Http\Controllers\ClientPortalController;
 use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\CompanyDashboardController;
@@ -92,6 +93,7 @@ Route::middleware('auth')->group(function () {
 });
 Route::get('invitations/{invitation}', [InvitationController::class, 'show'])->middleware(['signed', 'throttle:20,1', 'tenancy.system'])->name('invitations.show');
 Route::post('invitations/{invitation}', [InvitationController::class, 'accept'])->middleware(['signed', 'throttle:10,1', 'tenancy.system'])->name('invitations.accept');
+Route::get('client-email/verify/{organization}/{hash}', [ClientEmailController::class, 'verify'])->whereNumber('organization')->middleware(['signed', 'throttle:20,1'])->name('client-email.verify');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('subscription.active')->prefix('accounting')->name('accounting.')->group(function () {
@@ -578,6 +580,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('statements', 'statements')->name('statements');
             Route::get('statements/export', 'exportStatement')->middleware('throttle:20,1')->name('statements.export');
             Route::post('statements/send', 'sendStatement')->middleware('throttle:10,1')->name('statements.send');
+            Route::get('reminders/preview', 'previewReminder')->middleware('throttle:30,1')->name('reminders.preview');
             Route::post('reminders', 'sendReminder')->middleware('throttle:20,1')->name('reminders.send');
             Route::post('reminders/{reminder}/retry', 'retryReminder')->whereNumber('reminder')->middleware('throttle:20,1')->name('reminders.retry');
             Route::get('aging', 'aging')->name('aging');
@@ -903,6 +906,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('office/subscription/plan', [SubscriptionController::class, 'changePlan'])->middleware('throttle:10,1')->name('office.subscription.plan');
         Route::post('office/subscription/cancel', [SubscriptionController::class, 'cancel'])->middleware('throttle:5,1')->name('office.subscription.cancel');
         Route::post('office/subscription/keep', [SubscriptionController::class, 'keep'])->middleware('throttle:5,1')->name('office.subscription.keep');
+        Route::post('office/client-email', [ClientEmailController::class, 'store'])->middleware('throttle:6,1')->name('office.clientEmail.store');
+        Route::delete('office/client-email', [ClientEmailController::class, 'destroy'])->middleware('throttle:10,1')->name('office.clientEmail.destroy');
+        Route::post('office/client-email/test', [ClientEmailController::class, 'test'])->middleware('throttle:6,1')->name('office.clientEmail.test');
         Route::get('office/firm-profile', [FirmProfileController::class, 'show'])->name('office.firmProfile');
         Route::patch('office/firm-profile', [FirmProfileController::class, 'update'])->middleware('throttle:20,1')->name('office.firmProfile.update');
         Route::post('office/firm-profile/logo', [FirmProfileController::class, 'uploadLogo'])->middleware('throttle:10,1')->name('office.firmProfile.logo.upload');

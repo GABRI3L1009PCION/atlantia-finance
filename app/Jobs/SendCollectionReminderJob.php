@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Mail\CollectionReminderMail;
+use App\Services\Notifications\ClientMailIdentityService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -37,7 +38,8 @@ class SendCollectionReminderJob implements ShouldQueue
                 return;
             }
             $attachment = $this->attachmentPath !== null && Storage::disk('local')->exists($this->attachmentPath) ? Storage::disk('local')->get($this->attachmentPath) : null;
-            Mail::to((string) $reminder->recipient)->send(new CollectionReminderMail((string) $reminder->subject, (string) $reminder->body, $attachment, $attachment === null ? null : 'estado-de-cuenta-'.$reminder->sales_customer_id.'.pdf'));
+            $identity = app(ClientMailIdentityService::class)->identity((int) $reminder->organization_id, (int) $reminder->company_id, (int) $reminder->sent_by);
+            Mail::to((string) $reminder->recipient)->send(new CollectionReminderMail((string) $reminder->subject, (string) $reminder->body, $identity, $attachment, $attachment === null ? null : 'estado-de-cuenta-'.$reminder->sales_customer_id.'.pdf'));
             DB::table('collection_reminders')->where('id', $this->reminderId)->update(['status' => 'sent', 'sent_at' => now(), 'error' => null, 'updated_at' => now()]);
         });
     }

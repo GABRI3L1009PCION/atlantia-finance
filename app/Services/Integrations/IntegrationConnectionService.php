@@ -92,7 +92,7 @@ class IntegrationConnectionService
             ],
         ],
         'smtp' => [
-            'label' => 'Correo de la firma (SMTP)', 'category' => 'Comunicación', 'description' => 'Envía los avisos desde el servidor de correo de la firma (Gmail, Outlook u otro).',
+            'label' => 'Servidor de correo propio (avanzado)', 'category' => 'Comunicación', 'description' => 'Solo para equipos técnicos: envía los avisos internos desde el servidor SMTP de la firma. Para que las respuestas de tus clientes te lleguen basta con el Correo para tus clientes en Configuración.',
             'fields' => [
                 ['key' => 'host', 'label' => 'Servidor SMTP', 'type' => 'text', 'required' => true, 'placeholder' => 'smtp.gmail.com'],
                 ['key' => 'port', 'label' => 'Puerto', 'type' => 'number', 'required' => true, 'placeholder' => '587'],
