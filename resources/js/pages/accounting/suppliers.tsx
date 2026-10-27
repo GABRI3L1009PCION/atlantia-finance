@@ -60,6 +60,7 @@ type Supplier = {
     email: string | null;
     phone: string | null;
     payment_terms_days: number | null;
+    isr_regime: string | null;
     created_at: string;
     document_count: number | string;
     purchased_cents: number | string;
@@ -155,6 +156,7 @@ export default function Suppliers({
         email: '',
         phone: '',
         payment_terms_days: '',
+        isr_regime: '',
     });
     const selected = useMemo(
         () =>
@@ -193,6 +195,7 @@ export default function Suppliers({
                 supplier.payment_terms_days === null
                     ? ''
                     : String(supplier.payment_terms_days),
+            isr_regime: supplier.isr_regime ?? '',
         });
         supplierForm.clearErrors();
         setEditor('edit');
@@ -649,6 +652,36 @@ export default function Suppliers({
                                         )
                                     }
                                 />
+                            </label>
+                            <label className="block text-sm font-medium">
+                                Régimen de ISR del proveedor
+                                <select
+                                    className={field}
+                                    value={supplierForm.data.isr_regime}
+                                    onChange={(event) =>
+                                        supplierForm.setData(
+                                            'isr_regime',
+                                            event.target.value,
+                                        )
+                                    }
+                                >
+                                    <option value="">Sin indicar</option>
+                                    <option value="simplified">
+                                        Sujeto a retención definitiva (opcional
+                                        simplificado)
+                                    </option>
+                                    <option value="utilities">
+                                        Sujeto a pagos trimestrales (sobre
+                                        utilidades)
+                                    </option>
+                                    <option value="exempt">
+                                        Exento o no afecto
+                                    </option>
+                                </select>
+                                <span className="mt-1 block text-xs font-normal text-slate-500">
+                                    Lo dice su factura; decide si al pagarle se
+                                    sugiere retener ISR.
+                                </span>
                             </label>
                             <label className="block text-sm font-medium">
                                 Correo

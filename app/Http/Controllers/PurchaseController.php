@@ -258,7 +258,8 @@ class PurchaseController extends Controller
     {
         [$org, $record] = $this->scope($request, $company, 'purchases.manage');
         $data = $request->validate(['name' => 'required|string|max:150', 'tax_id' => 'nullable|string|max:30',
-            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30', 'payment_terms_days' => 'nullable|integer|min:0|max:365']);
+            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30', 'payment_terms_days' => 'nullable|integer|min:0|max:365',
+            'isr_regime' => ['nullable', Rule::in(array_keys(WithholdingService::ISR_REGIMES))]]);
         DB::transaction(function () use ($request, $org, $record, $supplier, $data): void {
             $this->accounting->lock($record->id);
             $supplierRow = $this->row(DB::table('purchase_suppliers')->where('company_id', $record->id)->where('id', $supplier));
@@ -412,7 +413,8 @@ class PurchaseController extends Controller
     {
         [$org, $record] = $this->scope($request, $company, 'purchases.manage');
         $data = $request->validate(['name' => 'required|string|max:150', 'tax_id' => 'nullable|string|max:30',
-            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30', 'payment_terms_days' => 'nullable|integer|min:0|max:365']);
+            'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:30', 'payment_terms_days' => 'nullable|integer|min:0|max:365',
+            'isr_regime' => ['nullable', Rule::in(array_keys(WithholdingService::ISR_REGIMES))]]);
         $id = DB::transaction(function () use ($request, $org, $record, $data): int {
             $this->accounting->lock($record->id);
             $id = DB::table('purchase_suppliers')->insertGetId([...$data, 'company_id' => $record->id, 'created_at' => now(), 'updated_at' => now()]);
@@ -480,6 +482,7 @@ class PurchaseController extends Controller
                 ->where('l.purchase_document_id', $row->id)->select('l.*', 'a.code as account_code', 'a.name as account_name')->orderBy('l.position')->get(),
             'payments' => $this->paymentsWithWithholdings($row->id),
             'suggestedRates' => WithholdingService::SUGGESTED_RATES,
+            'withholdingSuggestions' => app(WithholdingService::class)->suggest($record->id, $row),
             'fespWithholdings' => FacturaEspecialService::is($row) && $row->status !== 'draft' ? app(FacturaEspecialService::class)->withholdings($row) : null,
             'creditNotes' => DB::table('purchase_credit_notes')->where('purchase_document_id', $row->id)->orderByDesc('id')->get(['id', 'fiscal_series', 'fiscal_number', 'issued_on', 'amount_cents', 'vat_cents', 'reason', 'status', 'void_reason']),
             'payable' => app(PayableService::class)->find($row->id),

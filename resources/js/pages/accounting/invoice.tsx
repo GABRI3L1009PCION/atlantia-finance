@@ -18,6 +18,7 @@ type Receipt = {
     reference: string;
     voided_at: string | null;
     void_reason: string | null;
+    withholding_kind?: string | null;
 };
 function ReceiptRow({
     receipt: r,
@@ -37,6 +38,11 @@ function ReceiptRow({
             <div className="flex flex-wrap justify-between gap-3">
                 <div>
                     <strong>{money(r.amount_cents)}</strong>
+                    {r.withholding_kind && (
+                        <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800">
+                            Retención de {r.withholding_kind.toUpperCase()}
+                        </span>
+                    )}
                     <p className="mt-1 text-sm text-slate-500">
                         {r.received_on} · {r.reference}
                     </p>
@@ -240,6 +246,13 @@ export default function Invoice({
         reference: '',
     });
     const credit = useForm({ amount: '', issued_on: today, reason: '' });
+    const withholding = useForm({
+        request_id: crypto.randomUUID(),
+        kind: 'iva',
+        amount: '',
+        certificate_number: '',
+        certificate_date: today,
+    });
     const remaining = Number(i.total_cents) - paid - credited;
 
     return (
@@ -460,6 +473,114 @@ export default function Invoice({
                             disabled={receipt.processing}
                         >
                             Registrar cobro
+                        </button>
+                    </form>
+                </Card>
+            )}
+            {canWrite && i.status === 'issued' && remaining > 0 && (
+                <Card title="Constancia de retención del cliente">
+                    <p className="mb-3 text-sm text-slate-500">
+                        Si el cliente es agente de retención, paga el neto y
+                        entrega una constancia. Regístrala aquí: baja el saldo
+                        del comprobante y queda como IVA o ISR por acreditar, no
+                        como dinero en el banco.
+                    </p>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            withholding.post(
+                                routes.withholdingReceived.url([
+                                    company.public_id,
+                                    i.public_id,
+                                ]),
+                                {
+                                    preserveScroll: true,
+                                    onSuccess: () =>
+                                        withholding.setData({
+                                            request_id: crypto.randomUUID(),
+                                            kind: 'iva',
+                                            amount: '',
+                                            certificate_number: '',
+                                            certificate_date: today,
+                                        }),
+                                },
+                            );
+                        }}
+                    >
+                        <div className="grid gap-4 sm:grid-cols-4">
+                            <label>
+                                Impuesto
+                                <select
+                                    className={field}
+                                    value={withholding.data.kind}
+                                    onChange={(e) =>
+                                        withholding.setData(
+                                            'kind',
+                                            e.target.value,
+                                        )
+                                    }
+                                >
+                                    <option value="iva">IVA retenido</option>
+                                    <option value="isr">ISR retenido</option>
+                                </select>
+                            </label>
+                            <label>
+                                Monto retenido Q
+                                <input
+                                    required
+                                    type="number"
+                                    min="0.01"
+                                    max={remaining / 100}
+                                    step="0.01"
+                                    className={field}
+                                    value={withholding.data.amount}
+                                    onChange={(e) =>
+                                        withholding.setData(
+                                            'amount',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </label>
+                            <label>
+                                Número de constancia
+                                <input
+                                    required
+                                    maxLength={60}
+                                    className={field}
+                                    value={withholding.data.certificate_number}
+                                    onChange={(e) =>
+                                        withholding.setData(
+                                            'certificate_number',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </label>
+                            <label>
+                                Fecha de la constancia
+                                <input
+                                    required
+                                    type="date"
+                                    min={i.issued_on}
+                                    max={today}
+                                    className={field}
+                                    value={withholding.data.certificate_date}
+                                    onChange={(e) =>
+                                        withholding.setData(
+                                            'certificate_date',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </label>
+                        </div>
+                        <Errors errors={withholding.errors} />
+                        <button
+                            className={`${secondary} mt-4`}
+                            disabled={withholding.processing}
+                        >
+                            Registrar constancia
                         </button>
                     </form>
                 </Card>

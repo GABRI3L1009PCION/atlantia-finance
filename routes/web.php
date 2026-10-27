@@ -140,6 +140,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/sales/invoices/{invoice}', [SalesController::class, 'show'])->name('invoice');
         Route::get('companies/{company}/sales/invoices/{invoice}/pdf', [SalesController::class, 'pdf'])->middleware('throttle:10,1')->name('invoicePdf');
         Route::post('companies/{company}/sales/invoices/{invoice}/process', [SalesController::class, 'process'])->middleware('throttle:30,1')->name('invoiceProcess');
+        Route::post('companies/{company}/sales/invoices/{invoice}/withholdings', [SalesController::class, 'withholdingReceived'])->middleware('throttle:30,1')->name('withholdingReceived');
         Route::post('companies/{company}/sales/invoices/{invoice}/receipts', [SalesController::class, 'receipt'])->middleware('throttle:30,1')->name('receipt');
         Route::post('companies/{company}/sales/invoices/{invoice}/receipts/{receipt}/void', [SalesController::class, 'voidReceipt'])->whereNumber('receipt')->middleware('throttle:30,1')->name('voidReceipt');
         Route::post('companies/{company}/sales/invoices/{invoice}/credit-notes', [SalesController::class, 'creditNote'])->middleware('throttle:30,1')->name('creditNote');
@@ -201,6 +202,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('companies/{company}/tax-reports', [TaxReportController::class, 'index'])->name('taxReports');
         Route::get('companies/{company}/tax-reports/withholdings/export', [TaxReportController::class, 'exportWithholdings'])->middleware('throttle:10,1')->name('withholdingsExport');
+        Route::put('companies/{company}/tax-reports/withholdings/settings', [TaxReportController::class, 'withholdingSettings'])->middleware('throttle:30,1')->name('withholdingSettings');
+        Route::patch('companies/{company}/tax-reports/withholdings/{withholding}/certificate', [TaxReportController::class, 'withholdingCertificate'])->whereNumber('withholding')->middleware('throttle:60,1')->name('withholdingCertificate');
         Route::patch('companies/{company}/tax-reports/accounts/{account}/nature', [TaxReportController::class, 'setNature'])->whereNumber('account')->middleware('throttle:60,1')->name('taxNatureUpdate');
         Route::post('companies/{company}/tax-reports/adjustments', [TaxReportController::class, 'addAdjustment'])->middleware('throttle:30,1')->name('taxAdjustmentStore');
         Route::delete('companies/{company}/tax-reports/adjustments/{adjustment}', [TaxReportController::class, 'removeAdjustment'])->whereNumber('adjustment')->middleware('throttle:30,1')->name('taxAdjustmentDelete');

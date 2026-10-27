@@ -227,6 +227,67 @@ test('a supplier payment can withhold ISR and IVA: net plus retentions equals th
     $this->get(route('accounting.withholdingsExport', [$f['uuid'], 'from' => '2026-08-01', 'to' => '2026-08-31', 'format' => 'xlsx']))->assertOk();
 });
 
+test('as a withholding agent the payment suggests IVA and ISR by law and the SAT constancias are recorded', function () {
+    $f = advFixture();
+    $this->put(route('accounting.withholdingSettings', $f['uuid']), ['vat_agent' => 'special_taxpayer', 'isr_agent' => true, 'threshold' => '2500'])->assertSessionHasNoErrors();
+    $supplierId = DB::table('purchase_suppliers')->insertGetId(['company_id' => $f['companyId'], 'name' => 'Consultores Simplificados, S.A.', 'tax_id' => '5544332']);
+    $this->patch(route('accounting.purchaseSupplierUpdate', [$f['uuid'], $supplierId]), ['name' => 'Consultores Simplificados, S.A.', 'tax_id' => '5544332', 'isr_regime' => 'simplified'])->assertSessionHasNoErrors();
+    $small = DB::table('purchase_suppliers')->insertGetId(['company_id' => $f['companyId'], 'name' => 'Tienda Doña Rosa', 'tax_id' => '1112223']);
+    $purchase = function (int $supplier, string $type, string $price) use ($f): string {
+        $id = (string) Str::uuid();
+        $this->post(route('accounting.purchaseStore', $f['uuid']), ['request_id' => $id, 'supplier_id' => $supplier, 'document_type' => 'purchase', 'document_date' => '2026-08-10', 'due_on' => '2026-08-31',
+            'fiscal_document_type' => $type, 'fiscal_series' => 'A1', 'fiscal_number' => (string) random_int(100, 99999), 'lines' => [['account_id' => $f['accounts']['5204'], 'description' => 'Servicio', 'quantity' => 1, 'unit_price' => $price, 'tax_treatment' => 'services']]])
+            ->assertSessionHasNoErrors();
+        $this->post(route('accounting.purchaseProcess', [$f['uuid'], $id]), ['action' => 'approve'])->assertSessionHasNoErrors();
+
+        return $id;
+    };
+
+    // Q40,320 with VAT: 15 % of the Q4,320 VAT, and ISR 5 % on Q30,000 plus 7 % on the other Q6,000.
+    $big = $purchase($supplierId, 'FACT', '40320.00');
+    $this->get(route('accounting.purchaseShow', [$f['uuid'], $big]))->assertInertia(fn (Assert $page) => $page
+        ->where('withholdingSuggestions.0.kind', 'iva')->where('withholdingSuggestions.0.amount_cents', 64800)
+        ->where('withholdingSuggestions.1.kind', 'isr')->where('withholdingSuggestions.1.base_cents', 3600000)->where('withholdingSuggestions.1.amount_cents', 192000));
+    // A pequeño contribuyente gets 5 % of the total withheld, no ISR; below the minimum nothing is suggested.
+    $this->get(route('accounting.purchaseShow', [$f['uuid'], $purchase($small, 'FPEQ', '3000.00')]))->assertInertia(fn (Assert $page) => $page
+        ->where('withholdingSuggestions', [['kind' => 'iva', 'base_cents' => 300000, 'rate_bp' => 500, 'amount_cents' => 15000, 'reason' => 'Pequeño contribuyente: se le retiene el 5 % del total de la factura.']]));
+    $this->get(route('accounting.purchaseShow', [$f['uuid'], $purchase($supplierId, 'FACT', '1000.00')]))->assertInertia(fn (Assert $page) => $page->where('withholdingSuggestions', []));
+
+    $this->post(route('accounting.purchasePayment', [$f['uuid'], $big]), ['request_id' => (string) Str::uuid(), 'amount' => '40320.00', 'paid_on' => '2026-08-20', 'reference' => 'TRF-9',
+        'withholdings' => [['kind' => 'iva', 'base' => '4320.00', 'rate' => '15'], ['kind' => 'isr', 'base' => '36000.00', 'rate' => '5.33']]])->assertSessionHasNoErrors();
+    $withholding = DB::table('purchase_payment_withholdings')->where('kind', 'iva')->first();
+    $this->get(route('accounting.taxReports', [$f['uuid'], 'year' => 2026, 'from' => '2026-08-01', 'to' => '2026-08-31']))->assertInertia(fn (Assert $page) => $page
+        ->where('withholdingSettings.vat_agent', 'special_taxpayer')->where('withholdingSettings.vat_rate_bp', 1500)->where('withholdingReconciliation.missing_certificates', 2)
+        ->where('withholdingReconciliation.made.0.documents_cents', 64800));
+    $this->patch(route('accounting.withholdingCertificate', [$f['uuid'], $withholding->id]), ['certificate_number' => 'RET-IVA-0001', 'certificate_date' => '2026-08-21'])->assertSessionHasNoErrors();
+    expect(DB::table('purchase_payment_withholdings')->where('id', $withholding->id)->value('certificate_number'))->toBe('RET-IVA-0001');
+});
+
+test('a constancia from a customer that withholds settles part of the invoice against IVA to credit, not the bank', function () {
+    $f = advFixture();
+    advPost($f, '2026-08-01', [['1101', '1.00', '0'], ['3101', '0', '1.00']]);
+    $customerId = DB::table('sales_customers')->insertGetId(['company_id' => $f['companyId'], 'name' => 'Exportadora del Sur, S.A.', 'tax_id' => '7766554']);
+    $invoice = (string) Str::uuid();
+    $this->post(route('accounting.salesStore', $f['uuid']), ['request_id' => $invoice, 'customer_id' => $customerId, 'issued_on' => '2026-08-05', 'due_on' => '2026-09-04', 'fiscal_document_type' => 'FACT',
+        'lines' => [['description' => 'Fertilizante', 'quantity' => 1, 'unit_price' => '11200.00', 'tax_treatment' => 'goods']]])->assertSessionHasNoErrors();
+    $this->post(route('accounting.invoiceProcess', [$f['uuid'], $invoice]), ['action' => 'issue'])->assertSessionHasNoErrors();
+
+    // The customer withholds 15 % of the Q1,200 VAT and pays the rest.
+    $request = (string) Str::uuid();
+    $this->post(route('accounting.withholdingReceived', [$f['uuid'], $invoice]), ['request_id' => $request, 'kind' => 'iva', 'amount' => '180.00', 'certificate_number' => 'C-778899', 'certificate_date' => '2026-08-20'])
+        ->assertSessionHasNoErrors();
+    $this->post(route('accounting.withholdingReceived', [$f['uuid'], $invoice]), ['request_id' => (string) Str::uuid(), 'kind' => 'iva', 'amount' => '1.00', 'certificate_number' => 'C-778899', 'certificate_date' => '2026-08-20'])
+        ->assertSessionHasErrors();
+    $receipt = DB::table('sales_receipts')->where('public_id', $request)->first();
+    expect($receipt->withholding_kind)->toBe('iva')->and((int) $receipt->amount_cents)->toBe(18000);
+    $lines = DB::table('journal_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')
+        ->where('l.journal_entry_id', DB::table('accounting_source_entries')->where('source_type', 'sales_receipt')->where('source_id', $receipt->id)->value('journal_entry_id'))->get(['a.code', 'l.debit_cents', 'l.credit_cents']);
+    expect($lines->firstWhere('debit_cents', '>', 0)->code)->toBe('1303')->and((int) $lines->sum('credit_cents'))->toBe(18000);
+
+    $this->get(route('accounting.taxReports', [$f['uuid'], 'year' => 2026, 'from' => '2026-08-01', 'to' => '2026-08-31']))->assertInertia(fn (Assert $page) => $page
+        ->where('withholdingReconciliation.received.0.documents_cents', 18000)->where('withholdingReconciliation.received_rows.0.certificate_number', 'C-778899'));
+});
+
 // RF-031 · Chequeras y cheques -----------------------------------------------------------------------------------------
 
 test('checks use controlled numbering, cannot overlap checkbooks and voiding reverses the movement', function () {

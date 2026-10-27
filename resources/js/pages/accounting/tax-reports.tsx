@@ -20,6 +20,16 @@ import {
     primary,
     secondary,
 } from '@/components/accounting-ui';
+import {
+    CertificateCell,
+    WithholdingReconciliationCard,
+    WithholdingSettingsCard,
+} from '@/components/withholdings-panel';
+import type {
+    VatAgents,
+    WithholdingReconciliation,
+    WithholdingSettings,
+} from '@/components/withholdings-panel';
 
 type AccountRow = {
     id: number;
@@ -77,6 +87,7 @@ type Withholdings = {
         rate_bp: number;
         amount_cents: number;
         certificate_number: string | null;
+        certificate_date: string | null;
     }[];
     totals: {
         isr_cents: number;
@@ -100,6 +111,9 @@ type Props = {
     accounts: AccountRow[];
     adjustments: Adjustment[];
     withholdings: Withholdings;
+    withholdingSettings: WithholdingSettings;
+    vatAgents: VatAgents;
+    withholdingReconciliation: WithholdingReconciliation;
     filters: { from: string; to: string };
     canManage: boolean;
     canExport: boolean;
@@ -113,6 +127,9 @@ export default function TaxReports({
     accounts,
     adjustments,
     withholdings,
+    withholdingSettings,
+    vatAgents,
+    withholdingReconciliation,
     filters,
     canManage,
     canExport,
@@ -535,6 +552,12 @@ export default function TaxReports({
 
             {tab === 'withholdings' && (
                 <>
+                    <WithholdingSettingsCard
+                        base={base}
+                        settings={withholdingSettings}
+                        agents={vatAgents}
+                        canManage={canManage}
+                    />
                     <Card title="Retenciones aplicadas en pagos a proveedores">
                         <form
                             className="mb-4 flex flex-wrap items-end gap-3"
@@ -670,8 +693,17 @@ export default function TaxReports({
                                                     {money(row.amount_cents)}
                                                 </td>
                                                 <td className={cell}>
-                                                    {row.certificate_number ??
-                                                        '—'}
+                                                    <CertificateCell
+                                                        base={base}
+                                                        id={row.id}
+                                                        number={
+                                                            row.certificate_number
+                                                        }
+                                                        date={
+                                                            row.certificate_date
+                                                        }
+                                                        canManage={canManage}
+                                                    />
                                                 </td>
                                             </tr>
                                         ))}
@@ -680,6 +712,9 @@ export default function TaxReports({
                             </div>
                         )}
                     </Card>
+                    <WithholdingReconciliationCard
+                        reconciliation={withholdingReconciliation}
+                    />
                     {withholdings.monthly.length > 0 && (
                         <Card title="Resumen mensual">
                             <table className="w-full max-w-2xl">

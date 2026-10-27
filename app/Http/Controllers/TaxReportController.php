@@ -11,6 +11,7 @@ use App\Services\Fiscal\WithholdingService;
 use App\Services\ReportExportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -33,7 +34,9 @@ class TaxReportController extends Controller
 
         return Inertia::render('accounting/tax-reports', ['company' => $record, 'year' => $year, 'isr' => $this->isr->calculate($record->id, $year), 'natures' => IsrService::NATURES,
             'accounts' => $this->isr->accounts($record->id, $range['from'], $range['to']), 'adjustments' => $this->isr->adjustments($record->id, $year),
-            'withholdings' => $this->withholdings->report($record->id, $dates['from'], $dates['to']), 'filters' => $dates, 'canManage' => $this->can($request, $organization, $record, 'fiscal.manage'),
+            'withholdings' => $this->withholdings->report($record->id, $dates['from'], $dates['to']), 'filters' => $dates,
+            'withholdingSettings' => $this->withholdings->settings($record->id), 'vatAgents' => array_map(fn (array $agent): array => ['label' => $agent[0], 'rate_bp' => $agent[1]], WithholdingService::VAT_AGENTS),
+            'withholdingReconciliation' => $this->withholdings->reconciliation($record->id, $dates['from'], $dates['to']), 'canManage' => $this->can($request, $organization, $record, 'fiscal.manage'),
             'canExport' => $this->can($request, $organization, $record, 'reports.export')]);
     }
 
@@ -62,6 +65,26 @@ class TaxReportController extends Controller
         $this->isr->removeAdjustment($organization, $request->user(), $record->id, $adjustment);
 
         return back()->with('workspace_notice', 'Ajuste fiscal retirado.');
+    }
+
+    public function withholdingSettings(Request $request, string $company): RedirectResponse
+    {
+        [$organization, $record] = $this->scopeCompany($request, $company, 'fiscal.manage');
+        $data = $request->validate(['vat_agent' => ['nullable', Rule::in(array_keys(WithholdingService::VAT_AGENTS))], 'vat_rate' => 'nullable|numeric|min:0.01|max:100',
+            'isr_agent' => 'required|boolean', 'threshold' => 'required|numeric|min:0|max:100000000']);
+        DB::transaction(fn () => $this->withholdings->saveSettings($organization, $request->user(), $record->id, ['vat_agent' => $data['vat_agent'] ?? null,
+            'vat_rate_bp' => isset($data['vat_rate']) ? (int) round((float) $data['vat_rate'] * 100) : null, 'isr_agent' => (bool) $data['isr_agent'], 'threshold_cents' => (int) round((float) $data['threshold'] * 100)]));
+
+        return back()->with('workspace_notice', 'Configuración de retenciones guardada. Los pagos a proveedores sugerirán lo que corresponde retener.');
+    }
+
+    public function withholdingCertificate(Request $request, string $company, int $withholding): RedirectResponse
+    {
+        [$organization, $record] = $this->scopeCompany($request, $company, 'fiscal.manage');
+        $data = $request->validate(['certificate_number' => 'required|string|max:60', 'certificate_date' => 'required|date_format:Y-m-d|before_or_equal:today']);
+        $this->withholdings->setCertificate($organization, $request->user(), $record->id, $withholding, $data['certificate_number'], $data['certificate_date']);
+
+        return back()->with('workspace_notice', 'Constancia de la SAT registrada.');
     }
 
     public function exportWithholdings(Request $request, string $company, ReportExportService $exports): HttpResponse

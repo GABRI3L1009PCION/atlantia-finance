@@ -9,6 +9,7 @@ use App\Services\AccountingService;
 use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\Fiscal\VatBookService;
+use App\Services\Fiscal\WithholdingService;
 use App\Services\FiscalConfigurationService;
 use App\Services\Receivables\CollectionAutomationService;
 use App\Services\Receivables\CollectionReminderService;
@@ -480,6 +481,29 @@ class SalesController extends Controller
         });
 
         return back()->with('success', 'Cobro registrado y asiento automático enviado al Libro Diario.');
+    }
+
+    /** POST constancia of a withholding the customer made on this invoice: it settles that part like a receipt. */
+    public function withholdingReceived(Request $request, string $company, string $invoice, WithholdingService $withholdings): RedirectResponse
+    {
+        [$org, $record] = $this->scope($request, $company, 'sales.manage');
+        $data = $request->validate(['request_id' => 'required|uuid', 'kind' => 'required|in:iva,isr', 'amount' => 'required|string|max:13',
+            'certificate_number' => 'required|string|max:60', 'certificate_date' => 'required|date_format:Y-m-d|before_or_equal:today']);
+        DB::transaction(function () use ($request, $org, $record, $invoice, $data, $withholdings): void {
+            $this->accounting->lock($record->id);
+            $doc = $this->invoice($record->id, $invoice);
+            if (DB::table('sales_receipts')->where('public_id', $data['request_id'])->exists()) {
+                return;
+            }
+            $amount = $this->accounting->cents($data['amount']);
+            $this->ensure($doc->status === 'issued' && $data['certificate_date'] >= $doc->issued_on, 'La constancia necesita un comprobante emitido y fecha no anterior a su emisión.');
+            $this->ensure($amount > 0 && $amount <= (int) $doc->total_cents - $this->paid($doc->id) - $this->credited($doc->id), 'La retención debe ser positiva y no superar el saldo pendiente.');
+            $this->ensure(! DB::table('sales_receipts')->where('sales_invoice_id', $doc->id)->where('withholding_kind', $data['kind'])->where('certificate_number', trim($data['certificate_number']))->whereNull('voided_at')->exists(),
+                'Esa constancia ya está registrada en este comprobante.');
+            $withholdings->receive($org, $request->user(), $record->id, $doc, $data['kind'], $amount, trim($data['certificate_number']), $data['certificate_date'], $data['request_id']);
+        });
+
+        return back()->with('success', 'Constancia de retención registrada: el saldo del comprobante bajó y el asiento quedó en el Libro Diario.');
     }
 
     /** POST void receipt: owner-only reversal with reason; preserves original record. */

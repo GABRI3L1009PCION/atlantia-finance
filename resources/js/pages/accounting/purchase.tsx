@@ -121,6 +121,7 @@ export default function Purchase({
     today,
     notice,
     suggestedRates,
+    withholdingSuggestions = [],
     fespWithholdings = null,
 }: {
     company: Company;
@@ -138,6 +139,13 @@ export default function Purchase({
     today: string;
     notice?: string;
     suggestedRates?: { isr: number; iva: number };
+    withholdingSuggestions?: {
+        kind: 'isr' | 'iva';
+        base_cents: number;
+        rate_bp: number;
+        amount_cents: number;
+        reason: string;
+    }[];
     fespWithholdings?:
         | {
               kind: 'isr' | 'iva';
@@ -206,6 +214,23 @@ export default function Purchase({
                 certificate_number: '',
             },
         ]);
+    // The law's withholdings for the whole document, scaled to the part being paid.
+    const applySuggestions = () => {
+        const paying = Math.round(Number(payment.data.amount || 0) * 100);
+        const share =
+            document.total_cents > 0 && paying > 0
+                ? Math.min(1, paying / document.total_cents)
+                : 1;
+        payment.setData(
+            'withholdings',
+            withholdingSuggestions.map((item) => ({
+                kind: item.kind,
+                base: ((item.base_cents * share) / 100).toFixed(2),
+                rate: String(item.rate_bp / 100),
+                certificate_number: '',
+            })),
+        );
+    };
     const updateWithholding = (
         kind: 'isr' | 'iva',
         patch: Partial<WithholdingInput>,
@@ -637,7 +662,26 @@ export default function Purchase({
                                                 <strong className="text-sm">
                                                     Retenciones sobre este pago
                                                 </strong>
-                                                <span className="flex gap-2">
+                                                <span className="flex flex-wrap gap-2">
+                                                    {withholdingSuggestions.length >
+                                                        0 && (
+                                                        <button
+                                                            type="button"
+                                                            className={primary}
+                                                            title={withholdingSuggestions
+                                                                .map(
+                                                                    (item) =>
+                                                                        item.reason,
+                                                                )
+                                                                .join(' ')}
+                                                            onClick={
+                                                                applySuggestions
+                                                            }
+                                                        >
+                                                            Usar retenciones
+                                                            sugeridas
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         className={secondary}
