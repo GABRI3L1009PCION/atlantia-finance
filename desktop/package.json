@@ -1,0 +1,30 @@
+{
+  "name": "atlantia-finance-desktop",
+  "productName": "Atlantia Finance",
+  "version": "1.0.0",
+  "description": "Atlantia Finance para escritorio, con modo sin conexión.",
+  "author": "Atlantia Systems",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac dmg --x64 --arm64"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "com.atlantiasystems.finance",
+    "productName": "Atlantia Finance",
+    "copyright": "Atlantia Systems",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["src/**/*", "package.json"],
+    "win": { "target": "nsis", "icon": "build/icon.png", "artifactName": "AtlantiaFinance-${version}-Windows.${ext}" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "shortcutName": "Atlantia Finance" },
+    "mac": { "target": "dmg", "icon": "build/icon.png", "category": "public.app-category.finance", "artifactName": "AtlantiaFinance-${version}-Mac-${arch}.${ext}" }
+  }
+}

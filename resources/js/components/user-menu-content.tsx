@@ -1,5 +1,11 @@
 import { Link, router } from '@inertiajs/react';
-import { ChevronRight, LifeBuoy, LogOut, Settings } from 'lucide-react';
+import {
+    ChevronRight,
+    LifeBuoy,
+    LogOut,
+    MonitorDown,
+    Settings,
+} from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
     DropdownMenuGroup,
@@ -52,6 +58,13 @@ export function UserMenuContent({ user }: Props) {
                     <Link href={edit()} prefetch onClick={cleanup}>
                         <Settings className="size-5 text-white/80" />
                         <span className="flex-1">Configuración</span>
+                        <ChevronRight className="size-5 text-white/80" />
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className={itemClass}>
+                    <Link href="/desktop" onClick={cleanup}>
+                        <MonitorDown className="size-5 text-white/80" />
+                        <span className="flex-1">App de escritorio</span>
                         <ChevronRight className="size-5 text-white/80" />
                     </Link>
                 </DropdownMenuItem>

@@ -59,6 +59,7 @@ const sharedFirmPrefixes = [
 /** Screens shared by every panel that keep the user's own menu. */
 const sharedFirmScreens = [
     '/accounting',
+    '/desktop',
     '/communication',
     '/luzma',
     '/library',
