@@ -151,6 +151,9 @@ export default function PayrollEmployee({
                                     employee.bank_account ?? '',
                                 bank_account_type:
                                     employee.bank_account_type ?? '',
+                                sex: employee.sex ?? '',
+                                birth_date: employee.birth_date ?? '',
+                                nationality: employee.nationality ?? '',
                             }}
                             action={`/payroll/employees/${employee.id}`}
                             method="put"

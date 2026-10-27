@@ -48,6 +48,7 @@ use App\Http\Controllers\OperationalRecordController;
 use App\Http\Controllers\OperationalRecordFileController;
 use App\Http\Controllers\OperationsController;
 use App\Http\Controllers\OrganizationSwitchController;
+use App\Http\Controllers\OtherTaxesController;
 use App\Http\Controllers\PasswordHelpController;
 use App\Http\Controllers\PayablesController;
 use App\Http\Controllers\PayrollController;
@@ -201,6 +202,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/financial-statements/notes/{number}/publish', [FinancialStatementController::class, 'publishNote'])->whereNumber('number')->middleware('throttle:20,1')->name('statementNotePublish');
 
         Route::get('companies/{company}/tax-reports', [TaxReportController::class, 'index'])->name('taxReports');
+        Route::get('companies/{company}/other-taxes', [OtherTaxesController::class, 'index'])->name('otherTaxes');
+        Route::post('companies/{company}/other-taxes/properties', [OtherTaxesController::class, 'property'])->middleware('throttle:30,1')->name('iusiPropertyStore');
+        Route::put('companies/{company}/other-taxes/properties/{property}', [OtherTaxesController::class, 'property'])->whereNumber('property')->middleware('throttle:30,1')->name('iusiPropertyUpdate');
+        Route::delete('companies/{company}/other-taxes/properties/{property}', [OtherTaxesController::class, 'deactivateProperty'])->whereNumber('property')->middleware('throttle:30,1')->name('iusiPropertyDeactivate');
+        Route::post('companies/{company}/other-taxes/{tax}/draft', [OtherTaxesController::class, 'draft'])->whereIn('tax', ['iusi', 'iso'])->middleware('throttle:30,1')->name('otherTaxDraft');
+        Route::post('companies/{company}/other-taxes/stamps', [OtherTaxesController::class, 'stamp'])->middleware('throttle:30,1')->name('stampTaxStore');
+        Route::post('companies/{company}/other-taxes/stamps/{document}/void', [OtherTaxesController::class, 'voidStamp'])->whereNumber('document')->middleware('throttle:30,1')->name('stampTaxVoid');
         Route::get('companies/{company}/tax-reports/withholdings/export', [TaxReportController::class, 'exportWithholdings'])->middleware('throttle:10,1')->name('withholdingsExport');
         Route::put('companies/{company}/tax-reports/withholdings/settings', [TaxReportController::class, 'withholdingSettings'])->middleware('throttle:30,1')->name('withholdingSettings');
         Route::patch('companies/{company}/tax-reports/withholdings/{withholding}/certificate', [TaxReportController::class, 'withholdingCertificate'])->whereNumber('withholding')->middleware('throttle:60,1')->name('withholdingCertificate');
@@ -219,6 +227,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/inventory/movements', [InventoryController::class, 'storeMovement'])->middleware('throttle:60,1')->middleware('plan.feature:inventory')->name('inventoryMovementStore');
         Route::post('companies/{company}/inventory/costs', [InventoryController::class, 'postCosts'])->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryPostCosts');
         Route::get('companies/{company}/inventory/items/{item}/kardex', [InventoryController::class, 'kardex'])->whereNumber('item')->middleware('plan.feature:inventory')->name('inventoryKardex');
+        Route::post('companies/{company}/inventory/counts', [InventoryController::class, 'startCount'])->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryCountStart');
+        Route::put('companies/{company}/inventory/counts/{count}', [InventoryController::class, 'recordCount'])->whereNumber('count')->middleware('throttle:60,1')->middleware('plan.feature:inventory')->name('inventoryCountRecord');
+        Route::post('companies/{company}/inventory/counts/{count}/apply', [InventoryController::class, 'applyCount'])->whereNumber('count')->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryCountApply');
+        Route::delete('companies/{company}/inventory/counts/{count}', [InventoryController::class, 'discardCount'])->whereNumber('count')->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryCountDiscard');
 
         Route::get('companies/{company}/regional', [RegionalController::class, 'show'])->name('regional');
         Route::put('companies/{company}/regional', [RegionalController::class, 'update'])->middleware('throttle:20,1')->name('regionalUpdate');

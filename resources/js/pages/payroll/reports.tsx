@@ -13,6 +13,19 @@ import type {
 } from '@/components/payroll/kit';
 import { Card } from '@/components/supervisor/kit';
 
+const legalReports: [string, string, string][] = [
+    [
+        'salary_book',
+        'Libro de salarios',
+        'Un folio por trabajador con sus meses del año de la nómina elegida (formato único del Ministerio de Trabajo). El PDF numera los folios.',
+    ],
+    [
+        'igss_planilla',
+        'Planilla del IGSS',
+        'Por trabajador del mes de la nómina elegida: afiliación, salario afecto y cuotas laboral, patronal, IRTRA e INTECAP.',
+    ],
+];
+
 const reports: [string, string, string, boolean][] = [
     [
         'companies',
@@ -119,6 +132,35 @@ export default function PayrollReports({
                                 </div>
                             </Card>
                         ))}
+                        {permissions.canViewSalary &&
+                            legalReports.map(([key, title, description]) => (
+                                <Card key={key} title={title}>
+                                    <p className="mb-3 text-xs text-[#526b92]">
+                                        {description}
+                                    </p>
+                                    {period ? (
+                                        <div className="flex gap-2">
+                                            <a
+                                                href={url(key, 'xlsx', true)}
+                                                className={secondaryButton}
+                                            >
+                                                Excel
+                                            </a>
+                                            <a
+                                                href={url(key, 'pdf', true)}
+                                                className={secondaryButton}
+                                            >
+                                                PDF
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs font-semibold text-amber-700">
+                                            Elige una nómina arriba para
+                                            generarlo.
+                                        </p>
+                                    )}
+                                </Card>
+                            ))}
                     </div>
                 )}
             </Shell>

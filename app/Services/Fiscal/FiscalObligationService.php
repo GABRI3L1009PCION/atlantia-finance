@@ -59,6 +59,10 @@ class FiscalObligationService
             ->whereIn('w.company_id', $companyIds)->whereNull('p.voided_at')->selectRaw("w.company_id, TO_CHAR(p.paid_on, 'YYYY-MM') as month")->distinct()->get()
             ->map(fn (stdClass $row): string => $row->company_id.':'.$row->month)->all();
 
+        $employers = DB::table('payroll_employees')->whereIn('company_id', $companyIds)->where('status', 'active')->distinct()->pluck('company_id')->map(fn ($id): int => (int) $id)->all();
+        $properties = DB::table('iusi_properties')->whereIn('company_id', $companyIds)->where('is_active', true)->get(['company_id', 'value_cents', 'use'])->groupBy('company_id');
+        $otherTaxes = app(OtherTaxesService::class);
+
         $obligations = [];
         foreach ($companies as $company) {
             $cursor = Carbon::parse($from)->startOfMonth()->subMonths(3);
@@ -87,6 +91,20 @@ class FiscalObligationService
                 if ($month === 12 && in_array($regime, ['utilities', 'optional_simplified'], true)) {
                     $annual = $regime === 'utilities' ? 'Declaración anual ISR' : 'Declaración anual informativa ISR';
                     $obligations[] = $this->row($company, 'isr_annual', $annual, 'Año '.$year, Carbon::create($year + 1, 3, 31), false, $responsible, $year, $month);
+                }
+
+                // IGSS, IRTRA and INTECAP of the month's payroll are paid within the first twenty days of the next month.
+                if (in_array((int) $company->id, $employers, true)) {
+                    $obligations[] = $this->row($company, 'igss', 'Planilla IGSS, IRTRA e INTECAP', $label, $cursor->copy()->addMonth()->setDay(20), false, $responsible, $year, $month);
+                }
+
+                // IUSI is paid to the municipality in the month after each quarter, while the properties owe it.
+                if ($month % 3 === 0) {
+                    $quarterStart = $cursor->copy()->subMonths(2)->startOfMonth()->toDateString();
+                    $owes = collect($properties->get($company->id, collect()))->contains(fn (stdClass $property): bool => $otherTaxes->iusiAnnual((int) $property->value_cents, (string) $property->use, $quarterStart)['annual_cents'] > 0);
+                    if ($owes) {
+                        $obligations[] = $this->row($company, 'iusi', 'IUSI trimestral', 'Trimestre '.intdiv($month, 3).' '.$year, $cursor->copy()->addMonth()->endOfMonth(), false, $responsible, $year, $month);
+                    }
                 }
 
                 $monthStart = $cursor->copy()->startOfMonth()->toDateString();

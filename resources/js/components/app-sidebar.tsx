@@ -474,6 +474,7 @@ export function AppSidebar() {
                   ],
                   ['Cierre anual y libros legales', 'year-end', BookCheck],
                   ['ISR y retenciones', 'tax-reports', Calculator],
+                  ['Otros impuestos', 'other-taxes', Landmark],
                   ['Cheques', 'checks', FileCheck2],
                   ['Configuración regional', 'regional', Globe2],
               ].map(([title, path, icon]) => ({

@@ -24,6 +24,11 @@ import {
     money,
     primary,
 } from '@/components/accounting-ui';
+import { InventoryCountCard } from '@/components/inventory-count';
+import type {
+    InventoryCount,
+    InventoryCountSummary,
+} from '@/components/inventory-count';
 
 type Item = {
     id: number;
@@ -66,6 +71,8 @@ type Props = {
     types: Record<string, string>;
     canManage: boolean;
     today: string;
+    count: InventoryCount | null;
+    counts: InventoryCountSummary[];
 };
 
 const quantity = (value: number) =>
@@ -80,6 +87,8 @@ export default function Inventory({
     types,
     canManage,
     today,
+    count,
+    counts,
 }: Props) {
     const base = `/accounting/companies/${company.public_id}/inventory`;
     const current = items.find((item) => item.id === selectedItem) ?? null;
@@ -550,6 +559,14 @@ export default function Inventory({
                     </Card>
                 </div>
             </div>
+            <InventoryCountCard
+                key={count?.id ?? 0}
+                base={base}
+                count={count}
+                counts={counts}
+                canManage={canManage}
+                today={today}
+            />
         </PageShell>
     );
 }

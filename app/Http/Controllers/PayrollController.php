@@ -16,6 +16,7 @@ use App\Services\Payroll\PayrollPaymentService;
 use App\Services\Payroll\PayrollPeriodService;
 use App\Services\Payroll\PayrollRecordService;
 use App\Services\Payroll\PayrollSetupService;
+use App\Services\Payroll\SalaryBookService;
 use App\Services\ReportExportService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use App\Services\WorkManagement\WorkTaskService;
@@ -602,8 +603,12 @@ class PayrollController extends Controller
         $money = fn (?int $cents): string => $cents === null ? 'No disponible' : number_format($cents / 100, 2);
         $canViewSalary = $this->can($organization, $request, 'payroll.employees.view_salary');
         $periodId = $request->integer('period_id') ?: null;
-        if ($periodId !== null) {
-            $this->periodRow($request, $periodId);
+        $selected = $periodId === null ? null : $this->periodRow($request, $periodId);
+        if (in_array($report, ['salary_book', 'igss_planilla'], true)) {
+            abort_unless($canViewSalary, 403);
+            abort_if($selected === null, 422, 'Elige una nómina: el libro de salarios es de su empresa y año, y la planilla del IGSS de su mes.');
+
+            return $this->legalPayrollReport($request, $report, $format, $selected, $exports);
         }
         $concept = fn (array $codes): Collection => DB::table('payroll_result_lines')->join('payroll_results', 'payroll_results.id', '=', 'payroll_result_lines.payroll_result_id')
             ->join('payroll_employees', 'payroll_employees.id', '=', 'payroll_results.payroll_employee_id')->join('payroll_periods', 'payroll_periods.id', '=', 'payroll_results.payroll_period_id')->join('companies', 'companies.id', '=', 'payroll_results.company_id')
@@ -731,6 +736,30 @@ class PayrollController extends Controller
             ->map(fn (stdClass $event): array => ['action' => (string) $event->action, 'user' => $event->name ?? 'Sistema', 'occurred_at' => Carbon::parse($event->occurred_at)->toIso8601String()])->all());
     }
 
+    /** Libro de salarios (company and year of the payroll) and IGSS planilla (its month), with the worker's personal data. */
+    private function legalPayrollReport(Request $request, string $report, string $format, stdClass $period, ReportExportService $exports): HttpResponse
+    {
+        $company = DB::table('companies')->where('id', $period->company_id)->first(['id', 'name', 'tax_id']);
+        abort_if($company === null, 404);
+        $book = app(SalaryBookService::class);
+        $ends = Carbon::parse($period->ends_on);
+        if ($report === 'salary_book' && $format === 'pdf') {
+            $first = max(1, $request->integer('first_folio') ?: 1);
+
+            return response($book->pdf($company, $ends->year, $first), 200, ['Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="libro-de-salarios-'.$ends->year.'-'.preg_replace('/[^0-9A-Za-z-]/', '', (string) $company->tax_id).'.pdf"']);
+        }
+        $money = fn (int $cents): string => number_format($cents / 100, 2);
+        [$title, $headers, $rows, $scope] = $report === 'salary_book'
+            ? ['Libro de salarios', ['Trabajador', 'Afiliación IGSS', 'DPI', ...SalaryBookService::COLUMNS], $book->flatRows((int) $company->id, $ends->year), 'Año '.$ends->year]
+            : ['Planilla del IGSS', ['Afiliación', 'Trabajador', 'DPI', 'Salario afecto', 'Cuota laboral', 'Cuota patronal', 'IRTRA', 'INTECAP', 'Total'],
+                array_map(fn (array $row): array => [$row['igss_number'] ?: 'Sin afiliación', $row['name'], $row['dpi'], $money($row['base_cents']), $money($row['employee_cents']), $money($row['employer_cents']),
+                    $money($row['irtra_cents']), $money($row['intecap_cents']), $money($row['total_cents'])], $book->igssPlanilla((int) $company->id, $ends->year, $ends->month)), $ends->format('m/Y')];
+
+        return $exports->download(['title' => $title, 'filename' => ($report === 'salary_book' ? 'libro-de-salarios-' : 'planilla-igss-').$ends->format('Y-m'), 'company' => $company->name.' · NIT '.$company->tax_id,
+            'scope' => $scope, 'note' => 'Generado el '.now()->format('d/m/Y H:i').' por '.$request->user()->name.' a partir de las nóminas aprobadas.', 'headers' => $headers, 'money' => [], 'rows' => $rows], $format);
+    }
+
     private function periodRow(Request $request, int $periodId): stdClass
     {
         [$organization, $companyIds] = $this->resolve($request);
@@ -750,6 +779,7 @@ class PayrollController extends Controller
             'department' => 'nullable|string|max:120', 'hire_date' => 'required|date', 'pay_frequency' => ['required', Rule::in(['monthly'])], 'base_salary' => 'required|numeric|min:1|max:10000000',
             'incentive_bonus' => 'nullable|numeric|min:0|max:1000000', 'igss_affiliated' => 'required|boolean', 'payment_method' => ['required', Rule::in(['transfer', 'check', 'cash'])],
             'bank_name' => 'nullable|string|max:120', 'bank_account_number' => 'nullable|string|max:40', 'bank_account_type' => ['nullable', Rule::in(['monetaria', 'ahorro'])],
+            'sex' => ['nullable', Rule::in(['M', 'F'])], 'birth_date' => 'nullable|date|before:today', 'nationality' => 'nullable|string|max:60',
         ], ['dpi.regex' => 'El DPI tiene 13 dígitos.', 'pay_frequency.in' => 'Por ahora la nómina se calcula de forma mensual.']);
     }
 
@@ -760,6 +790,7 @@ class PayrollController extends Controller
     private function employeeData(array $data): array
     {
         return [...array_diff_key($data, array_flip(['company_id', 'base_salary', 'incentive_bonus'])), 'hire_date' => Carbon::parse($data['hire_date'])->toDateString(),
+            ...(filled($data['birth_date'] ?? null) ? ['birth_date' => Carbon::parse($data['birth_date'])->toDateString()] : []),
             'base_salary_cents' => $this->cents($data['base_salary']), 'incentive_bonus_cents' => $this->cents($data['incentive_bonus'] ?? 0)];
     }
 

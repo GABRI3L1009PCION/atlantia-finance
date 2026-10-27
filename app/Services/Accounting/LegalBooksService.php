@@ -164,7 +164,7 @@ class LegalBooksService
      *
      * @return list<BookSection>
      */
-    public function inventories(int $companyId, string $to): array
+    public function inventories(int $companyId, string $to, bool $withDetail = true): array
     {
         $position = $this->statements->position($companyId, $to);
         $rows = [];
@@ -184,12 +184,75 @@ class LegalBooksService
         $rows[] = ['type' => 'total', 'cells' => ['Total activo', '', self::amount((int) $totals['assets'])]];
         $rows[] = ['type' => 'total', 'cells' => ['Total pasivo y patrimonio', '', self::amount((int) $totals['liabilities_and_equity'])]];
         $sections = [['title' => 'Inventario general al '.CarbonImmutable::parse($to)->format('d/m/Y'), 'columns' => ['Cuenta', '', 'Saldo'], 'money' => [2], 'rows' => $rows]];
-        $items = array_values(array_filter($this->inventory->items($companyId), fn (array $item): bool => $item['quantity'] != 0));
+        // Stock as the kardex had it at the end of the book's date, not today.
+        $items = array_values(array_filter($this->inventory->items($companyId, $to), fn (array $item): bool => $item['quantity'] != 0));
         if ($items !== []) {
             $sections[] = ['title' => 'Detalle de mercaderías y existencias', 'columns' => ['Producto', 'Existencia', 'Costo unitario', 'Valor'], 'money' => [2, 3],
                 'rows' => [...array_map(fn (array $item): array => ['type' => 'line', 'cells' => [$item['code'].' '.$item['name'], rtrim(rtrim(number_format((float) $item['quantity'], 4), '0'), '.').' '.$item['unit'],
                     self::amount($item['average_cost_cents']), self::amount($item['value_cents'])]], $items),
                     ['type' => 'total', 'cells' => ['Total existencias', '', '', self::amount((int) array_sum(array_column($items, 'value_cents')))]]]];
+            $count = DB::table('inventory_counts')->where('company_id', $companyId)->where('status', 'applied')->where('count_date', '<=', $to)->orderByDesc('count_date')->first(['id', 'count_date']);
+            $sections[array_key_last($sections)]['rows'][] = ['type' => 'line', 'cells' => [$count === null
+                ? 'Sin toma física aplicada: existencias según el kardex.'
+                : 'Existencias según la toma física #'.$count->id.' del '.CarbonImmutable::parse((string) $count->count_date)->format('d/m/Y').' y los movimientos posteriores.', '', '', '']];
+        }
+
+        return $withDetail ? [...$sections, ...$this->details($companyId, $to)] : $sections;
+    }
+
+    /**
+     * The detail the Código de Comercio asks for besides the balances: banks, what each customer owes, what is owed to
+     * each supplier and the fixed assets with their depreciation, all at the book's date.
+     *
+     * @return list<BookSection>
+     */
+    private function details(int $companyId, string $to): array
+    {
+        $sections = [];
+        $banks = DB::table('bank_accounts as b')->leftJoin('journal_lines as l', 'l.ledger_account_id', '=', 'b.ledger_account_id')
+            ->leftJoin('journal_entries as e', fn ($join) => $join->on('e.id', '=', 'l.journal_entry_id')->whereIn('e.status', ['posted', 'reversed'])->where('e.entry_date', '<=', $to))
+            ->where('b.company_id', $companyId)->groupBy('b.id', 'b.bank_name', 'b.account_name', 'b.last_four', 'b.currency')->orderBy('b.bank_name')
+            ->selectRaw('b.bank_name, b.account_name, b.last_four, b.currency, CAST(COALESCE(SUM(CASE WHEN e.id IS NULL THEN 0 ELSE l.debit_cents - l.credit_cents END), 0) AS BIGINT) as balance')->get();
+        if ($banks->isNotEmpty()) {
+            $sections[] = ['title' => 'Detalle de bancos', 'columns' => ['Banco y cuenta', 'Moneda', 'Saldo en libros'], 'money' => [2],
+                'rows' => [...$banks->map(fn (stdClass $bank): array => ['type' => 'line', 'cells' => [$bank->bank_name.' · '.$bank->account_name.($bank->last_four ? ' ****'.$bank->last_four : ''), (string) $bank->currency, self::amount((int) $bank->balance)]])->all(),
+                    ['type' => 'total', 'cells' => ['Total bancos', '', self::amount((int) $banks->sum('balance'))]]]];
+        }
+
+        $receivable = DB::table('sales_invoices as i')->where('i.company_id', $companyId)->where('i.status', 'issued')->where('i.issued_on', '<=', $to)
+            ->groupBy('i.customer_name', 'i.customer_tax_id')->orderBy('i.customer_name')
+            ->selectRaw('i.customer_name as name, i.customer_tax_id as tax_id, CAST(SUM(i.total_cents) AS BIGINT) as invoiced')
+            ->selectRaw('CAST(COALESCE(SUM((SELECT SUM(r.amount_cents) FROM sales_receipts r WHERE r.sales_invoice_id = i.id AND r.voided_at IS NULL AND r.received_on <= ?)), 0) AS BIGINT) as settled', [$to])
+            ->selectRaw("CAST(COALESCE(SUM((SELECT SUM(c.amount_cents) FROM sales_credit_notes c WHERE c.sales_invoice_id = i.id AND c.status = 'issued' AND c.issued_on <= ?)), 0) AS BIGINT) as credited", [$to])
+            ->get()->map(fn (stdClass $row): array => ['name' => (string) $row->name, 'tax_id' => (string) ($row->tax_id ?? ''), 'cents' => (int) $row->invoiced - (int) $row->settled - (int) $row->credited])
+            ->filter(fn (array $row): bool => $row['cents'] > 0)->values();
+        if ($receivable->isNotEmpty()) {
+            $sections[] = ['title' => 'Detalle de cuentas por cobrar', 'columns' => ['Cliente', 'NIT', 'Saldo'], 'money' => [2],
+                'rows' => [...$receivable->map(fn (array $row): array => ['type' => 'line', 'cells' => [$row['name'], $row['tax_id'], self::amount($row['cents'])]])->all(),
+                    ['type' => 'total', 'cells' => ['Total cuentas por cobrar', '', self::amount((int) $receivable->sum('cents'))]]]];
+        }
+
+        $payable = DB::table('purchase_documents as d')->where('d.company_id', $companyId)->where('d.status', 'approved')->where('d.document_date', '<=', $to)
+            ->groupBy('d.supplier_name', 'd.supplier_tax_id')->orderBy('d.supplier_name')
+            ->selectRaw('d.supplier_name as name, d.supplier_tax_id as tax_id, CAST(SUM(d.total_cents) AS BIGINT) as invoiced')
+            ->selectRaw('CAST(COALESCE(SUM((SELECT SUM(p.amount_cents) FROM purchase_payments p WHERE p.purchase_document_id = d.id AND p.voided_at IS NULL AND p.paid_on <= ?)), 0) AS BIGINT) as settled', [$to])
+            ->selectRaw("CAST(COALESCE(SUM((SELECT SUM(c.amount_cents) FROM purchase_credit_notes c WHERE c.purchase_document_id = d.id AND c.status = 'issued' AND c.issued_on <= ?)), 0) AS BIGINT) as credited", [$to])
+            ->get()->map(fn (stdClass $row): array => ['name' => (string) $row->name, 'tax_id' => (string) ($row->tax_id ?? ''), 'cents' => (int) $row->invoiced - (int) $row->settled - (int) $row->credited])
+            ->filter(fn (array $row): bool => $row['cents'] > 0)->values();
+        if ($payable->isNotEmpty()) {
+            $sections[] = ['title' => 'Detalle de cuentas por pagar', 'columns' => ['Proveedor', 'NIT', 'Saldo'], 'money' => [2],
+                'rows' => [...$payable->map(fn (array $row): array => ['type' => 'line', 'cells' => [$row['name'], $row['tax_id'], self::amount($row['cents'])]])->all(),
+                    ['type' => 'total', 'cells' => ['Total cuentas por pagar', '', self::amount((int) $payable->sum('cents'))]]]];
+        }
+
+        $assets = DB::table('fixed_assets as a')->where('a.company_id', $companyId)->where('a.acquired_on', '<=', $to)->where(fn ($query) => $query->whereNull('a.disposed_on')->orWhere('a.disposed_on', '>', $to))
+            ->orderBy('a.code')->select('a.code', 'a.name', 'a.acquired_on', 'a.cost_cents')
+            ->selectRaw('CAST(COALESCE((SELECT SUM(d.amount_cents) FROM fixed_asset_depreciations d WHERE d.fixed_asset_id = a.id AND d.month_on <= ?), 0) AS BIGINT) as depreciated', [$to])->get();
+        if ($assets->isNotEmpty()) {
+            $sections[] = ['title' => 'Detalle de propiedad, planta y equipo', 'columns' => ['Activo', 'Adquirido', 'Costo', 'Depreciación acumulada', 'Valor en libros'], 'money' => [2, 3, 4],
+                'rows' => [...$assets->map(fn (stdClass $asset): array => ['type' => 'line', 'cells' => [$asset->code.' '.$asset->name, CarbonImmutable::parse((string) $asset->acquired_on)->format('d/m/Y'),
+                    self::amount((int) $asset->cost_cents), self::amount((int) $asset->depreciated), self::amount((int) $asset->cost_cents - (int) $asset->depreciated)]])->all(),
+                    ['type' => 'total', 'cells' => ['Total', '', self::amount((int) $assets->sum('cost_cents')), self::amount((int) $assets->sum('depreciated')), self::amount((int) $assets->sum('cost_cents') - (int) $assets->sum('depreciated'))]]]];
         }
 
         return $sections;
@@ -202,7 +265,7 @@ class LegalBooksService
      */
     public function statementsBook(int $companyId, string $from, string $to): array
     {
-        $sections = $this->inventories($companyId, $to);
+        $sections = $this->inventories($companyId, $to, false);
         $balance = $sections[0];
         $balance['title'] = 'Estado de situación financiera al '.CarbonImmutable::parse($to)->format('d/m/Y');
         $income = $this->statements->income($companyId, $from, $to);

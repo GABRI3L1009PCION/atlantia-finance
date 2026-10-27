@@ -5,9 +5,12 @@ use App\Models\PlanPrice;
 use App\Models\User;
 use App\Services\Accounting\AccountingPeriodCloseChecklistService;
 use App\Services\AccountingAutomationService;
+use App\Services\Fiscal\FiscalObligationService;
+use App\Services\Fiscal\OtherTaxesService;
 use App\Services\Luzma\LuzmaContextService;
 use App\Services\Luzma\LuzmaToolRegistry;
 use App\Services\Payroll\PayrollLedgerReconciliationService;
+use App\Services\Payroll\SalaryBookService;
 use App\Services\WorkManagement\WorkAuthorizationService;
 use Database\Seeders\PayrollParameterSeeder;
 use Database\Seeders\PlanCatalogSeeder;
@@ -174,6 +177,55 @@ test('data errors block the payroll, a failed payment returns its orders and sal
 });
 
 /** @return array<string, mixed> */
+test('the approved payroll gives the month IGSS, IRTRA and INTECAP, due on the 20th of the next month', function () {
+    $f = payrollFixture();
+    $this->travelTo(now()->setDate(2026, 10, 5)->setTime(10, 0));
+    $this->actingAs($f['payroll']);
+    $this->post(route('payroll.employees.store'), payrollEmployeeForm($f))->assertSessionHasNoErrors();
+    $this->post(route('payroll.periods.store'), ['company_id' => $f['mayaId'], 'month' => '2026-09'])->assertSessionHasNoErrors();
+    $period = (int) DB::table('payroll_periods')->where('company_id', $f['mayaId'])->value('id');
+    $this->post(route('payroll.periods.action', [$period, 'calculate']))->assertSessionHasNoErrors();
+    expect(app(OtherTaxesService::class)->employerContributions($f['mayaId'], 2026))->toBe([]);
+
+    DB::table('payroll_periods')->where('id', $period)->update(['status' => 'approved']);
+    $line = fn (string $code): int => (int) DB::table('payroll_result_lines')->where('concept_code', $code)->sum('amount_cents');
+    $month = app(OtherTaxesService::class)->employerContributions($f['mayaId'], 2026)[0];
+    expect($month)->toMatchArray(['month' => '2026-09', 'employees' => 1, 'igss_employee_cents' => $line('IGSS_LABORAL'), 'igss_employer_cents' => $line('IGSS_PATRONAL'),
+        'irtra_cents' => $line('IRTRA'), 'intecap_cents' => $line('INTECAP'), 'due_on' => '2026-10-20'])
+        ->and($month['total_cents'])->toBe($line('IGSS_LABORAL') + $line('IGSS_PATRONAL') + $line('IRTRA') + $line('INTECAP'))->and($line('INTECAP'))->toBeGreaterThan(0);
+
+    $calendar = collect(app(FiscalObligationService::class)->obligations([$f['mayaId']], now()->startOfMonth(), now()->endOfMonth()));
+    expect($calendar->firstWhere('type', 'igss'))->toMatchArray(['name' => 'Planilla IGSS, IRTRA e INTECAP', 'due_on' => '2026-10-20']);
+});
+
+test('the libro de salarios gives each worker a folio with the year of approved payrolls, and the IGSS planilla of the month', function () {
+    $f = payrollFixture();
+    $this->travelTo(now()->setDate(2026, 10, 5)->setTime(10, 0));
+    $this->actingAs($f['payroll']);
+    $this->post(route('payroll.employees.store'), payrollEmployeeForm($f, ['sex' => 'F', 'birth_date' => '1990-05-14', 'nationality' => 'Guatemalteca', 'position' => 'Auxiliar contable']))->assertSessionHasNoErrors();
+    $employee = DB::table('payroll_employees')->where('company_id', $f['mayaId'])->first();
+    expect($employee->sex)->toBe('F')->and($employee->birth_date)->toBe('1990-05-14');
+    $this->post(route('payroll.periods.store'), ['company_id' => $f['mayaId'], 'month' => '2026-09'])->assertSessionHasNoErrors();
+    $period = (int) DB::table('payroll_periods')->where('company_id', $f['mayaId'])->value('id');
+    $this->post(route('payroll.periods.action', [$period, 'calculate']))->assertSessionHasNoErrors();
+    DB::table('payroll_periods')->where('id', $period)->update(['status' => 'approved']);
+
+    $worker = app(SalaryBookService::class)->book($f['mayaId'], 2026)[0];
+    $result = DB::table('payroll_results')->where('payroll_period_id', $period)->first();
+    expect($worker)->toMatchArray(['name' => 'Ana López', 'sex' => 'Mujer', 'age' => '36 años', 'position' => 'Auxiliar contable', 'hire_date' => '01/01/2026', 'termination_date' => ''])
+        ->and($worker['rows'][0])->toMatchArray(['period' => 'septiembre 2026', 'ordinary_cents' => 600000, 'incentive_cents' => 25000, 'net_cents' => (int) $result->net_cents])
+        ->and($worker['rows'][0]['deductions_cents'])->toBe($worker['rows'][0]['igss_cents'] + $worker['rows'][0]['isr_cents'] + $worker['rows'][0]['other_deductions_cents'])
+        ->and($worker['totals']['net_cents'])->toBe((int) $result->net_cents);
+
+    $planilla = app(SalaryBookService::class)->igssPlanilla($f['mayaId'], 2026, 9);
+    expect($planilla)->toHaveCount(1)->and($planilla[0]['igss_number'])->toBe('201234567')->and($planilla[0]['base_cents'])->toBe(600000);
+
+    $this->get(route('payroll.reports.export', ['salary_book', 'format' => 'xlsx']))->assertStatus(422);
+    $this->get(route('payroll.reports.export', ['salary_book', 'format' => 'pdf', 'period_id' => $period, 'first_folio' => 15]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+    $this->get(route('payroll.reports.export', ['salary_book', 'format' => 'xlsx', 'period_id' => $period]))->assertOk();
+    $this->get(route('payroll.reports.export', ['igss_planilla', 'format' => 'xlsx', 'period_id' => $period]))->assertOk();
+});
+
 function payrollFixture(): array
 {
     $org = Organization::create(['name' => 'Atlantia Nómina', 'status' => 'active']);

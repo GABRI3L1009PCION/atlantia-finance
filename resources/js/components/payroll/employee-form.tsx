@@ -22,6 +22,9 @@ export type EmployeeFormData = {
     bank_name: string;
     bank_account_number: string;
     bank_account_type: string;
+    sex: string;
+    birth_date: string;
+    nationality: string;
 };
 
 function Field({
@@ -140,6 +143,39 @@ export function EmployeeForm({
                         value={form.data.igss_number}
                         onChange={(event) =>
                             set('igss_number', event.target.value)
+                        }
+                    />
+                </Field>
+                <Field label="Sexo" error={form.errors.sex}>
+                    <select
+                        className={input}
+                        value={form.data.sex}
+                        onChange={(event) => set('sex', event.target.value)}
+                    >
+                        <option value="">Sin indicar</option>
+                        <option value="F">Mujer</option>
+                        <option value="M">Hombre</option>
+                    </select>
+                </Field>
+                <Field
+                    label="Fecha de nacimiento"
+                    error={form.errors.birth_date}
+                >
+                    <input
+                        type="date"
+                        className={input}
+                        value={form.data.birth_date}
+                        onChange={(event) =>
+                            set('birth_date', event.target.value)
+                        }
+                    />
+                </Field>
+                <Field label="Nacionalidad" error={form.errors.nationality}>
+                    <input
+                        className={input}
+                        value={form.data.nationality}
+                        onChange={(event) =>
+                            set('nationality', event.target.value)
                         }
                     />
                 </Field>
@@ -331,4 +367,7 @@ export const emptyEmployee: EmployeeFormData = {
     bank_name: '',
     bank_account_number: '',
     bank_account_type: '',
+    sex: '',
+    birth_date: '',
+    nationality: 'Guatemalteca',
 };

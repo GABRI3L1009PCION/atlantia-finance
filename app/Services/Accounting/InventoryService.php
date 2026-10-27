@@ -29,13 +29,21 @@ class InventoryService
     public function __construct(private AccountingService $accounting, private AccountingAutomationService $automation, private PeriodLedgerFacts $facts) {}
 
     /**
+     * Products with their stock: the current one, or the one at the end of a date (the last movement of that day in the
+     * kardex), which is what a year-end book or a physical count needs.
+     *
      * @return list<array<string, mixed>>
      */
-    public function items(int $companyId): array
+    public function items(int $companyId, ?string $asOf = null): array
     {
-        $latest = DB::table('inventory_movements')->where('company_id', $companyId)->selectRaw('inventory_item_id, MAX(id) AS id')->groupBy('inventory_item_id');
-        $last = DB::table('inventory_movements as m')->joinSub($latest, 'latest', fn (JoinClause $join) => $join->on('latest.id', '=', 'm.id'))
-            ->get(['m.inventory_item_id', 'm.balance_units', 'm.balance_value_cents'])->keyBy('inventory_item_id');
+        if ($asOf === null) {
+            $latest = DB::table('inventory_movements')->where('company_id', $companyId)->selectRaw('inventory_item_id, MAX(id) AS id')->groupBy('inventory_item_id');
+            $last = DB::table('inventory_movements as m')->joinSub($latest, 'latest', fn (JoinClause $join) => $join->on('latest.id', '=', 'm.id'))
+                ->get(['m.inventory_item_id', 'm.balance_units', 'm.balance_value_cents'])->keyBy('inventory_item_id');
+        } else {
+            $last = collect(DB::select('SELECT DISTINCT ON (inventory_item_id) inventory_item_id, balance_units, balance_value_cents FROM inventory_movements
+                WHERE company_id = ? AND movement_date <= ? ORDER BY inventory_item_id, movement_date DESC, id DESC', [$companyId, $asOf]))->keyBy('inventory_item_id');
+        }
 
         return array_values(DB::table('inventory_items')->where('company_id', $companyId)->orderBy('code')->get()->map(function (object $item) use ($last): array {
             $balance = $last->get($item->id);

@@ -7,6 +7,7 @@ use App\Services\AccountingAutomationService;
 use App\Services\Fiscal\FiscalObligationReadinessService;
 use App\Services\Fiscal\FiscalObligationService;
 use App\Services\Fiscal\IsoService;
+use App\Services\Fiscal\OtherTaxesService;
 use App\Services\Fiscal\VatBookService;
 use App\Services\FiscalConfigurationService;
 use App\Services\Payables\PaymentProposalService;
@@ -168,4 +169,58 @@ test('only a company in the general VAT regime can document a purchase with a fa
         'fiscal_document_type' => 'FESP', 'lines' => [['account_id' => $f['accounts']['5204'], 'description' => 'Servicio', 'quantity' => 1, 'unit_price' => '1120.00', 'tax_treatment' => 'services']]])
         ->assertSessionHasErrors('fiscal_document_type');
     expect(DB::table('purchase_documents')->where('public_id', $documentId)->exists())->toBeFalse();
+});
+
+test('IUSI follows the law in force each quarter: Decreto 15-98 until the reform, then homes pay nothing', function () {
+    $f = gtFixture();
+    $this->travelTo(Carbon::parse('2026-12-15 10:00'));
+    $taxes = app(OtherTaxesService::class);
+    expect($taxes->iusiAnnual(100000000, 'commercial', '2026-10-01'))->toMatchArray(['law' => 'Decreto 15-98', 'rate_bp' => 90, 'annual_cents' => 900000])
+        ->and($taxes->iusiAnnual(1500000, 'residential', '2026-10-01'))->toMatchArray(['rate_bp' => 20, 'annual_cents' => 3000])
+        ->and($taxes->iusiAnnual(150000, 'commercial', '2026-10-01')['annual_cents'])->toBe(0)
+        ->and($taxes->iusiAnnual(100000000, 'commercial', '2027-01-01'))->toMatchArray(['law' => 'Decreto 18-2026', 'rate_bp' => 60, 'annual_cents' => 600000])
+        ->and($taxes->iusiAnnual(10000000, 'residential', '2027-01-01')['annual_cents'])->toBe(0);
+
+    $this->post(route('accounting.iusiPropertyStore', $f['uuid']), ['name' => 'Bodega zona 12', 'registry' => 'Finca 123, folio 45, libro 6', 'municipality' => 'Guatemala', 'use' => 'commercial', 'value' => '1000000'])->assertSessionHasNoErrors();
+    $this->post(route('accounting.iusiPropertyStore', $f['uuid']), ['name' => 'Casa del guardián', 'municipality' => 'Mixco', 'use' => 'residential', 'value' => '100000'])->assertSessionHasNoErrors();
+    $this->get(route('accounting.otherTaxes', [$f['uuid'], 'year' => 2026]))->assertOk()->assertInertia(fn (Assert $page) => $page->component('accounting/other-taxes')
+        ->where('iusi.quarters.3.tax_cents', 225000 + 22500)->where('iusi.quarters.3.due_on', '2027-01-31'));
+    expect(collect($taxes->iusi($f['companyId'], 2027)['quarters'])->pluck('tax_cents')->all())->toBe([150000, 150000, 150000, 150000]);
+
+    // The calendar asks for the quarter while a property owes IUSI.
+    $calendar = collect(app(FiscalObligationService::class)->obligations([$f['companyId']], Carbon::parse('2026-12-01'), Carbon::parse('2027-04-30')));
+    expect($calendar->where('type', 'iusi')->pluck('due_on')->all())->toContain('2027-01-31', '2027-04-30');
+
+    DB::table('accounting_periods')->insert(['company_id' => $f['companyId'], 'name' => 'Diciembre 2026', 'starts_on' => '2026-12-01', 'ends_on' => '2026-12-31']);
+    $this->post(route('accounting.otherTaxDraft', [$f['uuid'], 'iusi']), ['year' => 2026, 'quarter' => 4])->assertSessionHasNoErrors();
+    $entry = DB::table('accounting_source_entries')->where('source_type', 'iusi_quarter')->where('source_id', 20264)->value('journal_entry_id');
+    $lines = DB::table('journal_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')->where('l.journal_entry_id', $entry)->pluck('l.debit_cents', 'a.code');
+    expect((int) $lines['5260'])->toBe(247500)->and((int) $lines['2218'])->toBe(0);
+});
+
+test('documents taxed with timbres fiscales pay 3 % with their entry, and voiding reverses it', function () {
+    $f = gtFixture();
+    $this->travelTo(Carbon::parse('2026-09-20 10:00'));
+    DB::table('accounting_periods')->insert(['company_id' => $f['companyId'], 'name' => 'Septiembre 2026', 'starts_on' => '2026-09-01', 'ends_on' => '2026-09-30']);
+    $this->post(route('accounting.stampTaxStore', $f['uuid']), ['document_date' => '2026-09-10', 'description' => 'Contrato de arrendamiento de bodega', 'counterparty' => 'Inmobiliaria Los Pinos', 'taxable' => '10000'])
+        ->assertSessionHasNoErrors();
+    $document = DB::table('stamp_tax_documents')->first();
+    expect((int) $document->tax_cents)->toBe(30000);
+    $this->get(route('accounting.otherTaxes', [$f['uuid'], 'year' => 2026]))->assertInertia(fn (Assert $page) => $page->where('stamps.total_cents', 30000)->where('stamps.monthly.0.label', 'septiembre 2026'));
+
+    $this->post(route('accounting.stampTaxVoid', [$f['uuid'], $document->id]), ['reason' => 'Contrato no firmado'])->assertSessionHasNoErrors();
+    expect(DB::table('stamp_tax_documents')->where('id', $document->id)->value('voided_at'))->not->toBeNull();
+    $this->get(route('accounting.otherTaxes', [$f['uuid'], 'year' => 2026]))->assertInertia(fn (Assert $page) => $page->where('stamps.total_cents', 0));
+});
+
+test('the quarterly ISO is credited against the quarterly ISR of the same year until it runs out', function () {
+    $f = gtFixture();
+    $this->travelTo(Carbon::parse('2027-01-15 10:00'));
+    gtPost($f, '2025-01-05', [['1101', '50000.00', '0'], ['3101', '0', '50000.00']]);
+    gtPost($f, '2025-02-10', [['1102', '120000.00', '0'], ['4101', '0', '120000.00']]);
+
+    $iso = app(OtherTaxesService::class)->iso($f['companyId'], 2026);
+    expect($iso['estimate']['quarterly_cents'])->toBe(42500)
+        ->and(collect($iso['quarters'])->pluck('due_on')->all())->toBe(['2026-04-30', '2026-07-31', '2026-10-31', '2027-01-31'])
+        ->and(collect($iso['quarters'])->sum('credit_used_cents') + $iso['quarters'][3]['credit_left_cents'])->toBe(42500 * 4);
 });

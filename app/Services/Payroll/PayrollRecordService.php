@@ -54,7 +54,8 @@ class PayrollRecordService
                 'igss_number' => $data['igss_number'] ?? null, 'email' => $data['email'] ?? null, 'position' => $data['position'] ?? null, 'department' => $data['department'] ?? null,
                 'hire_date' => $data['hire_date'], 'pay_frequency' => $data['pay_frequency'] ?? 'monthly', 'base_salary_cents' => (int) $data['base_salary_cents'],
                 'incentive_bonus_cents' => (int) ($data['incentive_bonus_cents'] ?? 0), 'igss_affiliated' => (bool) ($data['igss_affiliated'] ?? true), 'payment_method' => $data['payment_method'] ?? 'transfer',
-                'bank_name' => $data['bank_name'] ?? null, 'bank_account_number' => $data['bank_account_number'] ?? null, 'bank_account_type' => $data['bank_account_type'] ?? null, 'updated_at' => now(),
+                'bank_name' => $data['bank_name'] ?? null, 'bank_account_number' => $data['bank_account_number'] ?? null, 'bank_account_type' => $data['bank_account_type'] ?? null,
+                'sex' => $data['sex'] ?? null, 'birth_date' => $data['birth_date'] ?? null, 'nationality' => $data['nationality'] ?? null, 'updated_at' => now(),
             ];
             if ($employeeId === null) {
                 $employeeId = DB::table('payroll_employees')->insertGetId([...$values, 'public_id' => (string) Str::uuid(), 'organization_id' => $organization->id, 'office_id' => $office, 'company_id' => $companyId, 'status' => 'active', 'created_by' => $actor->id, 'created_at' => now()]);
@@ -224,6 +225,7 @@ class PayrollRecordService
             'bank_account' => $canViewSalary ? $row->bank_account_number : ($account === '' ? null : '****'.substr($account, -4)), 'bank_account_type' => $canViewSalary ? $row->bank_account_type : null,
             'base_salary_cents' => $canViewSalary ? (int) $row->base_salary_cents : null, 'incentive_bonus_cents' => $canViewSalary ? (int) $row->incentive_bonus_cents : null,
             'has_bank_account' => $account !== '', 'salary_visible' => $canViewSalary,
+            'sex' => $row->sex ?? null, 'birth_date' => $row->birth_date ?? null, 'nationality' => $row->nationality ?? null,
         ];
     }
 

@@ -48,6 +48,9 @@ export type Employee = {
     incentive_bonus_cents: number | null;
     has_bank_account: boolean;
     salary_visible: boolean;
+    sex: string | null;
+    birth_date: string | null;
+    nationality: string | null;
 };
 
 const statusTone: Record<string, string> = {

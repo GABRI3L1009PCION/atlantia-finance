@@ -5,6 +5,7 @@ use App\Models\PlanPrice;
 use App\Models\User;
 use App\Services\Accounting\AccountingPeriodCloseChecklistService;
 use App\Services\Accounting\InventoryService;
+use App\Services\Accounting\LegalBooksService;
 use App\Services\AccountingAutomationService;
 use App\Services\FiscalConfigurationService;
 use App\Services\Platform\EntitlementResolverService;
@@ -156,4 +157,39 @@ test('un plan sin inventario no entra al módulo ni siquiera con la dirección d
     $this->get(route('accounting.inventory', $f['uuid']))->assertForbidden();
     $this->post(route('accounting.inventoryItemStore', $f['uuid']), ['name' => 'Colado'])->assertForbidden();
     expect(DB::table('inventory_items')->where('company_id', $f['companyId'])->count())->toBe(0);
+});
+
+test('the year-end physical count records each difference as an adjustment with its entry, and the book shows stock at its date', function () {
+    $f = inventoryFixture($this);
+    $this->travelTo(now()->setDate(2026, 3, 10)->setTime(10, 0));
+    $service = app(InventoryService::class);
+    $lamp = inventoryItem($f);
+    $cable = inventoryItem($f, 'Cable THHN');
+    $service->record($f['org'], $f['owner'], $f['companyId'], $lamp, ['date' => '2026-02-01', 'type' => 'opening', 'quantity' => '100', 'unit_cost' => '10.00']);
+    $service->record($f['org'], $f['owner'], $f['companyId'], $cable, ['date' => '2026-02-01', 'type' => 'opening', 'quantity' => '50', 'unit_cost' => '4.00']);
+    // A sale after the count date must not change the stock the count starts from.
+    DB::table('accounting_periods')->insert(['company_id' => $f['companyId'], 'name' => '2026-03', 'starts_on' => '2026-03-01', 'ends_on' => '2026-03-31']);
+    $service->record($f['org'], $f['owner'], $f['companyId'], $lamp, ['date' => '2026-03-05', 'type' => 'sale', 'quantity' => '30']);
+
+    $this->post(route('accounting.inventoryCountStart', $f['uuid']), ['count_date' => '2026-02-28'])->assertSessionHasNoErrors();
+    $this->post(route('accounting.inventoryCountStart', $f['uuid']), ['count_date' => '2026-02-28'])->assertSessionHasErrors('count_date');
+    $count = DB::table('inventory_counts')->first();
+    $lines = DB::table('inventory_count_lines')->where('inventory_count_id', $count->id)->pluck('id', 'inventory_item_id');
+    expect((int) DB::table('inventory_count_lines')->where('id', $lines[$lamp])->value('system_units'))->toBe(1000000);
+
+    $this->put(route('accounting.inventoryCountRecord', [$f['uuid'], $count->id]), ['counted' => [$lines[$lamp] => '97']])->assertSessionHasNoErrors();
+    $this->post(route('accounting.inventoryCountApply', [$f['uuid'], $count->id]))->assertSessionHasErrors('counted');
+    $this->put(route('accounting.inventoryCountRecord', [$f['uuid'], $count->id]), ['counted' => [$lines[$lamp] => '97', $lines[$cable] => '52']])->assertSessionHasNoErrors();
+    $this->get(route('accounting.inventory', $f['uuid']))->assertInertia(fn (Assert $page) => $page->where('count.difference_cents', -3000 + 800));
+    $this->post(route('accounting.inventoryCountApply', [$f['uuid'], $count->id]))->assertSessionHasNoErrors();
+
+    $adjustments = DB::table('inventory_movements')->where('reference', 'TOMA-'.$count->id)->orderBy('inventory_item_id')->get();
+    expect($adjustments->pluck('type')->all())->toBe(['adjustment_out', 'adjustment_in'])
+        ->and($adjustments->every(fn ($movement) => $movement->journal_entry_id !== null))->toBeTrue()
+        ->and(DB::table('inventory_counts')->where('id', $count->id)->value('status'))->toBe('applied');
+
+    // The book at the count date shows the counted stock, not today's (after the March sale).
+    $book = collect(app(LegalBooksService::class)->inventories($f['companyId'], '2026-02-28'))->firstWhere('title', 'Detalle de mercaderías y existencias');
+    expect(collect($book['rows'])->pluck('cells.1')->filter()->values()->all())->toContain('97 unidad', '52 unidad')
+        ->and(collect($book['rows'])->last()['cells'][0])->toContain('toma física #'.$count->id);
 });
