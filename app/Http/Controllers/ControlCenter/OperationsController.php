@@ -12,6 +12,7 @@ use App\Services\Platform\IntegrationManagementService;
 use App\Services\Platform\JobMonitoringService;
 use App\Services\Platform\LuzmaNeuralService;
 use App\Services\Platform\LuzmaPlatformService;
+use App\Services\Platform\MonitoringAlertService;
 use App\Services\Platform\PlatformAuditService;
 use App\Services\Platform\PlatformHealthService;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +25,7 @@ use Inertia\Response;
 /** Services, jobs and queues, integrations and Luzma. */
 class OperationsController extends ControlCenterController
 {
-    public function services(Request $request, PlatformHealthService $health): Response
+    public function services(Request $request, PlatformHealthService $health, MonitoringAlertService $alerts): Response
     {
         $this->staff($request, 'saas.services.view');
         $selected = (string) $request->query('service', '');
@@ -33,6 +34,8 @@ class OperationsController extends ControlCenterController
             'services' => $health->snapshot(),
             'selected' => $selected,
             'history' => $selected === '' ? [] : DB::table('service_health_checks')->where('service', $selected)->orderByDesc('id')->limit(60)->get(['status', 'latency_ms', 'detail', 'checked_at'])->all(),
+            'alerts' => $alerts->recent(),
+            'alertChannels' => $alerts->channels(),
         ]);
     }
 

@@ -26,13 +26,39 @@ type Service = {
     history: number[];
 };
 
+type Alert = {
+    service: string;
+    status: string;
+    message: string;
+    channels: Record<string, boolean>;
+    at: string;
+};
+
+const alertLabels: Record<string, string> = {
+    down: 'Caído',
+    degraded: 'Con problemas',
+    recovered: 'Recuperado',
+    test: 'Prueba',
+};
+
+const alertTones: Record<string, string> = {
+    down: 'down',
+    degraded: 'degraded',
+    recovered: 'healthy',
+    test: 'unknown',
+};
+
 export default function Services({
     services,
     selected,
     history,
+    alerts,
+    alertChannels,
 }: {
     services: Service[];
     selected: string;
+    alerts: Alert[];
+    alertChannels: string[];
     history: {
         status: string;
         latency_ms: number | null;
@@ -135,6 +161,44 @@ export default function Services({
                                                 : '#f59e0b'
                                         }
                                     />
+                                </td>
+                            </tr>
+                        ))}
+                    </Table>
+                </Panel>
+                <Panel title="Alertas al celular">
+                    <p className="mb-2 text-xs text-slate-400">
+                        {alertChannels.length === 0
+                            ? 'Sin canales configurados: las alertas solo quedan aquí. Configura Telegram, ntfy o correo en el .env (MONITORING_*) y prueba con php artisan monitoring:test.'
+                            : `Se envían por ${alertChannels.join(', ')} cuando un servicio falla dos chequeos seguidos, cada hora mientras siga caído, al recuperarse y cuando el disco pasa del 85 %.`}
+                    </p>
+                    <Table
+                        headers={['Fecha', 'Estado', 'Alerta', 'Entrega']}
+                        empty={alerts.length === 0 && 'Sin alertas enviadas.'}
+                    >
+                        {alerts.map((alert, index) => (
+                            <tr key={index}>
+                                <td className="px-2 py-1.5 whitespace-nowrap">
+                                    {date(alert.at, true)}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                    <Pill
+                                        tone={
+                                            healthTone[alertTones[alert.status]]
+                                        }
+                                    >
+                                        {alertLabels[alert.status] ??
+                                            alert.status}
+                                    </Pill>
+                                </td>
+                                <td className="px-2 py-1.5">{alert.message}</td>
+                                <td className="px-2 py-1.5 text-slate-400">
+                                    {Object.entries(alert.channels)
+                                        .map(
+                                            ([channel, delivered]) =>
+                                                `${channel} ${delivered ? '✓' : '✗'}`,
+                                        )
+                                        .join(' · ') || 'sin canales'}
                                 </td>
                             </tr>
                         ))}

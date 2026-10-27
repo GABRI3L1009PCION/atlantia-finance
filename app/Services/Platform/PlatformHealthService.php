@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Platform;
 
+use App\Jobs\QueueHeartbeatJob;
 use App\Services\Luzma\Contracts\LuzmaModelProvider;
 use App\Services\Luzma\LuzmaSwitch;
 use App\Services\Tenancy\TenantDatabaseContext;
@@ -44,7 +45,7 @@ class PlatformHealthService
     /**
      * Runs every check now and stores the results.
      *
-     * @return list<array{service: string, status: string, latency_ms: int|null, detail: string|null}>
+     * @return list<array{service: string, status: string, latency_ms: int|null, detail: string|null, data: array<string, mixed>|null}>
      */
     public function run(): array
     {
@@ -57,7 +58,7 @@ class PlatformHealthService
                 [$status, $detail, $data] = ['down', mb_strimwidth(PlatformLogReader::sanitize($exception->getMessage()), 0, 480, '…'), null];
             }
             $latency = (int) round((microtime(true) - $started) * 1000);
-            $results[] = ['service' => $service, 'status' => $status, 'latency_ms' => $latency, 'detail' => $detail];
+            $results[] = ['service' => $service, 'status' => $status, 'latency_ms' => $latency, 'detail' => $detail, 'data' => $data];
             $this->tenancy->runAsSystem(fn () => DB::table('service_health_checks')->insert(['service' => $service, 'status' => $status, 'latency_ms' => $latency, 'detail' => $detail,
                 'data' => $data === null ? null : json_encode($data, JSON_THROW_ON_ERROR), 'checked_at' => now()]));
         }
@@ -162,8 +163,44 @@ class PlatformHealthService
         if ($pending > 0 && $processed === 0 && $age > 120) {
             $detail .= ' · ningún worker está procesando';
         }
+        $stalled = $this->heartbeatStalledFor();
+        if ($stalled !== null) {
+            $status = 'down';
+            $detail = 'La cola está detenida: la prueba de vida lleva '.intdiv($stalled, 60).' min sin procesarse · '.$detail;
+        }
 
         return [$status, $detail, ['pending' => $pending, 'oldest_seconds' => $age, 'failed_last_hour' => $failedHour, 'processed_10m' => $processed]];
+    }
+
+    /**
+     * Sends the queue's proof of life unless the previous one is still waiting. Called by the scheduled health check,
+     * so a stopped worker is noticed even when nothing else is queued.
+     */
+    public function sendQueueHeartbeat(): void
+    {
+        if (config('queue.default') === 'sync') {
+            return;
+        }
+        $sent = Cache::get(QueueHeartbeatJob::SENT_KEY);
+        $done = Cache::get(QueueHeartbeatJob::DONE_KEY);
+        if ($sent !== null && ($done === null || (int) $done < (int) $sent)) {
+            return;
+        }
+        Cache::put(QueueHeartbeatJob::SENT_KEY, now()->getTimestamp(), now()->addDay());
+        QueueHeartbeatJob::dispatch();
+    }
+
+    /** Seconds the pending proof of life has waited, once past the allowed time; null while the queue answers. */
+    private function heartbeatStalledFor(): ?int
+    {
+        $sent = Cache::get(QueueHeartbeatJob::SENT_KEY);
+        $done = Cache::get(QueueHeartbeatJob::DONE_KEY);
+        if ($sent === null || ($done !== null && (int) $done >= (int) $sent)) {
+            return null;
+        }
+        $waiting = now()->getTimestamp() - (int) $sent;
+
+        return $waiting > (int) config('monitoring.queue_stalled_seconds', 300) ? $waiting : null;
     }
 
     /** @return array{0: string, 1: string|null, 2: array<string, mixed>|null} */

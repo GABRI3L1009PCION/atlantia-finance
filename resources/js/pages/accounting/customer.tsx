@@ -12,6 +12,7 @@ import {
     secondary,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
+import { CustomerAutomationToggle } from '@/components/collection-automation';
 import * as routes from '@/routes/accounting';
 
 type Invoice = {
@@ -46,6 +47,7 @@ export default function Customer({
     canRemind,
     reminderTemplates,
     reminders,
+    automation,
 }: {
     company: Company;
     customer: {
@@ -75,8 +77,10 @@ export default function Customer({
         status: string;
         status_label: string;
         sender: string;
+        automatic: boolean;
         at: string;
     }[];
+    automation: { enabled: boolean; paused: boolean } | null;
 }) {
     const [template, setTemplate] = useState<number | null>(
         reminderTemplates.find((row) =>
@@ -325,6 +329,15 @@ export default function Customer({
             </Card>
             {canRemind && (
                 <Card title="Recordatorios de cobro">
+                    {automation && (
+                        <div className="mb-3">
+                            <CustomerAutomationToggle
+                                companyId={company.public_id}
+                                customerId={customer.id}
+                                state={automation}
+                            />
+                        </div>
+                    )}
                     {customer.email ? (
                         <div className="flex flex-wrap items-center gap-2">
                             <select
@@ -387,7 +400,10 @@ export default function Customer({
                                             {new Date(
                                                 reminder.at,
                                             ).toLocaleString('es-GT')}{' '}
-                                            · {reminder.sender}
+                                            ·{' '}
+                                            {reminder.automatic
+                                                ? 'Automático'
+                                                : reminder.sender}
                                         </span>
                                     </span>
                                     <span

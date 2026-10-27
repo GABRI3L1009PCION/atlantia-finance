@@ -367,6 +367,64 @@ test('from the company customer page a reminder can be previewed and sent in any
     $this->actingAs($outsider)->get(route('accounting.salesCustomerReminderPreview', [$company, $customer, 'template_id' => $overdue]))->assertNotFound();
 });
 
+test('automatic collection sends each customer the most urgent step once, respects pauses and quiet days', function () {
+    Queue::fake();
+    $f = receivablesFixture();
+    $late = DB::table('sales_invoices')->where('id', receivablesInvoice($f, 'Cliente Atrasado', 120000, '2026-08-19', '2026-09-18'))->value('sales_customer_id');
+    $soon = DB::table('sales_invoices')->where('id', receivablesInvoice($f, 'Cliente Puntual', 80000, '2026-09-14', '2026-09-29'))->value('sales_customer_id');
+    $paused = DB::table('sales_invoices')->where('id', receivablesInvoice($f, 'Cliente En Pausa', 50000, '2026-08-01', '2026-08-31'))->value('sales_customer_id');
+    receivablesInvoice($f, 'Cliente Sin Correo', 50000, '2026-08-01', '2026-08-31');
+    DB::table('sales_customers')->whereIn('id', [$late, $soon, $paused])->update(['email' => 'cobros@cliente.test']);
+    $company = (string) DB::table('companies')->where('id', $f['mayaId'])->value('public_id');
+    $rules = ['enabled' => true, 'upcoming_days' => 3, 'overdue_steps' => [1, 8, 15, 30], 'promise_reminder' => true, 'broken_promise' => true, 'monthly_statement' => false, 'min_overdue_cents' => 0, 'quiet_days' => 3];
+
+    // Turning it on with every reminder off is refused.
+    $this->actingAs($f['owner'])->put(route('accounting.collectionAutomation', $company), [...$rules, 'upcoming_days' => null, 'overdue_steps' => [], 'promise_reminder' => false, 'broken_promise' => false])->assertSessionHasErrors('enabled');
+    $this->put(route('accounting.collectionAutomation', $company), $rules)->assertSessionHasNoErrors();
+    $this->post(route('accounting.collectionAutomationPause', [$company, $paused]), ['paused' => true])->assertSessionHasNoErrors();
+    $this->get(route('accounting.salesCustomers', $company))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->where('automation.enabled', true)->where('automation.today', fn ($steps) => collect($steps)->pluck('kind', 'customer')->all() === ['Cliente Atrasado' => 'overdue', 'Cliente Puntual' => 'upcoming']));
+    $this->get(route('accounting.salesCustomerShow', [$company, $paused]))->assertInertia(fn (Assert $page) => $page->where('automation', ['enabled' => true, 'paused' => true]));
+
+    $this->artisan('collections:auto-remind')->assertSuccessful();
+    expect(DB::table('collection_reminders')->where('automatic', true)->orderBy('sales_customer_id')->pluck('automation_key', 'sales_customer_id')->all())
+        ->toBe([(int) $late => 'overdue:8:2026-09-18', (int) $soon => 'upcoming:2026-09-29']);
+    Queue::assertPushed(SendCollectionReminderJob::class, 2);
+
+    // The same morning again sends nothing; after the quiet days only a new step goes out.
+    $this->artisan('collections:auto-remind')->assertSuccessful();
+    $this->travelTo(now()->setDate(2026, 10, 1)->setTime(10, 0));
+    $this->artisan('collections:auto-remind')->assertSuccessful();
+    expect(DB::table('collection_reminders')->where('automatic', true)->pluck('automation_key')->sort()->values()->all())
+        ->toBe(['overdue:1:2026-09-29', 'overdue:8:2026-09-18', 'upcoming:2026-09-29']);
+    $this->travelTo(now()->setDate(2026, 10, 4)->setTime(10, 0));
+    $this->artisan('collections:auto-remind')->assertSuccessful();
+    expect(DB::table('collection_reminders')->where('sales_customer_id', $late)->pluck('automation_key')->all())->toContain('overdue:15:2026-09-18')
+        ->and(DB::table('collection_reminders')->where('sales_customer_id', $paused)->exists())->toBeFalse();
+
+    // Someone who cannot send reminders cannot change the rules.
+    $this->actingAs(receivablesMember($f, 'auditor'))->put(route('accounting.collectionAutomation', $company), $rules)->assertNotFound();
+});
+
+test('automatic collection mails the monthly statement with its PDF once a month', function () {
+    Queue::fake();
+    $f = receivablesFixture();
+    $customer = DB::table('sales_invoices')->where('id', receivablesInvoice($f, 'Cliente Mensual', 90000, '2026-09-10', '2026-11-10'))->value('sales_customer_id');
+    DB::table('sales_customers')->where('id', $customer)->update(['email' => 'conta@mensual.test']);
+    $company = (string) DB::table('companies')->where('id', $f['mayaId'])->value('public_id');
+    $this->actingAs($f['owner'])->put(route('accounting.collectionAutomation', $company), ['enabled' => true, 'upcoming_days' => null, 'overdue_steps' => [], 'promise_reminder' => false,
+        'broken_promise' => false, 'monthly_statement' => true, 'min_overdue_cents' => 0, 'quiet_days' => 3])->assertSessionHasNoErrors();
+
+    $this->travelTo(now()->setDate(2026, 10, 1)->setTime(9, 0));
+    $this->artisan('collections:auto-remind')->assertSuccessful();
+    $reminder = DB::table('collection_reminders')->where('sales_customer_id', $customer)->first();
+    expect($reminder->automation_key)->toBe('statement:2026-09')->and($reminder->kind)->toBe('statement')->and($reminder->body)->toContain('01/09/2026');
+    Queue::assertPushed(SendCollectionReminderJob::class, fn (SendCollectionReminderJob $job): bool => $job->attachmentPath !== null);
+    $this->travelTo(now()->setDate(2026, 10, 9)->setTime(9, 0));
+    $this->artisan('collections:auto-remind')->assertSuccessful();
+    expect(DB::table('collection_reminders')->where('sales_customer_id', $customer)->count())->toBe(1);
+});
+
 test('the director sees portfolio problems per company without adding companies together', function () {
     $f = receivablesFixture();
     receivablesInvoice($f, 'Cliente ABC', 250000, '2026-09-05', '2026-10-05');

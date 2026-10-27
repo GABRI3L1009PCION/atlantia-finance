@@ -10,6 +10,7 @@ use App\Services\DocumentAnnulmentService;
 use App\Services\Fiscal\DocumentVatCalculator;
 use App\Services\Fiscal\VatBookService;
 use App\Services\FiscalConfigurationService;
+use App\Services\Receivables\CollectionAutomationService;
 use App\Services\Receivables\CollectionReminderService;
 use App\Services\ReportExportService;
 use App\Services\SalesCreditNoteService;
@@ -104,7 +105,7 @@ class SalesController extends Controller
     }
 
     /** Dedicated customer portfolio. All aggregates remain scoped to the authorized company. */
-    public function customers(Request $request, string $company): Response
+    public function customers(Request $request, string $company, CollectionAutomationService $automation): Response
     {
         [$org, $record] = $this->scope($request, $company);
         $filters = $request->validate([
@@ -179,6 +180,9 @@ class SalesController extends Controller
             ],
             'canWrite' => $this->canWrite($org, $record->id, $request->user()),
             'today' => $today,
+            // Only who can send reminders sees and changes the automatic collection.
+            'automation' => $this->accounting->canModule($org, $record->id, $request->user(), 'sales.manage')
+                ? [...$automation->rules($record->id), 'today' => $automation->plan($record->id)] : null,
         ]);
     }
 
@@ -305,7 +309,7 @@ class SalesController extends Controller
         return back()->with('success', 'Cliente registrado.');
     }
 
-    public function customerShow(Request $request, string $company, int $customer, CollectionReminderService $reminders): Response
+    public function customerShow(Request $request, string $company, int $customer, CollectionReminderService $reminders, CollectionAutomationService $automation): Response
     {
         [$org, $record] = $this->scope($request, $company);
         $client = $this->customerRecord($record->id, $customer);
@@ -333,7 +337,8 @@ class SalesController extends Controller
             'canRemind' => $canRemind = $this->accounting->canModule($org, $record->id, $request->user(), 'sales.manage'),
             'reminderTemplates' => $canRemind ? array_values(array_filter(array_map(fn (array $template): array => ['id' => $template['id'], 'label' => $template['kind_label'].' · '.$template['name'], 'kind' => $template['kind']],
                 $reminders->templates($org)), fn (array $template): bool => $template['kind'] !== 'statement')) : [],
-            'reminders' => $reminders->history([$record->id], $client->id, 10)]);
+            'reminders' => $reminders->history([$record->id], $client->id, 10),
+            'automation' => $canRemind ? $automation->customerState($record->id, (int) $client->id) : null]);
     }
 
     /** The collection reminder exactly as the customer would receive it, opened in a new tab before sending. */

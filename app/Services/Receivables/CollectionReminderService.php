@@ -53,13 +53,14 @@ class CollectionReminderService
 
     /**
      * @param  array{from?: string, to?: string}  $range
+     * @param  string|null  $automationKey  set by automatic collection: the step it covers, so it is never sent twice
      */
-    public function send(Organization $organization, User $actor, int $companyId, int $customerId, int $templateId, ?string $attachment = null, array $range = []): int
+    public function send(Organization $organization, User $actor, int $companyId, int $customerId, int $templateId, ?string $attachment = null, array $range = [], ?string $automationKey = null): int
     {
         ['customer' => $customer, 'template' => $template, 'company' => $company, 'subject' => $subject, 'body' => $body] = $this->compose($organization, $companyId, $customerId, $templateId, $range);
         $id = DB::table('collection_reminders')->insertGetId([
             'organization_id' => $organization->id, 'office_id' => $company?->office_id, 'company_id' => $companyId, 'sales_customer_id' => $customerId, 'collection_reminder_template_id' => $template->id,
-            'kind' => $template->kind, 'channel' => 'email', 'recipient' => $customer->email, 'subject' => $subject, 'body' => $body, 'status' => 'queued', 'sent_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
+            'kind' => $template->kind, 'channel' => 'email', 'recipient' => $customer->email, 'subject' => $subject, 'body' => $body, 'status' => 'queued', 'sent_by' => $actor->id, 'automatic' => $automationKey !== null, 'automation_key' => $automationKey, 'created_at' => now(), 'updated_at' => now(),
         ]);
         $path = null;
         if ($attachment !== null) {
@@ -72,7 +73,7 @@ class CollectionReminderService
             // Only a synchronous queue surfaces delivery errors here; the queued job records them itself.
             DB::table('collection_reminders')->where('id', $id)->where('status', '!=', 'sent')->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 500), 'updated_at' => now()]);
         }
-        $this->accounting->audit($organization, $actor, $template->kind === 'statement' ? 'statement.sent' : 'reminder.sent', 'collection_reminders', $id, ['customer' => $customer->name, 'recipient' => $customer->email, 'template' => $template->name], $company === null ? null : (int) $company->office_id);
+        $this->accounting->audit($organization, $actor, $template->kind === 'statement' ? 'statement.sent' : 'reminder.sent', 'collection_reminders', $id, ['customer' => $customer->name, 'recipient' => $customer->email, 'template' => $template->name, 'automatic' => $automationKey !== null], $company === null ? null : (int) $company->office_id);
 
         return $id;
     }
@@ -156,7 +157,7 @@ class CollectionReminderService
             ->whereIn('reminder.company_id', $companyIds === [] ? [-1] : $companyIds)->when($customerId !== null, fn ($query) => $query->where('reminder.sales_customer_id', $customerId))
             ->orderByDesc('reminder.id')->limit($limit)->get(['reminder.*', 'customer.name as customer_name', 'users.name as sender'])
             ->map(fn (stdClass $row): array => ['id' => (int) $row->id, 'customer' => (string) $row->customer_name, 'kind' => self::KINDS[$row->kind] ?? $row->kind, 'recipient' => (string) $row->recipient, 'subject' => (string) $row->subject,
-                'status' => (string) $row->status, 'status_label' => ['queued' => 'En cola', 'sent' => 'Enviado', 'failed' => 'Falló'][$row->status] ?? $row->status, 'error' => $row->error, 'sender' => (string) $row->sender,
+                'status' => (string) $row->status, 'status_label' => ['queued' => 'En cola', 'sent' => 'Enviado', 'failed' => 'Falló'][$row->status] ?? $row->status, 'error' => $row->error, 'sender' => (string) $row->sender, 'automatic' => (bool) $row->automatic,
                 'at' => Carbon::parse($row->created_at)->toIso8601String()])->all());
     }
 }

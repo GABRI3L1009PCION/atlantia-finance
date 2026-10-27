@@ -31,6 +31,8 @@ import {
     secondary,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
+import { CollectionAutomationButton } from '@/components/collection-automation';
+import type { CollectionAutomation } from '@/components/collection-automation';
 import * as routes from '@/routes/accounting';
 
 type Document = {
@@ -136,6 +138,7 @@ export default function Customers({
     summary,
     canWrite,
     today,
+    automation,
 }: {
     company: Company;
     customers: Page<Customer>;
@@ -143,6 +146,7 @@ export default function Customers({
     summary: Summary;
     canWrite: boolean;
     today: string;
+    automation: CollectionAutomation | null;
 }) {
     const [selectedId, setSelectedId] = useState<number | null>(
         customers.data[0]?.id ?? null,
@@ -201,6 +205,12 @@ export default function Customers({
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        {automation && (
+                            <CollectionAutomationButton
+                                companyId={company.public_id}
+                                automation={automation}
+                            />
+                        )}
                         {canWrite && (
                             <button
                                 type="button"

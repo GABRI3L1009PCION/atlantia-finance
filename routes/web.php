@@ -20,6 +20,7 @@ use App\Http\Controllers\CheckController;
 use App\Http\Controllers\ClientAccessAdminController;
 use App\Http\Controllers\ClientEmailController;
 use App\Http\Controllers\ClientPortalController;
+use App\Http\Controllers\CollectionAutomationController;
 use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\CompanyDashboardController;
 use App\Http\Controllers\CompanyDeletionController;
@@ -132,6 +133,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerShow'])->whereNumber('customer')->name('salesCustomerShow');
         Route::get('companies/{company}/sales/customers/{customer}/reminder-preview', [SalesController::class, 'customerReminderPreview'])->whereNumber('customer')->middleware('throttle:30,1')->name('salesCustomerReminderPreview');
         Route::post('companies/{company}/sales/customers/{customer}/reminders', [SalesController::class, 'customerReminder'])->whereNumber('customer')->middleware('throttle:20,1')->name('salesCustomerReminder');
+        Route::put('companies/{company}/collections/automation', [CollectionAutomationController::class, 'update'])->middleware('throttle:30,1')->name('collectionAutomation');
+        Route::post('companies/{company}/sales/customers/{customer}/automation-pause', [CollectionAutomationController::class, 'pause'])->whereNumber('customer')->middleware('throttle:30,1')->name('collectionAutomationPause');
         Route::patch('companies/{company}/sales/customers/{customer}', [SalesController::class, 'customerUpdate'])->whereNumber('customer')->middleware('throttle:30,1')->name('salesCustomerUpdate');
         Route::post('companies/{company}/sales/invoices', [SalesController::class, 'store'])->middleware('throttle:30,1')->name('salesStore');
         Route::get('companies/{company}/sales/invoices/{invoice}', [SalesController::class, 'show'])->name('invoice');

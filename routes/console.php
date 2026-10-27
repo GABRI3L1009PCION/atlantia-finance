@@ -12,9 +12,11 @@ use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\Billing\SubscriptionService;
 use App\Services\Platform\GlobalConfigurationService;
 use App\Services\Platform\LimitAlertService;
+use App\Services\Platform\MonitoringAlertService;
 use App\Services\Platform\PlatformHealthService;
 use App\Services\Platform\SupportAccessService;
 use App\Services\Platform\UsageMeterService;
+use App\Services\Receivables\CollectionAutomationService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkManagement\CompanyDeletionService;
 use App\Services\WorkManagement\CrmAlertService;
@@ -72,8 +74,10 @@ Artisan::command('webhooks:deliver', function (WebhookDeliveryService $deliverie
 
 Schedule::command('webhooks:deliver')->everyMinute()->withoutOverlapping();
 
-Artisan::command('platform:health', function (PlatformHealthService $health, GlobalConfigurationService $settings) {
+Artisan::command('platform:health', function (PlatformHealthService $health, GlobalConfigurationService $settings, MonitoringAlertService $alerts) {
     $results = $health->run();
+    $alerts->evaluate($results);
+    $health->sendQueueHeartbeat();
     $days = (int) $settings->get('retention.health_checks_days', 30);
     DB::table('service_health_checks')->where('checked_at', '<', now()->subDays($days))->delete();
     DB::table('job_runs')->where('created_at', '<', now()->subDays((int) $settings->get('retention.job_runs_days', 30)))->delete();
@@ -82,6 +86,19 @@ Artisan::command('platform:health', function (PlatformHealthService $health, Glo
 })->purpose('Chequeos reales de salud de los servicios de la plataforma');
 
 Schedule::command('platform:health')->everyMinute()->withoutOverlapping();
+
+Artisan::command('monitoring:test', function (MonitoringAlertService $alerts) {
+    if ($alerts->channels() === []) {
+        $this->error('No hay canales de alerta configurados: define MONITORING_TELEGRAM_*, MONITORING_NTFY_URL o MONITORING_EMAIL en el .env.');
+
+        return 1;
+    }
+    foreach ($alerts->test() as $channel => $delivered) {
+        $delivered ? $this->info("{$channel}: enviada") : $this->error("{$channel}: no se pudo enviar");
+    }
+
+    return 0;
+})->purpose('Envía una alerta de prueba a los celulares del equipo de la plataforma');
 
 Artisan::command('billing:run', function (SubscriptionService $subscriptions, SaaSBillingService $billing) {
     $renewals = $subscriptions->renewDue();
@@ -222,6 +239,22 @@ Artisan::command('companies:deletions', function (CompanyDeletionService $deleti
 })->purpose('Recuerda a los dueños las empresas en la papelera y elimina definitivamente las que cumplieron 30 días');
 
 Schedule::command('companies:deletions')->dailyAt('08:05')->withoutOverlapping()->onOneServer();
+
+Artisan::command('collections:auto-remind', function (CollectionAutomationService $automation) {
+    $sent = app(TenantDatabaseContext::class)->runAsSystem(function () use ($automation): int {
+        $total = 0;
+
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            $total += $automation->sweep($organization);
+        }
+
+        return $total;
+    });
+    $this->info('Recordatorios de cobro automáticos: '.$sent);
+})->purpose('Envía los recordatorios de cobro de las empresas con cobranza automática encendida');
+
+// In the morning in Guatemala, when the customer reads e-mail at the office.
+Schedule::command('collections:auto-remind')->dailyAt('08:40')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
 
 Artisan::command('luzma:morning-brief', function (TenantDatabaseContext $tenancy, LuzmaMorningBriefService $brief) {
     $sent = $tenancy->runAsSystem(fn (): int => $brief->sendAll());
