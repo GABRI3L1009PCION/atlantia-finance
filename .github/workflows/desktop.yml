@@ -5,6 +5,9 @@ name: desktop
 on:
   workflow_dispatch:
   push:
+    # A push filter that only names tags ignores branch pushes, so main is listed too; paths are not checked for tags.
+    branches:
+      - main
     tags:
       - 'desktop-v*'
     paths:

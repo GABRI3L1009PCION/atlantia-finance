@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const VERSION = 1;
+const TAG_LENGTH = 16;
 
 class Vault {
     /**
@@ -44,7 +45,7 @@ class Vault {
     write(name, value) {
         const key = this.loadKey();
         const iv = crypto.randomBytes(12);
-        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv, { authTagLength: TAG_LENGTH });
         const body = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
         const sealed = Buffer.concat([Buffer.from([VERSION]), iv, cipher.getAuthTag(), body]);
         const file = this.file(name);
@@ -62,10 +63,12 @@ class Vault {
         if (sealed[0] !== VERSION) {
             throw new Error('La copia sin conexión tiene un formato desconocido.');
         }
-        const decipher = crypto.createDecipheriv('aes-256-gcm', this.loadKey(), sealed.subarray(1, 13));
-        decipher.setAuthTag(sealed.subarray(13, 29));
+        const decipher = crypto.createDecipheriv('aes-256-gcm', this.loadKey(), sealed.subarray(1, 13), {
+            authTagLength: TAG_LENGTH,
+        });
+        decipher.setAuthTag(sealed.subarray(13, 13 + TAG_LENGTH));
 
-        return JSON.parse(Buffer.concat([decipher.update(sealed.subarray(29)), decipher.final()]).toString('utf8'));
+        return JSON.parse(Buffer.concat([decipher.update(sealed.subarray(13 + TAG_LENGTH)), decipher.final()]).toString('utf8'));
     }
 
     remove(name) {

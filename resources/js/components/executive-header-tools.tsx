@@ -14,6 +14,7 @@ import {
     Search,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { startProductTour } from '@/components/product-tour';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,7 +23,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { startProductTour } from '@/components/product-tour';
 import { EXECUTIVE_HOME } from '@/lib/executive-workspace';
 
 export type Inbox = {

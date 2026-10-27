@@ -116,6 +116,7 @@ export default [
             'resources/js/wayfinder/**',
             'services/**/.venv/**',
             'services/**/__pycache__/**',
+            'desktop/**',
         ],
     },
     prettier,
