@@ -7,6 +7,7 @@ use App\Services\Accounting\AccountingPeriodCloseChecklistService;
 use App\Services\AccountingAutomationService;
 use App\Services\Fiscal\FiscalObligationService;
 use App\Services\Fiscal\OtherTaxesService;
+use App\Services\Fiscal\SatFileService;
 use App\Services\Luzma\LuzmaContextService;
 use App\Services\Luzma\LuzmaToolRegistry;
 use App\Services\Payroll\PayrollLedgerReconciliationService;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 beforeEach(function () {
@@ -224,6 +226,27 @@ test('the libro de salarios gives each worker a folio with the year of approved 
     $this->get(route('payroll.reports.export', ['salary_book', 'format' => 'pdf', 'period_id' => $period, 'first_folio' => 15]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
     $this->get(route('payroll.reports.export', ['salary_book', 'format' => 'xlsx', 'period_id' => $period]))->assertOk();
     $this->get(route('payroll.reports.export', ['igss_planilla', 'format' => 'xlsx', 'period_id' => $period]))->assertOk();
+});
+
+test('the RetenISR anexo of rentas del trabajo lists the ISR withheld in the month per employee with NIT', function () {
+    $f = payrollFixture();
+    $this->travelTo(now()->setDate(2026, 10, 5)->setTime(10, 0));
+    $this->actingAs($f['payroll']);
+    $this->post(route('payroll.employees.store'), payrollEmployeeForm($f, ['nit' => '1234567-K', 'base_salary' => '15000.00']))->assertSessionHasNoErrors();
+    $this->post(route('payroll.periods.store'), ['company_id' => $f['mayaId'], 'month' => '2026-09'])->assertSessionHasNoErrors();
+    $period = (int) DB::table('payroll_periods')->where('company_id', $f['mayaId'])->value('id');
+    $this->post(route('payroll.periods.action', [$period, 'calculate']))->assertSessionHasNoErrors();
+    DB::table('payroll_periods')->where('id', $period)->update(['status' => 'approved']);
+    $isr = (int) DB::table('payroll_result_lines')->where('concept_code', 'ISR')->sum('amount_cents');
+
+    $file = app(SatFileService::class)->retenIsr(DB::table('companies')->find($f['mayaId']), 'rentas_trabajo', 2026, 9);
+    $path = tempnam(sys_get_temp_dir(), 'sat');
+    file_put_contents($path, $file['content']);
+    $rows = IOFactory::load($path)->getActiveSheet()->toArray(null, false, false);
+    unlink($path);
+
+    expect($isr)->toBeGreaterThan(0)->and($file['lines'])->toBe(1)->and($rows[0])->toBe(['NIT empleado', 'Nombre', 'Base Gravada o Pagada', 'Retencion '])
+        ->and(array_slice($rows[1], 0, 2))->toBe(['1234567K', 'Ana López'])->and((float) $rows[1][2])->toBe(15250.0)->and((float) $rows[1][3])->toBe($isr / 100);
 });
 
 function payrollFixture(): array

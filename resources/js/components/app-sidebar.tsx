@@ -479,6 +479,7 @@ export function AppSidebar() {
                   ['Cierre anual y libros legales', 'year-end', BookCheck],
                   ['ISR y retenciones', 'tax-reports', Calculator],
                   ['Otros impuestos', 'other-taxes', Landmark],
+                  ['Archivos para la SAT', 'sat-files', FileUp],
                   ['Presupuesto vs real', 'budgets', Target],
                   ['NIIF 16, 9 y NIC 12', 'ifrs', BookOpenCheck],
                   ['Cheques', 'checks', FileCheck2],

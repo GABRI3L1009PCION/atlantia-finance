@@ -63,6 +63,7 @@ use App\Http\Controllers\ReceivablesController;
 use App\Http\Controllers\RegionalController;
 use App\Http\Controllers\RevenueController;
 use App\Http\Controllers\SalesController;
+use App\Http\Controllers\SatFileController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\SupportTicketController;
@@ -212,6 +213,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('companies/{company}/tax-reports', [TaxReportController::class, 'index'])->name('taxReports');
         Route::get('companies/{company}/other-taxes', [OtherTaxesController::class, 'index'])->name('otherTaxes');
+        Route::get('companies/{company}/sat-files', [SatFileController::class, 'index'])->name('satFiles');
+        Route::get('companies/{company}/sat-files/{file}', [SatFileController::class, 'download'])->whereIn('file', ['asiste-libros', 'retenisr', 'inventarios'])->middleware('throttle:20,1')->name('satFileDownload');
         Route::get('companies/{company}/budgets', [BudgetController::class, 'index'])->name('budgets');
         Route::get('companies/{company}/ifrs', [IfrsController::class, 'index'])->name('ifrs');
         Route::post('companies/{company}/ifrs/leases', [IfrsController::class, 'lease'])->middleware('throttle:20,1')->name('ifrsLease');
