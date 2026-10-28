@@ -42,6 +42,10 @@ class TreasuryReceiptService
             if ($data['bank_account_id'] !== null && ! DB::table('bank_accounts')->where('id', $data['bank_account_id'])->where('company_id', $companyId)->where('status', 'active')->exists()) {
                 throw ValidationException::withMessages(['bank_account_id' => 'La cuenta no pertenece a la empresa.']);
             }
+            // Treasury receipts are in quetzales; a dollar account moves through transfers between dollar accounts or entries.
+            if ($data['bank_account_id'] !== null && DB::table('bank_accounts')->where('id', $data['bank_account_id'])->value('currency') !== 'GTQ') {
+                throw ValidationException::withMessages(['bank_account_id' => 'Los cobros de Tesorería son en quetzales: elige una cuenta en quetzales o registra el cobro en dólares desde la factura.']);
+            }
             $applied = array_sum(array_column($data['allocations'], 'amount_cents'));
             if ($applied > $data['amount_cents']) {
                 throw ValidationException::withMessages(['allocations' => 'Lo aplicado no puede superar lo recibido.']);

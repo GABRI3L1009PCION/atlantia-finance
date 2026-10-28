@@ -61,6 +61,7 @@ class AccountingController extends Controller
         return Inertia::render('accounting/index', [
             'organizationName' => $org->name,
             'canManage' => $org->pivot->role === 'owner',
+            'canConsolidate' => $this->context->hasFeature($org, 'consolidated_dashboard'),
             'companyQuota' => $this->companyQuota($org),
             'companies' => $companies->orderBy('companies.name')->paginate(12)->withQueryString(),
             'offices' => $org->pivot->role === 'owner' ? $org->offices()->where('status', 'active')->get(['id', 'name']) : [],

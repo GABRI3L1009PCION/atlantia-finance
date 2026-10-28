@@ -88,6 +88,9 @@ class TreasuryPaymentService
             if ($data['bank_account_id'] !== null && ! DB::table('bank_accounts')->where('id', $data['bank_account_id'])->where('company_id', $companyId)->where('status', 'active')->exists()) {
                 throw ValidationException::withMessages(['bank_account_id' => 'La cuenta de origen no pertenece a la empresa.']);
             }
+            if ($data['bank_account_id'] !== null && DB::table('bank_accounts')->where('id', $data['bank_account_id'])->value('currency') !== 'GTQ') {
+                throw ValidationException::withMessages(['bank_account_id' => 'Los pagos de Tesorería son en quetzales: elige una cuenta en quetzales o registra el pago en dólares desde la compra.']);
+            }
 
             $supplier = null;
             $supplierId = null;
@@ -249,8 +252,8 @@ class TreasuryPaymentService
                 throw ValidationException::withMessages(['status' => 'Solo se ejecuta un pago aprobado.']);
             }
             if ($instruction->bank_account_id === null && $bankAccountId !== null) {
-                if (! DB::table('bank_accounts')->where('id', $bankAccountId)->where('company_id', $instruction->company_id)->where('status', 'active')->exists()) {
-                    throw ValidationException::withMessages(['bank_account_id' => 'La cuenta de origen no pertenece a la empresa.']);
+                if (! DB::table('bank_accounts')->where('id', $bankAccountId)->where('company_id', $instruction->company_id)->where('status', 'active')->where('currency', 'GTQ')->exists()) {
+                    throw ValidationException::withMessages(['bank_account_id' => 'Elige una cuenta en quetzales de la empresa.']);
                 }
                 DB::table('payment_instructions')->where('id', $instructionId)->update(['bank_account_id' => $bankAccountId, 'updated_at' => now()]);
                 $instruction->bank_account_id = $bankAccountId;

@@ -195,6 +195,8 @@ export default function Purchase({
         paid_on: today,
         reference: '',
         withholdings: [] as WithholdingInput[],
+        foreign_amount: '',
+        settlement_rate: '',
     });
     const withheldCents = payment.data.withholdings.reduce(
         (sum, item) =>
@@ -569,12 +571,67 @@ export default function Purchase({
                                                         'amount',
                                                         'reference',
                                                         'withholdings',
+                                                        'foreign_amount',
+                                                        'settlement_rate',
                                                     ),
                                             },
                                         );
                                     }}
                                     className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-3"
                                 >
+                                    {payable &&
+                                        payable.currency !== 'GTQ' &&
+                                        payable.foreign_original_cents !==
+                                            null && (
+                                            <div className="grid gap-3 rounded-xl bg-sky-50 p-3 sm:col-span-3 sm:grid-cols-2">
+                                                <label>
+                                                    Pagado en {payable.currency}
+                                                    <input
+                                                        inputMode="decimal"
+                                                        className={field}
+                                                        value={
+                                                            payment.data
+                                                                .foreign_amount
+                                                        }
+                                                        onChange={(event) =>
+                                                            payment.setData(
+                                                                'foreign_amount',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <label>
+                                                    Tipo de cambio del día
+                                                    <input
+                                                        inputMode="decimal"
+                                                        className={field}
+                                                        value={
+                                                            payment.data
+                                                                .settlement_rate
+                                                        }
+                                                        onChange={(event) =>
+                                                            payment.setData(
+                                                                'settlement_rate',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <p className="text-xs text-sky-900 sm:col-span-2">
+                                                    Con el monto en{' '}
+                                                    {payable.currency}, el
+                                                    documento se salda a su tipo
+                                                    de cambio y la diferencia
+                                                    con el del día va a
+                                                    diferencial cambiario
+                                                    realizado. Deja vacío el
+                                                    monto en quetzales.
+                                                </p>
+                                            </div>
+                                        )}
                                     <label>
                                         Monto
                                         <input

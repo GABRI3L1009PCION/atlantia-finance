@@ -173,6 +173,7 @@ export default function Banks({
         account_type: 'checking',
         last_four: '',
         bank_balance: '0.00',
+        currency: 'GTQ',
     });
 
     const transactionForm = useForm({
@@ -969,6 +970,40 @@ export default function Banks({
                                             />
                                         </label>
                                     </div>
+
+                                    <label className="block text-sm font-medium">
+                                        Moneda de la cuenta
+                                        <select
+                                            className={field}
+                                            value={accountForm.data.currency}
+                                            onChange={(event) =>
+                                                accountForm.setData(
+                                                    'currency',
+                                                    event.target.value,
+                                                )
+                                            }
+                                        >
+                                            <option value="GTQ">
+                                                Quetzales (GTQ)
+                                            </option>
+                                            <option value="USD">
+                                                Dólares (USD)
+                                            </option>
+                                            <option value="EUR">
+                                                Euros (EUR)
+                                            </option>
+                                        </select>
+                                        {accountForm.data.currency !==
+                                            'GTQ' && (
+                                            <span className="mt-1 block text-xs font-normal text-slate-500">
+                                                El estado de cuenta se carga en
+                                                su moneda; el Mayor la lleva en
+                                                quetzales y cada fin de mes se
+                                                revalúa al tipo de cambio del
+                                                cierre (Cierre anual).
+                                            </span>
+                                        )}
+                                    </label>
 
                                     <label className="block text-sm font-medium">
                                         Saldo bancario inicial

@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     BookCheck,
+    BookOpenCheck,
     Handshake,
     MessagesSquare,
     ListChecks,
@@ -16,6 +17,7 @@ import {
     BookMarked,
     BookOpen,
     Boxes,
+    Factory,
     BriefcaseBusiness,
     Building2,
     Calculator,
@@ -40,6 +42,7 @@ import {
     Home,
     KeyRound,
     Landmark,
+    Target,
     LibraryBig,
     ListTree,
     LockKeyhole,
@@ -463,6 +466,7 @@ export function AppSidebar() {
         companyId && hasAccounting
             ? [
                   ['Inventario y kardex', 'inventory', Boxes],
+                  ['Producción y costos', 'production', Factory],
                   ['Activos fijos', 'fixed-assets', Building2],
                   ['Centros de costo', 'cost-centers', Tags],
                   ['Políticas contables', 'policies', ScrollText],
@@ -475,6 +479,8 @@ export function AppSidebar() {
                   ['Cierre anual y libros legales', 'year-end', BookCheck],
                   ['ISR y retenciones', 'tax-reports', Calculator],
                   ['Otros impuestos', 'other-taxes', Landmark],
+                  ['Presupuesto vs real', 'budgets', Target],
+                  ['NIIF 16, 9 y NIC 12', 'ifrs', BookOpenCheck],
                   ['Cheques', 'checks', FileCheck2],
                   ['Configuración regional', 'regional', Globe2],
               ].map(([title, path, icon]) => ({

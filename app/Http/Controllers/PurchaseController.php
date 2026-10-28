@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Accounting\RealizedExchangeService;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
 use App\Services\DocumentAnnulmentService;
@@ -540,8 +541,9 @@ class PurchaseController extends Controller
     public function payment(Request $request, string $company, string $document): RedirectResponse
     {
         [$org, $record] = $this->scope($request, $company, 'purchases.manage');
-        $data = $request->validate(['request_id' => 'required|uuid', 'amount' => 'required|string|max:13',
+        $data = $request->validate(['request_id' => 'required|uuid', 'amount' => 'required_without:foreign_amount|nullable|string|max:13',
             'paid_on' => 'required|date_format:Y-m-d|before_or_equal:today', 'reference' => 'required|string|max:150',
+            'foreign_amount' => 'nullable|string|max:13', 'settlement_rate' => 'required_with:foreign_amount|nullable|numeric|min:0.0001|max:10000',
             'withholdings' => 'nullable|array|max:2', 'withholdings.*.kind' => 'required|in:isr,iva', 'withholdings.*.base' => 'required|string|max:13',
             'withholdings.*.rate' => 'required|numeric|min:0.01|max:100', 'withholdings.*.certificate_number' => 'nullable|string|max:60']);
         DB::transaction(function () use ($request, $org, $record, $document, $data): void {
@@ -550,7 +552,10 @@ class PurchaseController extends Controller
             if (DB::table('purchase_payments')->where('purchase_document_id', $row->id)->where('public_id', $data['request_id'])->exists()) {
                 return;
             }
-            $amount = $this->accounting->cents($data['amount']);
+            // A payment in the document's foreign currency clears it at its own rate; the day's rate gives the realized difference.
+            $settlement = filled($data['foreign_amount'] ?? null) ? app(RealizedExchangeService::class)->settle($row, $this->accounting->cents((string) $data['foreign_amount']), (string) $data['settlement_rate']) : null;
+            $this->ensure($settlement === null || blank($data['withholdings'] ?? null), 'Registra las retenciones de un pago en moneda extranjera por separado, en quetzales.');
+            $amount = $settlement['book_cents'] ?? $this->accounting->cents((string) $data['amount']);
             $this->ensure($row->status === 'approved' && $data['paid_on'] >= $row->document_date, 'El pago requiere un documento aprobado y fecha válida.');
             $payable = app(PayableService::class)->find($row->id);
             $this->ensure($amount > 0 && $amount <= ($payable['outstanding_cents'] ?? 0) - ($payable['committed_cents'] ?? 0), 'El pago no puede superar el saldo pendiente no comprometido en Tesorería.');
@@ -563,14 +568,17 @@ class PurchaseController extends Controller
             $this->ensure($mapping !== null, 'Configura el mapeo contable antes de registrar pagos.');
             $id = DB::table('purchase_payments')->insertGetId(['public_id' => $data['request_id'], 'purchase_document_id' => $row->id,
                 'amount_cents' => $amount, 'paid_on' => $data['paid_on'], 'reference' => $data['reference'],
-                'created_by' => $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
+                'foreign_amount_cents' => $settlement === null ? null : $this->accounting->cents((string) $data['foreign_amount']), 'settlement_rate' => $settlement === null ? null : $data['settlement_rate'],
+                'exchange_difference_cents' => $settlement['difference_cents'] ?? null, 'created_by' => $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
             $dimensions = ['third_party_type' => 'supplier', 'third_party_id' => $row->purchase_supplier_id];
             $withholdings = app(WithholdingService::class);
-            $entry = filled($data['withholdings'] ?? null)
+            $entry = $settlement !== null
+                ? app(RealizedExchangeService::class)->draft($org, $request->user(), $record->id, 'purchase_payment', $id, $data['paid_on'], 'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $settlement, $dimensions)
+                : (filled($data['withholdings'] ?? null)
                 ? $withholdings->draftPayment($org, $request->user(), $record->id, $id, $data['paid_on'], 'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $amount,
                     $withholdings->compute($data['withholdings'], $amount), $dimensions)
                 : $this->automation->draftFromRule($org, $request->user(), $record->id, 'purchase_payment', $id, $data['paid_on'],
-                    'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $amount, $dimensions);
+                    'Pago a '.$row->supplier_name, 'PAGO-'.$data['request_id'], $amount, $dimensions));
             $this->ensure($entry !== null, 'Abre un período contable que incluya la fecha del pago.');
             $this->accounting->audit($org, $request->user(), 'purchase.payment.created', 'purchase_payments', $id, ['amount_cents' => $amount]);
         });

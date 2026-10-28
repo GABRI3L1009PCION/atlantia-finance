@@ -27,6 +27,7 @@ type Company = {
 type Props = {
     organizationName: string;
     canManage: boolean;
+    canConsolidate?: boolean;
     companies: Page<Company>;
     offices: { id: number; name: string }[];
     search: string;
@@ -37,6 +38,7 @@ type Props = {
 export default function AccountingIndex({
     organizationName,
     canManage,
+    canConsolidate = false,
     companies,
     offices,
     search,
@@ -96,6 +98,14 @@ export default function AccountingIndex({
                             <Search size={18} />
                         </button>
                     </form>
+                    {canConsolidate && (
+                        <Link
+                            href="/accounting/consolidation"
+                            className={secondary}
+                        >
+                            Consolidación de grupos
+                        </Link>
+                    )}
                     {canManage && (
                         <button
                             className={primary}

@@ -244,7 +244,10 @@ export default function Invoice({
         amount: '',
         received_on: today,
         reference: '',
+        foreign_amount: '',
+        settlement_rate: '',
     });
+    const foreign = i.currency !== 'GTQ' && i.foreign_total_cents !== null;
     const credit = useForm({ amount: '', issued_on: today, reason: '' });
     const withholding = useForm({
         request_id: crypto.randomUUID(),
@@ -409,16 +412,57 @@ export default function Invoice({
                                             amount: '',
                                             received_on: today,
                                             reference: '',
+                                            foreign_amount: '',
+                                            settlement_rate: '',
                                         }),
                                 },
                             );
                         }}
                     >
+                        {foreign && (
+                            <div className="mb-4 grid gap-4 rounded-xl bg-sky-50 p-3 sm:grid-cols-2">
+                                <label>
+                                    Recibido en {i.currency}
+                                    <input
+                                        inputMode="decimal"
+                                        className={field}
+                                        value={receipt.data.foreign_amount}
+                                        onChange={(e) =>
+                                            receipt.setData(
+                                                'foreign_amount',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label>
+                                    Tipo de cambio del día
+                                    <input
+                                        inputMode="decimal"
+                                        className={field}
+                                        value={receipt.data.settlement_rate}
+                                        onChange={(e) =>
+                                            receipt.setData(
+                                                'settlement_rate',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <p className="text-xs text-sky-900 sm:col-span-2">
+                                    Con el monto en {i.currency}, el comprobante
+                                    se salda a su tipo de cambio y la diferencia
+                                    con el del día se registra como diferencial
+                                    cambiario realizado. Deja vacío el importe
+                                    en quetzales.
+                                </p>
+                            </div>
+                        )}
                         <div className="grid gap-4 sm:grid-cols-3">
                             <label>
                                 Importe Q
                                 <input
-                                    required
+                                    required={!receipt.data.foreign_amount}
                                     type="number"
                                     min="0.01"
                                     max={remaining / 100}
@@ -625,11 +669,50 @@ export default function Invoice({
                             );
                         }}
                     >
+                        {foreign && (
+                            <div className="mb-4 grid gap-4 rounded-xl bg-sky-50 p-3 sm:grid-cols-2">
+                                <label>
+                                    Recibido en {i.currency}
+                                    <input
+                                        inputMode="decimal"
+                                        className={field}
+                                        value={receipt.data.foreign_amount}
+                                        onChange={(e) =>
+                                            receipt.setData(
+                                                'foreign_amount',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <label>
+                                    Tipo de cambio del día
+                                    <input
+                                        inputMode="decimal"
+                                        className={field}
+                                        value={receipt.data.settlement_rate}
+                                        onChange={(e) =>
+                                            receipt.setData(
+                                                'settlement_rate',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </label>
+                                <p className="text-xs text-sky-900 sm:col-span-2">
+                                    Con el monto en {i.currency}, el comprobante
+                                    se salda a su tipo de cambio y la diferencia
+                                    con el del día se registra como diferencial
+                                    cambiario realizado. Deja vacío el importe
+                                    en quetzales.
+                                </p>
+                            </div>
+                        )}
                         <div className="grid gap-4 sm:grid-cols-3">
                             <label>
                                 Importe Q
                                 <input
-                                    required
+                                    required={!receipt.data.foreign_amount}
                                     type="number"
                                     min="0.01"
                                     max={remaining / 100}

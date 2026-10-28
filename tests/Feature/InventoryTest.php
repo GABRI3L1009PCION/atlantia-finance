@@ -193,3 +193,36 @@ test('the year-end physical count records each difference as an adjustment with 
     expect(collect($book['rows'])->pluck('cells.1')->filter()->values()->all())->toContain('97 unidad', '52 unidad')
         ->and(collect($book['rows'])->last()['cells'][0])->toContain('toma física #'.$count->id);
 });
+
+test('a production order consumes the recipe materials at average cost and brings the product in at full cost with its entry', function () {
+    $f = inventoryFixture($this);
+    $this->travelTo(now()->setDate(2026, 2, 20)->setTime(10, 0));
+    $service = app(InventoryService::class);
+    $flour = inventoryItem($f, 'Harina');
+    $sugar = inventoryItem($f, 'Azúcar');
+    $bread = inventoryItem($f, 'Pan dulce');
+    $service->record($f['org'], $f['owner'], $f['companyId'], $flour, ['date' => '2026-02-01', 'type' => 'opening', 'quantity' => '100', 'unit_cost' => '5.00']);
+    $service->record($f['org'], $f['owner'], $f['companyId'], $sugar, ['date' => '2026-02-01', 'type' => 'opening', 'quantity' => '50', 'unit_cost' => '8.00']);
+
+    // One loaf: 0.5 of flour and 0.25 of sugar, plus Q1.00 of labor and Q0.50 of overhead.
+    $this->post(route('accounting.productionRecipe', $f['uuid']), ['product_id' => $bread, 'labor' => '1.00', 'overhead' => '0.50',
+        'components' => [['item_id' => $flour, 'quantity' => '0.5'], ['item_id' => $sugar, 'quantity' => '0.25']]])->assertSessionHasNoErrors();
+    $this->post(route('accounting.productionRecipe', $f['uuid']), ['product_id' => $bread, 'components' => [['item_id' => $bread, 'quantity' => '1']]])->assertSessionHasErrors('components');
+    $recipe = (int) DB::table('bills_of_materials')->value('id');
+    $this->get(route('accounting.production', $f['uuid']))->assertOk()->assertInertia(fn (Assert $page) => $page->component('accounting/production')->where('recipes.0.standard_cost_cents', 250 + 200 + 100 + 50));
+
+    $this->post(route('accounting.productionOrder', $f['uuid']), ['recipe_id' => $recipe, 'quantity' => '40', 'produced_on' => '2026-02-15'])->assertSessionHasNoErrors();
+    $order = DB::table('production_orders')->first();
+    // 20 of flour at Q5 + 10 of sugar at Q8 = Q180 of materials, Q40 of labor and Q20 of overhead: Q240 for 40 loaves.
+    expect([(int) $order->materials_cents, (int) $order->labor_cents, (int) $order->overhead_cents, (int) $order->total_cents])->toBe([18000, 4000, 2000, 24000]);
+    expect($service->kardex($f['companyId'], $bread)[0])->toMatchArray(['type' => 'production_in', 'unit_cost_cents' => 600, 'total_cents' => 24000])
+        ->and(collect($service->items($f['companyId']))->firstWhere('id', $flour)['quantity'])->toEqual(80);
+    $lines = DB::table('journal_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')->where('l.journal_entry_id', $order->journal_entry_id)
+        ->orderBy('l.position')->get(['a.code', 'l.debit_cents', 'l.credit_cents'])->map(fn ($row): array => [$row->code, (int) $row->debit_cents, (int) $row->credit_cents])->all();
+    expect($lines)->toBe([['1205', 24000, 0], ['1203', 0, 18000], ['5105', 0, 4000], ['5106', 0, 2000]])
+        ->and(DB::table('inventory_movements')->where('reference', 'OP-'.$order->id)->whereNull('journal_entry_id')->exists())->toBeFalse();
+
+    // Not enough flour for 200 loaves: nothing is recorded.
+    $this->post(route('accounting.productionOrder', $f['uuid']), ['recipe_id' => $recipe, 'quantity' => '200', 'produced_on' => '2026-02-16'])->assertSessionHasErrors('quantity');
+    expect(DB::table('production_orders')->count())->toBe(1);
+});

@@ -154,6 +154,7 @@ class BankController extends Controller
             'account_type' => ['required', Rule::in(['checking', 'savings'])],
             'last_four' => 'required|digits:4',
             'bank_balance' => 'required|string|max:16',
+            'currency' => 'nullable|in:GTQ,USD,EUR',
         ]);
 
         DB::transaction(function () use ($request, $org, $record, $data): void {
@@ -173,7 +174,7 @@ class BankController extends Controller
                 'account_name' => trim($data['account_name']),
                 'account_type' => $data['account_type'],
                 'last_four' => $data['last_four'],
-                'currency' => 'GTQ',
+                'currency' => $data['currency'] ?? 'GTQ',
                 'bank_balance_cents' => $this->accounting->cents($data['bank_balance']),
                 'created_by' => $request->user()->id,
                 'created_at' => now(),

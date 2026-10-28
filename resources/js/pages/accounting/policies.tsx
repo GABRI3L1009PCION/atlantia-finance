@@ -15,7 +15,7 @@ type Policy = {
     key: string;
     label: string;
     group: string;
-    type: 'bool' | 'int' | 'money' | 'select';
+    type: 'bool' | 'int' | 'money' | 'percent' | 'select';
     options: Record<string, string> | null;
     help: string | null;
     value: string;

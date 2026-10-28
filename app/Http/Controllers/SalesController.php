@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Accounting\RealizedExchangeService;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
 use App\Services\DocumentAnnulmentService;
@@ -458,8 +459,9 @@ class SalesController extends Controller
     public function receipt(Request $request, string $company, string $invoice): RedirectResponse
     {
         [$org, $record] = $this->scope($request, $company, 'sales.manage');
-        $data = $request->validate(['request_id' => 'required|uuid', 'amount' => 'required|string|max:13',
-            'received_on' => 'required|date_format:Y-m-d|before_or_equal:today', 'reference' => 'required|string|max:150']);
+        $data = $request->validate(['request_id' => 'required|uuid', 'amount' => 'required_without:foreign_amount|nullable|string|max:13',
+            'received_on' => 'required|date_format:Y-m-d|before_or_equal:today', 'reference' => 'required|string|max:150',
+            'foreign_amount' => 'nullable|string|max:13', 'settlement_rate' => 'required_with:foreign_amount|nullable|numeric|min:0.0001|max:10000']);
         DB::transaction(function () use ($request, $org, $record, $invoice, $data): void {
             $this->accounting->lock($record->id);
             $doc = $this->invoice($record->id, $invoice);
@@ -467,15 +469,19 @@ class SalesController extends Controller
                 return;
             }
             $this->ensure(! DB::table('sales_receipts')->where('public_id', $data['request_id'])->exists(), 'Solicitud no válida. Recarga el formulario.');
-            $amount = $this->accounting->cents($data['amount']);
+            // A receipt in the invoice's foreign currency clears it at its own rate; the day's rate gives the realized difference.
+            $settlement = filled($data['foreign_amount'] ?? null) ? app(RealizedExchangeService::class)->settle($doc, $this->accounting->cents((string) $data['foreign_amount']), (string) $data['settlement_rate']) : null;
+            $amount = $settlement['book_cents'] ?? $this->accounting->cents((string) $data['amount']);
             $this->ensure($doc->status === 'issued' && $data['received_on'] >= $doc->issued_on, 'El cobro necesita un comprobante emitido y fecha no anterior a su emisión.');
             $this->ensure($amount > 0 && $amount <= (int) $doc->total_cents - $this->paid($doc->id) - $this->credited($doc->id), 'El cobro debe ser positivo y no superar el saldo pendiente.');
             $id = DB::table('sales_receipts')->insertGetId(['public_id' => $data['request_id'], 'sales_invoice_id' => $doc->id,
                 'amount_cents' => $amount, 'received_on' => $data['received_on'], 'reference' => $data['reference'],
-                'created_by' => $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
-            $entry = $this->automation->draftFromRule($org, $request->user(), $record->id, 'sales_receipt', $id, $data['received_on'],
-                'Cobro de '.$doc->customer_name, 'COBRO-'.$data['request_id'], $amount,
-                ['third_party_type' => 'customer', 'third_party_id' => $doc->sales_customer_id]);
+                'foreign_amount_cents' => $settlement === null ? null : $this->accounting->cents((string) $data['foreign_amount']), 'settlement_rate' => $settlement === null ? null : $data['settlement_rate'],
+                'exchange_difference_cents' => $settlement['difference_cents'] ?? null, 'created_by' => $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
+            $dimensions = ['third_party_type' => 'customer', 'third_party_id' => $doc->sales_customer_id];
+            $entry = $settlement === null
+                ? $this->automation->draftFromRule($org, $request->user(), $record->id, 'sales_receipt', $id, $data['received_on'], 'Cobro de '.$doc->customer_name, 'COBRO-'.$data['request_id'], $amount, $dimensions)
+                : app(RealizedExchangeService::class)->draft($org, $request->user(), $record->id, 'sales_receipt', $id, $data['received_on'], 'Cobro de '.$doc->customer_name, 'COBRO-'.$data['request_id'], $settlement, $dimensions);
             $this->ensure($entry !== null, 'Abre un período contable que incluya la fecha del cobro.');
             $this->accounting->audit($org, $request->user(), 'sales.receipt.created', 'sales_receipts', $id, ['amount_cents' => $amount]);
         });

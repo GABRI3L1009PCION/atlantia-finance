@@ -24,7 +24,10 @@ class InventoryService
 
     public const TYPES = ['opening' => 'Existencia inicial', 'purchase' => 'Compra', 'sale' => 'Venta (salida)', 'adjustment_in' => 'Ajuste (entrada)', 'adjustment_out' => 'Ajuste (salida / merma)'];
 
-    private const INBOUND = ['opening', 'purchase', 'adjustment_in'];
+    /** Movements of a production order: they are recorded by the order, never typed by hand. */
+    public const PRODUCTION_TYPES = ['production_in' => 'Producción terminada (entrada)', 'production_out' => 'Consumo de producción (salida)'];
+
+    private const INBOUND = ['opening', 'purchase', 'adjustment_in', 'production_in'];
 
     public function __construct(private AccountingService $accounting, private AccountingAutomationService $automation, private PeriodLedgerFacts $facts) {}
 
@@ -83,7 +86,7 @@ class InventoryService
      */
     public function record(Organization $organization, User $user, int $companyId, int $itemId, array $data): int
     {
-        if (! isset(self::TYPES[$data['type']])) {
+        if (! isset(self::TYPES[$data['type']]) && ! isset(self::PRODUCTION_TYPES[$data['type']])) {
             throw ValidationException::withMessages(['type' => 'Tipo de movimiento no válido.']);
         }
         $units = $this->units($data['quantity']);
@@ -128,7 +131,7 @@ class InventoryService
     public function kardex(int $companyId, int $itemId): array
     {
         return array_values(DB::table('inventory_movements')->where('company_id', $companyId)->where('inventory_item_id', $itemId)->orderBy('movement_date')->orderBy('id')->get()->map(fn (object $m): array => [
-            'id' => (int) $m->id, 'date' => (string) $m->movement_date, 'type' => (string) $m->type, 'type_label' => self::TYPES[$m->type] ?? $m->type, 'inbound' => in_array($m->type, self::INBOUND, true),
+            'id' => (int) $m->id, 'date' => (string) $m->movement_date, 'type' => (string) $m->type, 'type_label' => self::TYPES[$m->type] ?? self::PRODUCTION_TYPES[$m->type] ?? $m->type, 'inbound' => in_array($m->type, self::INBOUND, true),
             'quantity' => (int) $m->quantity_units / self::SCALE, 'unit_cost_cents' => (int) $m->unit_cost_cents, 'total_cents' => (int) $m->total_cents,
             'balance' => (int) $m->balance_units / self::SCALE, 'balance_value_cents' => (int) $m->balance_value_cents, 'reference' => $m->reference, 'memo' => $m->memo,
             'journal_entry_id' => $m->journal_entry_id === null ? null : (int) $m->journal_entry_id])->all());

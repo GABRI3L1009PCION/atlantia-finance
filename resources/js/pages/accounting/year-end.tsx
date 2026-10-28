@@ -25,6 +25,8 @@ import {
     money,
     primary,
 } from '@/components/accounting-ui';
+import { BankRevaluationCard } from '@/components/bank-revaluation';
+import type { BankRevaluation } from '@/components/bank-revaluation';
 import { ConfirmDialog } from '@/components/office-admin/kit';
 
 type CloseLine = {
@@ -87,6 +89,7 @@ type Props = {
         missing_rates: string[];
         entry: Entry;
     };
+    bankRevaluation: BankRevaluation;
     books: Record<string, string>;
     nextFolios: Record<string, number>;
     history: Print[];
@@ -161,6 +164,7 @@ export default function YearEnd({
     month,
     closing,
     revaluation,
+    bankRevaluation,
     books,
     nextFolios,
     history,
@@ -474,6 +478,13 @@ export default function YearEnd({
                         </button>
                     )}
             </Card>
+
+            <BankRevaluationCard
+                base={base}
+                month={month}
+                revaluation={bankRevaluation}
+                canManage={canManage}
+            />
 
             <Card title="Libros legales foliados">
                 <p className="mb-4 text-sm text-slate-600">

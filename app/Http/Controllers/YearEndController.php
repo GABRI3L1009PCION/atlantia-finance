@@ -36,6 +36,7 @@ class YearEndController extends Controller
             'company' => $record, 'years' => $years, 'year' => $year, 'month' => $month,
             'closing' => $this->close->preview((int) $record->id, $year),
             'revaluation' => $this->revaluation->preview((int) $record->id, $month),
+            'bankRevaluation' => $this->revaluation->bankPreview((int) $record->id, $month),
             'books' => LegalBooksService::BOOKS, 'nextFolios' => $this->books->nextFolios((int) $record->id), 'history' => $this->books->history((int) $record->id),
             'canManage' => $this->can($request, $organization, $record, 'journal.create'), 'canPrint' => $this->can($request, $organization, $record, 'reports.export'),
             'journalUrl' => '/accounting/companies/'.$record->public_id,
@@ -61,6 +62,15 @@ class YearEndController extends Controller
 
         return back()->with('workspace_notice', 'Diferencial cambiario '.($result['net_cents'] >= 0 ? 'a favor' : 'en contra').' de Q '.number_format(abs($result['net_cents']) / 100, 2)
             .' registrado en borrador, con su reversión el primer día del mes siguiente.');
+    }
+
+    public function revalueBanks(Request $request, string $company): RedirectResponse
+    {
+        [$organization, $record] = $this->scopeCompany($request, $company, 'journal.create');
+        $data = $request->validate(['month' => ['required', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'], 'balances' => 'nullable|array', 'balances.*' => 'nullable|string|max:20']);
+        $result = $this->revaluation->revalueBanks($organization, $request->user(), $record, $data['month'], array_map('strval', array_filter($data['balances'] ?? [], fn ($value): bool => $value !== null)));
+
+        return back()->with('workspace_notice', 'Revaluación de bancos '.($result['net_cents'] >= 0 ? 'a favor' : 'en contra').' de Q '.number_format(abs($result['net_cents']) / 100, 2).' registrada en borrador.');
     }
 
     public function book(Request $request, string $company, string $book): FileResponse

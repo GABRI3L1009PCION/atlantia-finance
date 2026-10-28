@@ -15,6 +15,7 @@ use App\Http\Controllers\BankController;
 use App\Http\Controllers\Billing\BillingDetailsController;
 use App\Http\Controllers\Billing\CheckoutController;
 use App\Http\Controllers\Billing\CreateCheckoutController;
+use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\CalendarFeedController;
 use App\Http\Controllers\CheckController;
 use App\Http\Controllers\ClientAccessAdminController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\CollectionAutomationController;
 use App\Http\Controllers\CommunicationController;
 use App\Http\Controllers\CompanyDashboardController;
 use App\Http\Controllers\CompanyDeletionController;
+use App\Http\Controllers\ConsolidationController;
 use App\Http\Controllers\ControlCenter as CC;
 use App\Http\Controllers\CrmController;
 use App\Http\Controllers\DesktopController;
@@ -35,6 +37,7 @@ use App\Http\Controllers\FirmProfileController;
 use App\Http\Controllers\FiscalSettingsController;
 use App\Http\Controllers\FixedAssetController;
 use App\Http\Controllers\ForcedPasswordController;
+use App\Http\Controllers\IfrsController;
 use App\Http\Controllers\IntegrationsController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvitationController;
@@ -52,6 +55,7 @@ use App\Http\Controllers\OtherTaxesController;
 use App\Http\Controllers\PasswordHelpController;
 use App\Http\Controllers\PayablesController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\ProfitabilityController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\QuoteRequestController;
@@ -102,6 +106,10 @@ Route::get('client-email/verify/{organization}/{hash}', [ClientEmailController::
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware('subscription.active')->prefix('accounting')->name('accounting.')->group(function () {
         Route::get('/', [AccountingController::class, 'index'])->name('index');
+        Route::get('consolidation', [ConsolidationController::class, 'index'])->name('consolidation');
+        Route::post('consolidation', [ConsolidationController::class, 'save'])->middleware('throttle:20,1')->name('consolidationStore');
+        Route::put('consolidation/{group}', [ConsolidationController::class, 'save'])->whereNumber('group')->middleware('throttle:20,1')->name('consolidationUpdate');
+        Route::get('consolidation/{group}/export', [ConsolidationController::class, 'export'])->whereNumber('group')->middleware('throttle:10,1')->name('consolidationExport');
         Route::post('companies', [AccountingController::class, 'storeCompany'])->middleware('throttle:20,1')->name('storeCompany');
         Route::get('companies/{company}/dashboard', CompanyDashboardController::class)->name('companyDashboard');
         Route::get('companies/{company}', [AccountingController::class, 'show'])->name('show');
@@ -173,6 +181,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/year-end', [YearEndController::class, 'index'])->name('yearEnd');
         Route::post('companies/{company}/year-end/close', [YearEndController::class, 'closeYear'])->middleware('throttle:10,1')->name('yearEndClose');
         Route::post('companies/{company}/year-end/revaluation', [YearEndController::class, 'revalue'])->middleware('throttle:10,1')->name('exchangeRevaluation');
+        Route::post('companies/{company}/year-end/bank-revaluation', [YearEndController::class, 'revalueBanks'])->middleware('throttle:10,1')->name('bankRevaluation');
         Route::get('companies/{company}/legal-books/{book}', [YearEndController::class, 'book'])->whereIn('book', ['diario', 'mayor', 'inventarios', 'estados'])->middleware('throttle:20,1')->name('legalBook');
         Route::get('companies/{company}/fixed-assets', [FixedAssetController::class, 'index'])->name('fixedAssets');
         Route::post('companies/{company}/fixed-assets', [FixedAssetController::class, 'store'])->middleware('throttle:30,1')->name('fixedAssetStore');
@@ -203,6 +212,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('companies/{company}/tax-reports', [TaxReportController::class, 'index'])->name('taxReports');
         Route::get('companies/{company}/other-taxes', [OtherTaxesController::class, 'index'])->name('otherTaxes');
+        Route::get('companies/{company}/budgets', [BudgetController::class, 'index'])->name('budgets');
+        Route::get('companies/{company}/ifrs', [IfrsController::class, 'index'])->name('ifrs');
+        Route::post('companies/{company}/ifrs/leases', [IfrsController::class, 'lease'])->middleware('throttle:20,1')->name('ifrsLease');
+        Route::post('companies/{company}/ifrs/leases/{lease}/post', [IfrsController::class, 'postLease'])->whereNumber('lease')->middleware('throttle:20,1')->name('ifrsLeasePost');
+        Route::post('companies/{company}/ifrs/expected-credit-loss', [IfrsController::class, 'postEcl'])->middleware('throttle:20,1')->name('ifrsEcl');
+        Route::post('companies/{company}/ifrs/deferred-tax', [IfrsController::class, 'postDeferredTax'])->middleware('throttle:20,1')->name('ifrsDeferredTax');
+        Route::post('companies/{company}/budgets', [BudgetController::class, 'store'])->middleware('throttle:20,1')->name('budgetStore');
+        Route::put('companies/{company}/budgets/{budget}/lines', [BudgetController::class, 'lines'])->whereNumber('budget')->middleware('throttle:60,1')->name('budgetLines');
+        Route::post('companies/{company}/budgets/{budget}/{action}', [BudgetController::class, 'status'])->whereNumber('budget')->whereIn('action', ['approve', 'reopen'])->middleware('throttle:20,1')->name('budgetStatus');
         Route::post('companies/{company}/other-taxes/properties', [OtherTaxesController::class, 'property'])->middleware('throttle:30,1')->name('iusiPropertyStore');
         Route::put('companies/{company}/other-taxes/properties/{property}', [OtherTaxesController::class, 'property'])->whereNumber('property')->middleware('throttle:30,1')->name('iusiPropertyUpdate');
         Route::delete('companies/{company}/other-taxes/properties/{property}', [OtherTaxesController::class, 'deactivateProperty'])->whereNumber('property')->middleware('throttle:30,1')->name('iusiPropertyDeactivate');
@@ -227,6 +245,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('companies/{company}/inventory/movements', [InventoryController::class, 'storeMovement'])->middleware('throttle:60,1')->middleware('plan.feature:inventory')->name('inventoryMovementStore');
         Route::post('companies/{company}/inventory/costs', [InventoryController::class, 'postCosts'])->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryPostCosts');
         Route::get('companies/{company}/inventory/items/{item}/kardex', [InventoryController::class, 'kardex'])->whereNumber('item')->middleware('plan.feature:inventory')->name('inventoryKardex');
+        Route::get('companies/{company}/production', [ProductionController::class, 'index'])->middleware('plan.feature:inventory')->name('production');
+        Route::post('companies/{company}/production/recipes', [ProductionController::class, 'recipe'])->middleware('throttle:30,1')->middleware('plan.feature:inventory')->name('productionRecipe');
+        Route::post('companies/{company}/production/orders', [ProductionController::class, 'produce'])->middleware('throttle:30,1')->middleware('plan.feature:inventory')->name('productionOrder');
         Route::post('companies/{company}/inventory/counts', [InventoryController::class, 'startCount'])->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryCountStart');
         Route::put('companies/{company}/inventory/counts/{count}', [InventoryController::class, 'recordCount'])->whereNumber('count')->middleware('throttle:60,1')->middleware('plan.feature:inventory')->name('inventoryCountRecord');
         Route::post('companies/{company}/inventory/counts/{count}/apply', [InventoryController::class, 'applyCount'])->whereNumber('count')->middleware('throttle:10,1')->middleware('plan.feature:inventory')->name('inventoryCountApply');

@@ -142,6 +142,86 @@ class ExchangeRevaluationService
     }
 
     /**
+     * Bank accounts in dollars or euros at the end of a month: their balance in that currency (the last bank statement
+     * line of the month, or the one typed by the accountant) valued at the closing rate, against what the ledger carries
+     * in quetzales. Unlike receivables and payables this adjustment is not reversed: cash is valued again each month.
+     *
+     * @param  array<int, string>  $balances  bank account id => balance in its currency typed by the accountant
+     * @return array{as_of: string, rows: list<array{id: int, bank: string, currency: string, foreign_cents: int|null, source: string, rate: string|null, ledger_cents: int, revalued_cents: int|null, difference_cents: int}>, net_cents: int, entry: array{status: string, public_id: string}|null}
+     */
+    public function bankPreview(int $companyId, string $month, array $balances = []): array
+    {
+        $asOf = CarbonImmutable::parse($month.'-01')->endOfMonth()->toDateString();
+        $base = (string) (DB::table('company_fiscal_profiles')->where('company_id', $companyId)->value('base_currency') ?: 'GTQ');
+        $rows = [];
+        foreach (DB::table('bank_accounts')->where('company_id', $companyId)->where('currency', '!=', $base)->where('status', 'active')->orderBy('bank_name')->get() as $bank) {
+            $typed = isset($balances[(int) $bank->id]) && trim($balances[(int) $bank->id]) !== '' ? $this->accounting->cents($balances[(int) $bank->id]) : null;
+            $statement = DB::table('bank_transactions')->where('bank_account_id', $bank->id)->where('transaction_date', '<=', $asOf)->orderByDesc('transaction_date')->orderByDesc('id')->value('running_balance_cents');
+            $foreign = $typed ?? ($statement === null ? null : (int) $statement);
+            try {
+                $rate = (string) $this->fiscal->exchangeRate($companyId, (string) $bank->currency, $asOf)->rate;
+            } catch (Throwable) {
+                $rate = null;
+            }
+            $ledger = (int) DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->where('l.ledger_account_id', $bank->ledger_account_id)
+                ->whereIn('e.status', ['posted', 'reversed'])->where('e.entry_date', '<=', $asOf)->sum(DB::raw('l.debit_cents - l.credit_cents'));
+            $revalued = $foreign === null || $rate === null ? null : (int) round($foreign * (float) $rate);
+            $rows[] = ['id' => (int) $bank->id, 'bank' => $bank->bank_name.' · '.$bank->account_name, 'currency' => (string) $bank->currency, 'foreign_cents' => $foreign,
+                'source' => $typed !== null ? 'typed' : ($statement !== null ? 'statement' : 'missing'), 'rate' => $rate, 'ledger_cents' => $ledger, 'revalued_cents' => $revalued,
+                'difference_cents' => $revalued === null ? 0 : $revalued - $ledger];
+        }
+
+        return ['as_of' => $asOf, 'rows' => $rows, 'net_cents' => (int) array_sum(array_column($rows, 'difference_cents')), 'entry' => $this->existing($companyId, $this->bankKey($companyId, $month))];
+    }
+
+    /**
+     * Drafts the revaluation of the foreign-currency banks at the end of the month.
+     *
+     * @param  array<int, string>  $balances
+     * @return array{entry_id: int, net_cents: int}
+     */
+    public function revalueBanks(Organization $organization, User $user, stdClass $company, string $month, array $balances): array
+    {
+        return DB::transaction(function () use ($organization, $user, $company, $month, $balances): array {
+            $companyId = (int) $company->id;
+            $this->accounting->lock($companyId);
+            $preview = $this->bankPreview($companyId, $month, $balances);
+            if ($preview['entry'] !== null) {
+                throw ValidationException::withMessages(['month' => 'La revaluación de bancos de ese mes ya está registrada.']);
+            }
+            $missing = array_values(array_filter($preview['rows'], fn (array $row): bool => $row['revalued_cents'] === null));
+            if ($missing !== []) {
+                throw ValidationException::withMessages(['balances' => 'Falta el saldo en moneda extranjera o el tipo de cambio de: '.implode(', ', array_column($missing, 'bank')).'.']);
+            }
+            $changed = array_values(array_filter($preview['rows'], fn (array $row): bool => $row['difference_cents'] !== 0));
+            if ($changed === []) {
+                throw ValidationException::withMessages(['month' => 'No hay diferencial cambiario en bancos: su valor en quetzales ya coincide.']);
+            }
+            $accounts = $this->accounts($companyId);
+            $lines = [];
+            foreach ($changed as $row) {
+                $bankAccount = (int) DB::table('bank_accounts')->where('id', $row['id'])->value('ledger_account_id');
+                $amount = number_format(abs($row['difference_cents']) / 100, 2, '.', '');
+                $description = 'Revaluación '.$row['bank'].' ('.$row['currency'].' '.number_format($row['foreign_cents'] / 100, 2).' a Q '.number_format((float) $row['rate'], 5).')';
+                $gain = $row['difference_cents'] > 0;
+                $lines[] = ['account_id' => $gain ? $bankAccount : $accounts['loss'], 'debit' => $amount, 'credit' => '0', 'description' => $description];
+                $lines[] = ['account_id' => $gain ? $accounts['gain'] : $bankAccount, 'debit' => '0', 'credit' => $amount, 'description' => $description];
+            }
+            $entryId = $this->accounting->createDraft($organization, $user, $company, ['request_id' => (string) Str::uuid(), 'period_id' => $this->period($companyId, $preview['as_of']), 'entry_date' => $preview['as_of'],
+                'description' => 'Revaluación de bancos en moneda extranjera al cierre de '.self::label($month), 'reference' => 'REVBANCO-'.str_replace('-', '', $month), 'kind' => 'adjustment',
+                'posting_key' => $this->bankKey($companyId, $month)], $this->accounting->lines($companyId, $lines));
+            $this->accounting->audit($organization, $user, 'exchange.bank_revaluation_drafted', 'journal_entries', $entryId, ['month' => $month, 'net_cents' => $preview['net_cents']]);
+
+            return ['entry_id' => $entryId, 'net_cents' => $preview['net_cents']];
+        });
+    }
+
+    private function bankKey(int $companyId, string $month): string
+    {
+        return 'fx_bank_revaluation:'.$companyId.':'.$month;
+    }
+
+    /**
      * The four accounts of the entry by their role, creating the adjustment accounts the first time.
      *
      * @return array{receivable: int, payable: int, gain: int, loss: int}

@@ -2,6 +2,7 @@
 
 use App\Jobs\LuzmaMaintenanceJob;
 use App\Models\Organization;
+use App\Services\Accounting\BudgetService;
 use App\Services\Fel\SatPendingAlertService;
 use App\Services\Fiscal\BanguatExchangeRateService;
 use App\Services\Integrations\WebhookDeliveryService;
@@ -252,6 +253,21 @@ Artisan::command('collections:auto-remind', function (CollectionAutomationServic
     });
     $this->info('Recordatorios de cobro automáticos: '.$sent);
 })->purpose('Envía los recordatorios de cobro de las empresas con cobranza automática encendida');
+
+Artisan::command('budgets:alerts', function (BudgetService $budgets) {
+    $reported = app(TenantDatabaseContext::class)->runAsSystem(function () use ($budgets): int {
+        $total = 0;
+
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            $total += $budgets->sweep($organization);
+        }
+
+        return $total;
+    });
+    $this->info('Presupuestos con desviaciones avisadas: '.$reported);
+})->purpose('Avisa una vez al mes de los presupuestos aprobados cuyas cuentas se desvían del umbral');
+
+Schedule::command('budgets:alerts')->dailyAt('09:10')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
 
 // In the morning in Guatemala, when the customer reads e-mail at the office.
 Schedule::command('collections:auto-remind')->dailyAt('08:40')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
