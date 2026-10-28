@@ -226,3 +226,37 @@ test('a production order consumes the recipe materials at average cost and bring
     $this->post(route('accounting.productionOrder', $f['uuid']), ['recipe_id' => $recipe, 'quantity' => '200', 'produced_on' => '2026-02-16'])->assertSessionHasErrors('quantity');
     expect(DB::table('production_orders')->count())->toBe(1);
 });
+
+test('with standard costs the product enters at standard and the real consumption leaves quantity, price and labor variances', function () {
+    $f = inventoryFixture($this);
+    $this->travelTo(now()->setDate(2026, 2, 20)->setTime(10, 0));
+    $service = app(InventoryService::class);
+    $flour = inventoryItem($f, 'Harina');
+    $sugar = inventoryItem($f, 'Azúcar');
+    $bread = inventoryItem($f, 'Pan dulce');
+    $service->record($f['org'], $f['owner'], $f['companyId'], $flour, ['date' => '2026-02-01', 'type' => 'opening', 'quantity' => '100', 'unit_cost' => '5.00']);
+    $service->record($f['org'], $f['owner'], $f['companyId'], $sugar, ['date' => '2026-02-01', 'type' => 'opening', 'quantity' => '50', 'unit_cost' => '8.00']);
+
+    // The hoja técnica sets flour at a standard Q4.50; sugar takes its average cost (Q8.00).
+    $this->post(route('accounting.productionRecipe', $f['uuid']), ['product_id' => $bread, 'labor' => '1.00', 'overhead' => '0.50',
+        'components' => [['item_id' => $flour, 'quantity' => '0.5', 'standard_cost' => '4.50'], ['item_id' => $sugar, 'quantity' => '0.25', 'standard_cost' => '']]])->assertSessionHasNoErrors();
+    $recipe = (int) DB::table('bills_of_materials')->value('id');
+    $this->get(route('accounting.production', $f['uuid']))->assertInertia(fn (Assert $page) => $page->where('recipes.0.standard_cost_cents', 225 + 200 + 100 + 50));
+
+    // 40 loaves used 22 of flour instead of 20 and Q45 of labor instead of Q40.
+    $this->post(route('accounting.productionOrder', $f['uuid']), ['recipe_id' => $recipe, 'quantity' => '40', 'produced_on' => '2026-02-15',
+        'actual' => ['components' => [$flour => '22'], 'labor' => '45.00']])->assertSessionHasNoErrors();
+    $order = DB::table('production_orders')->first();
+    expect([(int) $order->standard_cents, (int) $order->total_cents, (int) $order->material_quantity_variance_cents, (int) $order->material_price_variance_cents,
+        (int) $order->labor_variance_cents, (int) $order->overhead_variance_cents])->toBe([23000, 25500, 900, 1100, 500, 0])
+        ->and($service->kardex($f['companyId'], $bread)[0])->toMatchArray(['unit_cost_cents' => 575, 'total_cents' => 23000])
+        ->and(collect($service->items($f['companyId']))->firstWhere('id', $flour)['quantity'])->toEqual(78);
+    $lines = DB::table('journal_lines as l')->join('ledger_accounts as a', 'a.id', '=', 'l.ledger_account_id')->where('l.journal_entry_id', $order->journal_entry_id)
+        ->orderBy('l.position')->get(['a.code', 'l.debit_cents', 'l.credit_cents'])->map(fn ($row): array => [$row->code, (int) $row->debit_cents, (int) $row->credit_cents])->all();
+    expect($lines)->toBe([['1205', 23000, 0], ['5109', 2500, 0], ['1203', 0, 19000], ['5105', 0, 4500], ['5106', 0, 2000]]);
+    $this->get(route('accounting.production', $f['uuid']))->assertInertia(fn (Assert $page) => $page->where('production.totals.variance_cents', 2500)
+        ->where('production.totals.material_price_variance_cents', 1100));
+
+    $this->post(route('accounting.productionOrder', $f['uuid']), ['recipe_id' => $recipe, 'quantity' => '1', 'produced_on' => '2026-02-16',
+        'actual' => ['components' => [$bread => '1']]])->assertSessionHasErrors('components');
+});

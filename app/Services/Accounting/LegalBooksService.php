@@ -31,7 +31,7 @@ class LegalBooksService
     /** Rows a single printing may hold; a larger book is printed in several parts (by quarter or month). */
     private const MAX_ROWS = 6000;
 
-    public function __construct(private FinancialStatementService $statements, private InventoryService $inventory) {}
+    public function __construct(private FinancialStatementService $statements, private InventoryService $inventory, private StatementCertificationService $certification) {}
 
     /**
      * Next folio of each book: one after the last printed sheet.
@@ -77,8 +77,15 @@ class LegalBooksService
         $taxId = (string) ($company->tax_id ?? '');
         $header = $company->name.($taxId === '' ? '' : ' · NIT '.$taxId).' · '.self::BOOKS[$book];
         $scope = $book === 'inventarios' ? 'Al '.CarbonImmutable::parse($to)->format('d/m/Y') : 'Del '.CarbonImmutable::parse($from)->format('d/m/Y').' al '.CarbonImmutable::parse($to)->format('d/m/Y');
+        $certification = match ($book) {
+            'inventarios' => $this->certification->certify($company, 'Libro de Inventarios', $to, $to,
+                (int) ((array) $this->statements->position((int) $company->id, $to)['totals'])['assets'], 'un total de activo'),
+            'estados' => $this->certification->certify($company, 'Libro de Estados Financieros', $from, $to,
+                (int) ((array) $this->statements->income((int) $company->id, $from, $to)['totals'])['net_result'], 'un resultado del período'),
+            default => null,
+        };
         [$content, $pages] = $this->render(['title' => self::BOOKS[$book], 'company' => (string) $company->name, 'tax_id' => $taxId, 'scope' => $scope, 'authorization' => $authorization,
-            'sections' => $sections, 'printed_at' => now()->format('d/m/Y H:i')], $header, $first);
+            'sections' => $sections, 'certification' => $certification, 'printed_at' => now()->format('d/m/Y H:i')], $header, $first);
         $last = $first + $pages - 1;
         DB::table('legal_book_prints')->insert(['organization_id' => $organization->id, 'company_id' => $company->id, 'book' => $book, 'period_from' => $book === 'inventarios' ? $to : $from, 'period_to' => $to,
             'first_folio' => $first, 'last_folio' => $last, 'authorization' => $authorization === null ? null : mb_substr($authorization, 0, 120), 'file_hash' => hash('sha256', $content),

@@ -7,7 +7,7 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; } thead { d
 th { border-top: 1px solid #111; border-bottom: 1px solid #111; text-align: left; padding: 4px 3px; font-size: 8px; text-transform: uppercase; }
 td { padding: 2.5px 3px; vertical-align: top; overflow-wrap: break-word; } .number { text-align: right; white-space: nowrap; }
 tr.heading td { font-weight: bold; padding-top: 6px; } tr.subtotal td { border-top: 1px solid #999; font-style: italic; } tr.total td { border-top: 1.5px solid #111; border-bottom: 1.5px solid #111; font-weight: bold; }
-.signatures { margin-top: 40px; width: 100%; } .signatures td { width: 50%; text-align: center; padding-top: 34px; } .line { border-top: 1px solid #111; width: 70%; margin: 0 auto; padding-top: 3px; }
+.certification { margin-top: 16px; text-align: justify; line-height: 1.5; font-size: 9px; } .signatures { margin-top: 40px; width: 100%; } .signatures td { width: 50%; text-align: center; padding-top: 34px; } .line { border-top: 1px solid #111; width: 70%; margin: 0 auto; padding-top: 3px; }
 </style></head><body>
 <h1>{{ $book['title'] }}</h1>
 <div class="company">{{ $book['company'] }}@if($book['tax_id'] !== '') · NIT {{ $book['tax_id'] }}@endif</div>
@@ -17,8 +17,10 @@ tr.heading td { font-weight: bold; padding-top: 6px; } tr.subtotal td { border-t
 <table><thead><tr>@foreach($section['columns'] as $index => $column)<th class="{{ in_array($index, $section['money']) ? 'number' : '' }}" @if($index === 1 && count($section['columns']) > 3) style="width: 46%" @endif>{{ $column }}</th>@endforeach</tr></thead>
 <tbody>@foreach($section['rows'] as $row)<tr class="{{ $row['type'] }}">@foreach($row['cells'] as $index => $cell)<td class="{{ in_array($index, $section['money']) ? 'number' : '' }}">{{ $cell }}</td>@endforeach</tr>@endforeach</tbody></table>
 @endforeach
-@if(in_array($book['title'], ['Libro de Inventarios', 'Libro de Estados Financieros'], true))
-<table class="signatures"><tr><td><div class="line">Propietario o representante legal</div></td><td><div class="line">Contador</div></td></tr></table>
+@if($book['certification'] ?? null)
+<p class="certification">{{ $book['certification']['text'] }}</p>
+@if($book['certification']['place_date'] !== '')<p class="certification">{{ $book['certification']['place_date'] }}</p>@endif
+<table class="signatures"><tr>@foreach($book['certification']['signatures'] as $signature)<td><div class="line">{{ $signature['name'] }}<br>{{ $signature['title'] }}</div></td>@endforeach</tr></table>
 @endif
 <p class="meta">Impreso el {{ $book['printed_at'] }} con Atlantia Finance.</p>
 </body></html>

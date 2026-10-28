@@ -391,7 +391,9 @@ class SalesController extends Controller
             'fiscal_document_type' => ['nullable', Rule::in(DocumentVatCalculator::SALE_TYPES)],
             'fiscal_series' => 'nullable|string|max:40',
             'fiscal_number' => 'nullable|string|max:40',
-            'fiscal_authorization' => 'nullable|string|max:64']);
+            'fiscal_authorization' => 'nullable|string|max:64',
+            'customs_document_type' => ['nullable', Rule::in(['DUA', 'DUCA', 'FAUCA'])],
+            'customs_document_number' => ['nullable', 'string', 'max:50', 'regex:/^[0-9A-Za-z-]+$/']]);
         $drafts->create($org, $request->user(), $record, $data);
 
         return to_route('accounting.invoice', [$company, $data['request_id']]);

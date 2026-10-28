@@ -9,6 +9,7 @@ use App\Services\Accounting\InventoryService;
 use App\Services\Accounting\ProductionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -41,9 +42,11 @@ class ProductionController extends Controller
     {
         [$organization, $record] = $this->scopeCompany($request, $company, 'journal.create');
         $data = $request->validate(['product_id' => 'required|integer', 'labor' => 'nullable|numeric|min:0|max:100000000', 'overhead' => 'nullable|numeric|min:0|max:100000000',
-            'components' => 'required|array|min:1|max:100', 'components.*.item_id' => 'required|integer', 'components.*.quantity' => 'required|string|max:20']);
+            'components' => 'required|array|min:1|max:100', 'components.*.item_id' => 'required|integer', 'components.*.quantity' => 'required|string|max:20',
+            'components.*.standard_cost' => 'nullable|string|max:20']);
         $this->production->saveRecipe($organization, $request->user(), $record->id, (int) $data['product_id'],
-            array_values(array_map(fn (array $component): array => ['item_id' => (int) $component['item_id'], 'quantity' => (string) $component['quantity']], $data['components'])),
+            array_values(array_map(fn (array $component): array => ['item_id' => (int) $component['item_id'], 'quantity' => (string) $component['quantity'],
+                'standard_cost' => $component['standard_cost'] ?? null], $data['components'])),
             (int) round((float) ($data['labor'] ?? 0) * 100), (int) round((float) ($data['overhead'] ?? 0) * 100));
 
         return back()->with('workspace_notice', 'Receta guardada.');
@@ -53,9 +56,23 @@ class ProductionController extends Controller
     {
         [$organization, $record] = $this->scopeCompany($request, $company, 'journal.create');
         $data = $request->validate(['recipe_id' => 'required|integer', 'quantity' => 'required|string|max:20', 'produced_on' => 'required|date_format:Y-m-d|before_or_equal:today',
-            'reference' => 'nullable|string|max:80']);
-        $this->production->produce($organization, $request->user(), $record, (int) $data['recipe_id'], $data['quantity'], $data['produced_on'], $data['reference'] ?? null);
+            'reference' => 'nullable|string|max:80', 'actual' => 'nullable|array:components,labor,overhead', 'actual.components' => 'nullable|array|max:100',
+            'actual.components.*' => 'nullable|string|max:20', 'actual.labor' => 'nullable|numeric|min:0|max:100000000', 'actual.overhead' => 'nullable|numeric|min:0|max:100000000']);
+        $actual = (array) ($data['actual'] ?? []);
+        $components = [];
+        foreach ((array) ($actual['components'] ?? []) as $itemId => $quantity) {
+            if (filled($quantity)) {
+                $components[(int) $itemId] = (string) $quantity;
+            }
+        }
+        $orderId = $this->production->produce($organization, $request->user(), $record, (int) $data['recipe_id'], $data['quantity'], $data['produced_on'], $data['reference'] ?? null, [
+            'components' => $components,
+            'labor_cents' => filled($actual['labor'] ?? null) ? (int) round((float) $actual['labor'] * 100) : null,
+            'overhead_cents' => filled($actual['overhead'] ?? null) ? (int) round((float) $actual['overhead'] * 100) : null,
+        ]);
+        $variance = (int) DB::table('production_orders')->where('id', $orderId)->selectRaw('total_cents - standard_cents as variance')->value('variance');
 
-        return back()->with('workspace_notice', 'Producción registrada: materias primas consumidas, producto terminado en el kardex y asiento en borrador.');
+        return back()->with('workspace_notice', 'Producción registrada a costo estándar, con su asiento en borrador.'
+            .($variance === 0 ? ' Sin variaciones.' : ' Variación '.($variance > 0 ? 'desfavorable' : 'favorable').' de Q'.number_format(abs($variance) / 100, 2).'.'));
     }
 }

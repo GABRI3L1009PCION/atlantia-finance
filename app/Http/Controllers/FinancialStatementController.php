@@ -6,11 +6,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ScopesAccountingCompany;
 use App\Services\Accounting\FinancialRatioService;
+use App\Services\Accounting\FinancialStatementReviewService;
 use App\Services\Accounting\FinancialStatementService;
+use App\Services\Accounting\StatementCertificationService;
 use App\Services\Accounting\StatementNoteService;
 use App\Services\ReportExportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -20,7 +23,8 @@ class FinancialStatementController extends Controller
 {
     use ScopesAccountingCompany;
 
-    public function __construct(private FinancialStatementService $statements, private StatementNoteService $notes, private FinancialRatioService $ratios) {}
+    public function __construct(private FinancialStatementService $statements, private StatementNoteService $notes, private FinancialRatioService $ratios,
+        private FinancialStatementReviewService $review, private StatementCertificationService $certification) {}
 
     public function index(Request $request, string $company): Response
     {
@@ -30,7 +34,9 @@ class FinancialStatementController extends Controller
         return Inertia::render('accounting/financial-statements', ['company' => $record, 'filters' => $filters, 'set' => $this->statements->build($record->id, $filters['from'], $filters['to'], $filters['compare']),
             'notes' => $this->notes->list($record->id, $filters['year']), 'ratios' => $this->ratios->analysis($record->id, $filters['from'], $filters['to']), 'definitions' => FinancialRatioService::DEFINITIONS,
             'monthly' => $this->ratios->monthly($record->id, $filters['to']), 'canManageNotes' => $this->can($request, $organization, $record, 'journal.create'),
-            'canExport' => $this->can($request, $organization, $record, 'reports.export')]);
+            'canExport' => $this->can($request, $organization, $record, 'reports.export'), 'review' => $this->review->review($record->id, $filters['from'], $filters['to']),
+            'signers' => $this->certification->signers($record->id), 'accountantTitles' => StatementCertificationService::ACCOUNTANT_TITLES,
+            'signerTitles' => StatementCertificationService::SIGNER_TITLES, 'canSign' => $this->can($request, $organization, $record, 'journal.review')]);
     }
 
     public function export(Request $request, string $company, ReportExportService $exports): HttpResponse
@@ -46,9 +52,29 @@ class FinancialStatementController extends Controller
         }
         $set = $this->statements->build($record->id, $filters['from'], $filters['to'], $filters['compare']);
         $sheet = $this->statements->exportRows($set, $data['statement']);
+        $title = FinancialStatementService::TITLES[$data['statement']];
+        [$figure, $figureLabel] = match ($data['statement']) {
+            'position' => [(int) $set['position']['totals']['assets'], 'un total de activo'],
+            'income' => [(int) $set['income']['totals']['net_result'], 'un resultado del período'],
+            default => [(int) $set['cash_flow']['totals']['cash_close'], 'un efectivo al final del período'],
+        };
 
-        return $exports->download([...$base, 'title' => FinancialStatementService::TITLES[$data['statement']], 'filename' => $data['statement'].'-'.$record->tax_id.'-'.$filters['to'],
-            'note' => 'Elaborado con los asientos contabilizados; los asientos de cierre no se incluyen.', 'headers' => $sheet['headers'], 'money' => $sheet['money'], 'rows' => $sheet['rows']], $format);
+        return $exports->download([...$base, 'title' => $title, 'filename' => $data['statement'].'-'.$record->tax_id.'-'.$filters['to'],
+            'note' => 'Elaborado con los asientos contabilizados; los asientos de cierre no se incluyen.', 'headers' => $sheet['headers'], 'money' => $sheet['money'], 'rows' => $sheet['rows'],
+            'certification' => $this->certification->certify($record, mb_strtolower(mb_substr($title, 0, 1)).mb_substr($title, 1), $data['statement'] === 'position' ? $filters['to'] : $filters['from'], $filters['to'], $figure, $figureLabel)], $format);
+    }
+
+    public function saveSigners(Request $request, string $company): RedirectResponse
+    {
+        [$organization, $record] = $this->scopeCompany($request, $company, 'journal.review');
+        $data = $request->validate(['signer_name' => 'required|string|max:150', 'signer_title' => ['required', Rule::in(StatementCertificationService::SIGNER_TITLES)],
+            'accountant_name' => 'required|string|max:150', 'accountant_title' => ['required', Rule::in(StatementCertificationService::ACCOUNTANT_TITLES)],
+            'accountant_registration' => ['required', 'string', 'max:30', 'regex:/^[0-9A-Za-z-]+$/'], 'signing_place' => 'nullable|string|max:120']);
+        $this->certification->save($organization, $request->user(), $record->id, ['signer_name' => (string) $data['signer_name'], 'signer_title' => (string) $data['signer_title'],
+            'accountant_name' => (string) $data['accountant_name'], 'accountant_title' => (string) $data['accountant_title'],
+            'accountant_registration' => (string) $data['accountant_registration'], 'signing_place' => (string) ($data['signing_place'] ?? '')]);
+
+        return back()->with('workspace_notice', 'Firmantes guardados. La certificación sale en los estados financieros y en los libros de Inventarios y Estados Financieros.');
     }
 
     public function seedNotes(Request $request, string $company): RedirectResponse

@@ -8,5 +8,10 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; } thead { d
 <div class="scope">{{ $report['scope'] }}</div><div class="note">{{ $report['note'] }}</div>
 <table><thead><tr>@foreach($report['headers'] as $heading)<th>{{ $heading }}</th>@endforeach</tr></thead>
 <tbody>@foreach($report['rows'] as $row)<tr>@foreach($row as $index => $cell)<td class="{{ in_array($index, $report['money']) ? 'number' : '' }}">{{ in_array($index, $report['money']) ? number_format($cell / 100, 2, '.', ',') : $cell }}</td>@endforeach</tr>@endforeach</tbody></table>
+@if($report['certification'] ?? null)
+<p style="margin-top: 18px; text-align: justify; line-height: 1.5;">{{ $report['certification']['text'] }}</p>
+@if($report['certification']['place_date'] !== '')<p>{{ $report['certification']['place_date'] }}</p>@endif
+<table style="margin-top: 46px;"><tr>@foreach($report['certification']['signatures'] as $signature)<td style="width: 50%; text-align: center; border: 0;"><div style="border-top: 1px solid #142135; width: 70%; margin: 0 auto; padding-top: 4px;">{{ $signature['name'] }}<br>{{ $signature['title'] }}</div></td>@endforeach</tr></table>
+@endif
 <p>Generado: {{ now()->format('d/m/Y H:i') }} · Atlantia Finance</p>
 </body></html>

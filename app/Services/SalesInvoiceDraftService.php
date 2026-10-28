@@ -27,7 +27,7 @@ class SalesInvoiceDraftService
     ) {}
 
     /**
-     * @param  array{request_id: string, customer_id: int|string, issued_on: string, due_on?: string|null, currency?: string|null, lines: list<array{description: string, quantity: int|string, unit_price: string, tax_treatment?: string|null}>, fiscal_document_type?: string|null, fiscal_series?: string|null, fiscal_number?: string|null, fiscal_authorization?: string|null}  $data
+     * @param  array{request_id: string, customer_id: int|string, issued_on: string, due_on?: string|null, currency?: string|null, lines: list<array{description: string, quantity: int|string, unit_price: string, tax_treatment?: string|null}>, fiscal_document_type?: string|null, fiscal_series?: string|null, fiscal_number?: string|null, fiscal_authorization?: string|null, customs_document_type?: string|null, customs_document_number?: string|null}  $data
      * @param  array<string, mixed>  $auditContext
      * @return array{id: int, created: bool}
      */
@@ -85,6 +85,8 @@ class SalesInvoiceDraftService
                 'issued_on' => $data['issued_on'], 'due_on' => $data['due_on'], 'total_cents' => $total,
                 'currency' => $currency, 'exchange_rate' => $rate, 'foreign_total_cents' => $currency === 'GTQ' ? null : $foreignTotal,
                 ...$fiscal, ...Arr::except($breakdown, 'line_vat_cents'),
+                'customs_document_type' => filled($data['customs_document_number'] ?? null) ? ($data['customs_document_type'] ?? 'DUA') : null,
+                'customs_document_number' => filled($data['customs_document_number'] ?? null) ? trim((string) $data['customs_document_number']) : null,
                 'created_by' => $user->id, 'created_at' => now(), 'updated_at' => now()]);
             DB::table('sales_invoice_lines')->insert(array_map(fn ($line) => [...$line, 'sales_invoice_id' => $id], $lines));
             $this->accounting->audit($organization, $user, 'sales.invoice.drafted', 'sales_invoices', $id, ['total_cents' => $total, ...$auditContext]);

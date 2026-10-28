@@ -124,6 +124,8 @@ export default function Sales({
         fiscal_series: '',
         fiscal_number: '',
         fiscal_authorization: '',
+        customs_document_type: 'DUA',
+        customs_document_number: '',
         lines: [
             {
                 description: '',
@@ -1031,6 +1033,63 @@ export default function Sales({
                                                         : 'Los precios incluyen IVA. El sistema separa el IVA débito fiscal por línea.'
                                                 }
                                             />
+                                            <fieldset className="col-span-full grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:grid-cols-3">
+                                                <legend className="px-1 text-xs font-semibold text-slate-600">
+                                                    Exportación (opcional)
+                                                </legend>
+                                                <label>
+                                                    Documento aduanero
+                                                    <select
+                                                        className={field}
+                                                        value={
+                                                            draft.data
+                                                                .customs_document_type
+                                                        }
+                                                        onChange={(event) =>
+                                                            draft.setData(
+                                                                'customs_document_type',
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                    >
+                                                        <option value="DUA">
+                                                            DUA
+                                                        </option>
+                                                        <option value="DUCA">
+                                                            DUCA
+                                                        </option>
+                                                        <option value="FAUCA">
+                                                            FAUCA
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                                <label>
+                                                    Número del documento
+                                                    <input
+                                                        className={field}
+                                                        value={
+                                                            draft.data
+                                                                .customs_document_number
+                                                        }
+                                                        onChange={(event) =>
+                                                            draft.setData(
+                                                                'customs_document_number',
+                                                                event.target.value.replace(
+                                                                    /\s+/g,
+                                                                    '',
+                                                                ),
+                                                            )
+                                                        }
+                                                    />
+                                                </label>
+                                                <p className="self-end text-xs text-slate-500">
+                                                    Solo en ventas al exterior:
+                                                    el Libro de Ventas y Asiste
+                                                    Libros las reportan como
+                                                    exportación.
+                                                </p>
+                                            </fieldset>
                                         </div>
                                         <div className="mt-6 space-y-3">
                                             {draft.data.lines.map(

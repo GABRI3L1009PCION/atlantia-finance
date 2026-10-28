@@ -17,7 +17,8 @@ use stdClass;
  * Load files for the SAT desktop tools, built from the books already kept in the system:
  *
  * - Asiste Libros (Libros de Compras y Ventas del IVA): text file .asl, one line per document with the 32 columns of
- *   "Datos a incluir en archivo de carga" v1.1.9, separated by "|", without titles and for a single month.
+ *   "Datos a incluir en archivo de carga" v1.1.9, separated by "|", without titles and for a single month. Export sales
+ *   carry their customs document (DUA, DUCA or FAUCA).
  * - Informe de Inventarios (semestral or at the request of Fiscalización): tab-delimited .txt with the header row of
  *   the SAT instructivo and the name SAT_RSI_<NIT>_<TIPO>_dd_mm_aa.txt.
  * - RetenISR 2 Escritorio: Excel 97-2003 workbooks with one sheet laid out as the SAT "Modelos de carga" (facturas
@@ -76,6 +77,9 @@ class SatFileService
         $establishment = $this->digits((string) (DB::table('company_fel_settings')->where('company_id', $company->id)->value('establishment_code') ?? '1')) ?: '1';
         $lines = [];
         $warnings = [];
+        $customs = DB::table('sales_invoices')->where('company_id', $company->id)->whereNotNull('customs_document_number')
+            ->whereIn('id', array_column(array_filter($book['sales'], fn (array $row): bool => $row['source'] === 'sales_invoice'), 'source_id') ?: [-1])
+            ->get(['id', 'customs_document_type', 'customs_document_number'])->keyBy('id');
         foreach (['purchases' => 'C', 'sales' => 'V'] as $key => $letter) {
             if (! in_array($key, $books, true)) {
                 continue;
@@ -88,7 +92,8 @@ class SatFileService
 
                     continue;
                 }
-                $line = $this->asisteLine($row, $letter, $establishment, $number);
+                $export = $letter === 'V' && $row['source'] === 'sales_invoice' ? $customs->get($row['source_id']) : null;
+                $line = $this->asisteLine($row, $letter, $establishment, $number, $export);
                 if ($line === null) {
                     $warnings[] = $label.': falta el NIT o DPI y se omitió.';
 
@@ -195,12 +200,13 @@ class SatFileService
     }
 
     /**
-     * The 32 columns of one document, or null when it lacks the counterpart's identification.
+     * The 32 columns of one document, or null when it lacks the counterpart's identification. An export sale ($export,
+     * with its DUA, DUCA or FAUCA) is transaction "E" and its values go to the columns of operations abroad.
      *
      * @param  VatRow  $row
      * @return list<string>|null
      */
-    private function asisteLine(array $row, string $letter, string $establishment, string $number): ?array
+    private function asisteLine(array $row, string $letter, string $establishment, string $number, ?stdClass $export = null): ?array
     {
         $type = $this->asisteDocument($row, $letter);
         $taxId = strtoupper((string) preg_replace('/[\s-]+/', '', (string) ($row['tax_id'] ?? '')));
@@ -210,7 +216,7 @@ class SatFileService
         if ($type === 'FE' && preg_match('/^\d{13}$/', $taxId) === 1) {
             [$identityType, $identityNumber, $taxId] = ['DPI', $taxId, ''];
         }
-        if ($taxId === '' && $identityNumber === '') {
+        if ($taxId === '' && $identityNumber === '' && $export === null) {
             return null;
         }
 
@@ -224,10 +230,12 @@ class SatFileService
         $small = abs($row['small_taxpayer_cents']);
         $isSmall = $letter === 'C' && in_array($type, ['FPC', 'FPE'], true);
         $money = fn (int $cents): string => number_format($cents / 100, 2, '.', '');
-        $taxable = $isSmall ? array_fill(0, 8, '') : [
-            $money($goods + $goodsVat), '0.00', $money($services + $vat - $goodsVat), '0.00',
-            $money($exemptIsService ? 0 : $exempt), '0.00', $money($exemptIsService ? $exempt : 0), '0.00',
-        ];
+        $local = [$money($goods + $goodsVat), $money($services + $vat - $goodsVat), $money($exemptIsService ? 0 : $exempt), $money($exemptIsService ? $exempt : 0)];
+        $abroad = ['0.00', '0.00', '0.00', '0.00'];
+        if ($export !== null) {
+            [$local, $abroad] = [$abroad, $local];
+        }
+        $taxable = $isSmall ? array_fill(0, 8, '') : [$local[0], $abroad[0], $local[1], $abroad[1], $local[2], $abroad[2], $local[3], $abroad[3]];
         $smallTaxpayer = $isSmall ? [$money($small + $goods + $services + $exempt), '0.00', '0.00', '0.00'] : ['', '', '', ''];
 
         return [
@@ -239,13 +247,13 @@ class SatFileService
             Carbon::parse($row['date'])->format('d/m/Y'),
             mb_substr($taxId, 0, 15),
             $this->text($row['name'], 100),
-            'L',
-            '',
+            $export === null ? 'L' : 'E',
+            $export === null ? '' : ($services + ($exemptIsService ? $exempt : 0) > $goods + ($exemptIsService ? 0 : $exempt) ? 'SERVICIO' : 'BIEN'),
             $letter === 'C' ? '' : ($annulled ? 'A' : 'E'),
             $identityType,
             $identityNumber,
-            '',
-            '',
+            $export === null ? '' : (string) $export->customs_document_type,
+            $export === null ? '' : $this->text((string) $export->customs_document_number, 50),
             ...$taxable,
             '', '', '',
             ...$smallTaxpayer,

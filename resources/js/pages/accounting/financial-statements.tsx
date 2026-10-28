@@ -21,6 +21,14 @@ import {
     primary,
     secondary,
 } from '@/components/accounting-ui';
+import {
+    StatementReviewCard,
+    StatementSignersCard,
+} from '@/components/statement-review';
+import type {
+    StatementReview,
+    StatementSigners,
+} from '@/components/statement-review';
 
 type Line = {
     code: string;
@@ -117,6 +125,11 @@ type Props = {
     monthly: Month[];
     canManageNotes: boolean;
     canExport: boolean;
+    review: StatementReview;
+    signers: StatementSigners;
+    accountantTitles: string[];
+    signerTitles: string[];
+    canSign: boolean;
 };
 
 const tabs = [
@@ -313,6 +326,11 @@ export default function FinancialStatements({
     monthly,
     canManageNotes,
     canExport,
+    review,
+    signers,
+    accountantTitles,
+    signerTitles,
+    canSign,
 }: Props) {
     const base = `/accounting/companies/${company.public_id}/financial-statements`;
     const [tab, setTab] = useState<(typeof tabs)[number][0]>('position');
@@ -450,6 +468,16 @@ export default function FinancialStatements({
                     <button className={primary}>Consultar</button>
                 </form>
             </Card>
+
+            <StatementReviewCard review={review} />
+            {canSign && (
+                <StatementSignersCard
+                    action={`${base}/signers`}
+                    signers={signers}
+                    accountantTitles={accountantTitles}
+                    signerTitles={signerTitles}
+                />
+            )}
 
             <div className="flex flex-wrap gap-2" role="tablist">
                 {tabs.map(([key, label]) => (

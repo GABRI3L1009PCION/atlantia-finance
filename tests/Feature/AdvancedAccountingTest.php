@@ -4,7 +4,9 @@ use App\Models\Organization;
 use App\Models\PlanPrice;
 use App\Models\User;
 use App\Services\Accounting\AccountingPolicyService;
+use App\Services\Accounting\FinancialStatementReviewService;
 use App\Services\Accounting\FinancialStatementService;
+use App\Services\Accounting\StatementCertificationService;
 use App\Services\AccountingAutomationService;
 use App\Services\Fiscal\IsrService;
 use App\Services\FiscalConfigurationService;
@@ -381,4 +383,42 @@ test('alert preferences are saved per person, overridden per company and alerts 
     $first = $dispatcher->run(now('America/Guatemala')->setTime(9, 0));
     $second = $dispatcher->run(now('America/Guatemala')->setTime(10, 0));
     expect($first['notifications'])->toBeGreaterThanOrEqual(1)->and($second['notifications'])->toBe(0);
+});
+
+test('the review before signing catches missing depreciation, income tax without provision and negative cash', function () {
+    $f = advFixture();
+    advPost($f, '2025-01-02', [['1102', '1000.00', '0'], ['3101', '0', '1000.00']]);
+    advPost($f, '2025-01-05', [['1401', '600.00', '0'], ['1102', '0', '600.00']]);
+    advPost($f, '2025-06-01', [['1101', '200.00', '0'], ['4101', '0', '200.00']]);
+    $review = fn (): array => collect(app(FinancialStatementReviewService::class)->review($f['companyId'], '2025-01-01', '2025-12-31')['checks'])->pluck('status', 'key')->all();
+
+    expect($review())->toMatchArray(['balance' => 'ok', 'cash_flow' => 'ok', 'negative_cash' => 'ok', 'drafts' => 'ok', 'depreciation' => 'warning', 'income_tax' => 'warning', 'vat' => 'ok', 'banks' => 'ok']);
+
+    advPost($f, '2025-12-31', [['5206', '60.00', '0'], ['1402', '0', '60.00']]);
+    advPost($f, '2025-12-31', [['5201', '500.00', '0'], ['1101', '0', '500.00']]);
+    $result = app(FinancialStatementReviewService::class)->review($f['companyId'], '2025-01-01', '2025-12-31');
+    expect($review())->toMatchArray(['depreciation' => 'ok', 'negative_cash' => 'error', 'income_tax' => 'ok'])->and($result['ready'])->toBeFalse()->and($result['errors'])->toBe(1);
+
+    $this->get(route('accounting.financialStatements', [$f['uuid'], 'year' => 2025]))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('review.errors', 1)->where('canSign', true)->where('signers.accountant_title', 'Perito Contador'));
+});
+
+test('the accountant certification carries the signers, the figure in words and goes under the statements and the legal books', function () {
+    $f = advFixture();
+    advPost($f, '2025-01-02', [['1102', '1000.00', '0'], ['3101', '0', '1000.00']]);
+    $this->put(route('accounting.statementSigners', $f['uuid']), ['signer_name' => 'Pedro Ejemplo', 'signer_title' => 'Propietario', 'accountant_name' => 'Ana Ejemplo',
+        'accountant_title' => 'Perito Contador', 'accountant_registration' => '1234567-8', 'signing_place' => 'Puerto Barrios, Izabal'])->assertSessionHasNoErrors();
+    $this->put(route('accounting.statementSigners', $f['uuid']), ['signer_name' => 'X', 'signer_title' => 'Gerente', 'accountant_name' => 'Y', 'accountant_title' => 'Perito Contador',
+        'accountant_registration' => '12 34'])->assertSessionHasErrors(['signer_title', 'accountant_registration']);
+
+    $company = DB::table('companies')->find($f['companyId']);
+    $certification = app(StatementCertificationService::class)->certify($company, 'estado de situación financiera', '2025-12-31', '2025-12-31', 22951657, 'un total de activo');
+    expect($certification['text'])->toContain('El infrascrito Perito Contador, Ana Ejemplo, registrado en la Superintendencia de Administración Tributaria con el número 1234567-8')
+        ->toContain('Comercial Maya, S.A., NIT 1234567-8, al 31 de diciembre de 2025')
+        ->toContain('DOSCIENTOS VEINTINUEVE MIL QUINIENTOS DIECISÉIS QUETZALES CON 57/100 (Q229,516.57)')
+        ->and($certification['place_date'])->toBe('Puerto Barrios, Izabal, 31 de diciembre de 2025.')
+        ->and($certification['signatures'])->toBe([['name' => 'Pedro Ejemplo', 'title' => 'Propietario'], ['name' => 'Ana Ejemplo', 'title' => 'Perito Contador · Registro SAT 1234567-8']]);
+
+    $this->get(route('accounting.financialStatementsExport', [$f['uuid'], 'year' => 2025, 'statement' => 'position', 'format' => 'pdf']))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+    $this->get(route('accounting.financialStatementsExport', [$f['uuid'], 'year' => 2025, 'statement' => 'income', 'format' => 'xlsx']))->assertOk();
 });

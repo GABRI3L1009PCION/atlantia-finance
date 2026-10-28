@@ -207,6 +207,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         Route::get('companies/{company}/financial-statements', [FinancialStatementController::class, 'index'])->name('financialStatements');
         Route::get('companies/{company}/financial-statements/export', [FinancialStatementController::class, 'export'])->middleware('throttle:10,1')->name('financialStatementsExport');
+        Route::put('companies/{company}/financial-statements/signers', [FinancialStatementController::class, 'saveSigners'])->middleware('throttle:20,1')->name('statementSigners');
         Route::post('companies/{company}/financial-statements/notes/seed', [FinancialStatementController::class, 'seedNotes'])->middleware('throttle:10,1')->name('statementNotesSeed');
         Route::post('companies/{company}/financial-statements/notes', [FinancialStatementController::class, 'saveNote'])->middleware('throttle:30,1')->name('statementNoteSave');
         Route::post('companies/{company}/financial-statements/notes/{number}/publish', [FinancialStatementController::class, 'publishNote'])->whereNumber('number')->middleware('throttle:20,1')->name('statementNotePublish');

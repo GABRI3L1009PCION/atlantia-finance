@@ -155,3 +155,23 @@ test('the SAT files screen previews each file and downloads them with the exact 
     $response = $this->actingAs($stranger)->get(route('accounting.satFileDownload', [$f['uuid'], 'asiste-libros']));
     expect($response->status())->not->toBe(200)->and($response->headers->has('Content-Disposition'))->toBeFalse();
 });
+
+test('an export sale with its DUA goes to Asiste Libros as transaction E with the customs document and the values abroad', function () {
+    $f = satFixture();
+    $sale = (string) Str::uuid();
+    $this->post(route('accounting.salesStore', $f['uuid']), ['request_id' => $sale, 'customer_id' => $f['customerId'], 'issued_on' => '2026-08-14', 'due_on' => '2026-08-30',
+        'fiscal_document_type' => 'FACT', 'fiscal_series' => 'F001', 'fiscal_number' => '502', 'customs_document_type' => 'DUA', 'customs_document_number' => 'GT-26-000123',
+        'lines' => [['description' => 'Cardamomo de exportación', 'quantity' => 1, 'unit_price' => '5000.00', 'tax_treatment' => 'exempt']]])->assertSessionHasNoErrors();
+    $this->post(route('accounting.invoiceProcess', [$f['uuid'], $sale]), ['action' => 'issue'])->assertSessionHasNoErrors();
+    $this->post(route('accounting.salesStore', $f['uuid']), ['request_id' => (string) Str::uuid(), 'customer_id' => $f['customerId'], 'issued_on' => '2026-08-14', 'due_on' => '2026-08-30',
+        'customs_document_type' => 'BL', 'customs_document_number' => 'X 1', 'lines' => [['description' => 'Otro', 'quantity' => 1, 'unit_price' => '10.00']]])
+        ->assertSessionHasErrors(['customs_document_type', 'customs_document_number']);
+
+    $file = app(SatFileService::class)->asisteLibros(DB::table('companies')->find($f['companyId']), 2026, 8, ['sales']);
+    $columns = explode('|', rtrim(mb_convert_encoding($file['content'], 'UTF-8', 'Windows-1252'), "\r\n"));
+
+    expect($columns)->toHaveCount(32)
+        ->and([$columns[8], $columns[9], $columns[10], $columns[13], $columns[14]])->toBe(['E', 'BIEN', 'E', 'DUA', 'GT-26-000123'])
+        ->and(array_slice($columns, 15, 8))->toBe(['0.00', '0.00', '0.00', '0.00', '0.00', '5000.00', '0.00', '0.00'])
+        ->and([$columns[30], $columns[31]])->toBe(['0.00', '5000.00']);
+});
