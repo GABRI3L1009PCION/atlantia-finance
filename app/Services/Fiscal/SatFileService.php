@@ -11,6 +11,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xls;
+use RuntimeException;
 use stdClass;
 
 /**
@@ -169,10 +170,14 @@ class SatFileService
                 }
             }
         }
-        $path = (string) tempnam(sys_get_temp_dir(), 'retenisr');
-        (new Xls($workbook))->save($path);
-        $content = (string) file_get_contents($path);
-        unlink($path);
+        $stream = fopen('php://memory', 'w+b');
+        if ($stream === false) {
+            throw new RuntimeException('No fue posible preparar el archivo de RetenISR.');
+        }
+        (new Xls($workbook))->save($stream);
+        rewind($stream);
+        $content = (string) stream_get_contents($stream);
+        fclose($stream);
 
         return ['filename' => sprintf('retenisr-%s-%04d-%02d-%s.xls', str_replace('_', '-', $kind), $year, $month, $this->digits((string) $company->tax_id) ?: 'empresa'),
             'content' => $content, 'mime' => 'application/vnd.ms-excel', 'lines' => count($rows), 'warnings' => $warnings];
