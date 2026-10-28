@@ -23,12 +23,12 @@ beforeEach(function () {
  *
  * @return array{owner: User, organization: Organization, uuid: string, companyId: int, supplierId: int, customerId: int, accounts: array<string, int>}
  */
-function satFixture(): array
+function satFixture(string $plan = 'professional'): array
 {
     $owner = User::factory()->create();
     $organization = Organization::create(['name' => 'Firma SAT '.Str::random(4), 'status' => 'active']);
     $organization->users()->attach($owner->id, ['role' => 'owner', 'status' => 'active']);
-    $price = PlanPrice::whereHas('plan', fn ($query) => $query->where('code', 'professional'))->where('billing_period', 'monthly')->firstOrFail();
+    $price = PlanPrice::whereHas('plan', fn ($query) => $query->where('code', $plan))->where('billing_period', 'monthly')->firstOrFail();
     $organization->subscriptions()->create(['status' => 'active'])->items()->create(['plan_price_id' => $price->id, 'item_type' => 'base_plan']);
     $office = $organization->offices()->create(['code' => 'MAIN', 'name' => 'Sede', 'status' => 'active', 'is_primary' => true]);
     $uuid = (string) Str::uuid();
@@ -174,4 +174,13 @@ test('an export sale with its DUA goes to Asiste Libros as transaction E with th
         ->and([$columns[8], $columns[9], $columns[10], $columns[13], $columns[14]])->toBe(['E', 'BIEN', 'E', 'DUA', 'GT-26-000123'])
         ->and(array_slice($columns, 15, 8))->toBe(['0.00', '0.00', '0.00', '0.00', '0.00', '5000.00', '0.00', '0.00'])
         ->and([$columns[30], $columns[31]])->toBe(['0.00', '5000.00']);
+});
+
+test('the Esencial plan downloads the Asiste Libros file but RetenISR and the inventory report come from Profesional', function () {
+    $f = satFixture('essential');
+    $this->get(route('accounting.satFiles', [$f['uuid'], 'year' => 2026, 'month' => 8]))->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('hasAdvanced', false));
+    $this->get(route('accounting.satFileDownload', [$f['uuid'], 'asiste-libros', 'year' => 2026, 'month' => 8]))->assertOk();
+    $this->get(route('accounting.satFileDownload', [$f['uuid'], 'retenisr', 'year' => 2026, 'month' => 8, 'kind' => 'rentas_trabajo']))->assertForbidden();
+    $this->get(route('accounting.satFileDownload', [$f['uuid'], 'inventarios', 'as_of' => '2026-06-30']))->assertForbidden();
 });

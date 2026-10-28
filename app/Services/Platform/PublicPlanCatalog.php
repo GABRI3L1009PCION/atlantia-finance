@@ -97,8 +97,8 @@ class PublicPlanCatalog
     }
 
     /**
-     * The VAT books (libros de compras y ventas) and advanced reports are part of "advanced_reports": a plan without them
-     * says so, like payroll, so no firm buys it expecting them.
+     * Budgets, RetenISR files and the other advanced reports are part of "advanced_reports": a plan without them says so,
+     * like payroll, so no firm buys it expecting them. The VAT books are in every plan.
      *
      * @return list<array{text: string, hint: string|null}>
      */
@@ -108,7 +108,7 @@ class PublicPlanCatalog
             return [];
         }
 
-        return [['text' => $reportsFrom === null ? 'Libros de IVA y reportes avanzados no incluidos' : 'Libros de IVA y reportes avanzados no incluidos (disponibles desde el plan '.$reportsFrom.')', 'hint' => null]];
+        return [['text' => $reportsFrom === null ? 'Presupuestos y reportes avanzados no incluidos' : 'Presupuestos y reportes avanzados no incluidos (disponibles desde el plan '.$reportsFrom.')', 'hint' => null]];
     }
 
     /**

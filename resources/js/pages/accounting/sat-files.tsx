@@ -20,6 +20,7 @@ type Props = {
     concepts: Record<string, string>;
     semesterDate: string;
     canExport: boolean;
+    hasAdvanced: boolean;
 };
 
 const MONTHS = [
@@ -61,6 +62,7 @@ export default function SatFiles({
     concepts,
     semesterDate,
     canExport,
+    hasAdvanced,
 }: Props) {
     const base = `/accounting/companies/${company.public_id}/sat-files`;
     const period = `year=${year}&month=${month}`;
@@ -150,101 +152,125 @@ export default function SatFiles({
                 </div>
             </Card>
 
-            <Card title="RetenISR 2 Escritorio">
-                <p className="text-sm text-slate-600">
-                    Libros de Excel con el formato de los modelos de carga de la
-                    SAT (una sola hoja). En RetenISR use “Carga archivo Excel” y
-                    valide antes de generar las constancias.
-                </p>
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    {Object.entries(retenisrFiles).map(([kind, label]) => {
-                        const file = summary.retenisr[kind];
+            {hasAdvanced ? (
+                <>
+                    <Card title="RetenISR 2 Escritorio">
+                        <p className="text-sm text-slate-600">
+                            Libros de Excel con el formato de los modelos de
+                            carga de la SAT (una sola hoja). En RetenISR use
+                            “Carga archivo Excel” y valide antes de generar las
+                            constancias.
+                        </p>
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                            {Object.entries(retenisrFiles).map(
+                                ([kind, label]) => {
+                                    const file = summary.retenisr[kind];
 
-                        return (
-                            <article
-                                key={kind}
-                                className="rounded-xl border border-slate-200 p-3 text-sm"
-                            >
-                                <p className="font-semibold">{label}</p>
-                                <p className="text-slate-600">
-                                    {file.lines} registro(s)
-                                </p>
-                                <Warnings items={file.warnings} />
-                                <div className="mt-2">
-                                    {file.lines === 0 ? (
-                                        <Empty>Sin datos en el mes.</Empty>
-                                    ) : (
-                                        link(
-                                            secondary,
-                                            `${base}/retenisr?${period}&kind=${kind}`,
-                                            'Descargar .xls',
-                                        )
-                                    )}
-                                </div>
-                            </article>
-                        );
-                    })}
-                </div>
-                <details className="mt-3 text-xs text-slate-600">
-                    <summary className="cursor-pointer">
-                        Tabla de conceptos (opcional simplificado)
-                    </summary>
-                    <ul className="mt-1 grid gap-1 md:grid-cols-2">
-                        {Object.entries(concepts).map(([code, label]) => (
-                            <li key={code}>
-                                {code}. {label}
-                            </li>
-                        ))}
-                    </ul>
-                </details>
-            </Card>
-
-            <Card title="Informe de Inventarios">
-                <p className="text-sm text-slate-600">
-                    Archivo de texto delimitado por tabulaciones con el nombre
-                    que exige la SAT (SAT_RSI_NIT_TIPO_dd_mm_aa.txt). El
-                    semestral se presenta con existencias al 30 de junio y al 31
-                    de diciembre, a costo promedio del kardex.
-                </p>
-                <div className="mt-3 flex flex-wrap items-end gap-3">
-                    <Label text="Existencias al">
-                        <input
-                            className={field}
-                            type="date"
-                            value={asOf}
-                            onChange={(e) => setAsOf(e.target.value)}
-                        />
-                    </Label>
-                    <Label text="Tipo de inventario">
-                        <select
-                            className={field}
-                            value={type}
-                            onChange={(e) => setType(e.target.value)}
-                        >
-                            {Object.entries(inventoryTypes).map(
-                                ([code, label]) => (
-                                    <option key={code} value={code}>
-                                        {code} · {label}
-                                    </option>
-                                ),
+                                    return (
+                                        <article
+                                            key={kind}
+                                            className="rounded-xl border border-slate-200 p-3 text-sm"
+                                        >
+                                            <p className="font-semibold">
+                                                {label}
+                                            </p>
+                                            <p className="text-slate-600">
+                                                {file.lines} registro(s)
+                                            </p>
+                                            <Warnings items={file.warnings} />
+                                            <div className="mt-2">
+                                                {file.lines === 0 ? (
+                                                    <Empty>
+                                                        Sin datos en el mes.
+                                                    </Empty>
+                                                ) : (
+                                                    link(
+                                                        secondary,
+                                                        `${base}/retenisr?${period}&kind=${kind}`,
+                                                        'Descargar .xls',
+                                                    )
+                                                )}
+                                            </div>
+                                        </article>
+                                    );
+                                },
                             )}
-                        </select>
-                    </Label>
-                    <label className="flex items-center gap-2 text-sm">
-                        <input
-                            type="checkbox"
-                            checked={byRequest}
-                            onChange={(e) => setByRequest(e.target.checked)}
-                        />
-                        A requerimiento de Fiscalización
-                    </label>
-                    {link(
-                        primary,
-                        `${base}/inventarios?as_of=${asOf}&type=${type}&by_request=${byRequest ? 1 : 0}`,
-                        'Descargar .txt',
-                    )}
-                </div>
-            </Card>
+                        </div>
+                        <details className="mt-3 text-xs text-slate-600">
+                            <summary className="cursor-pointer">
+                                Tabla de conceptos (opcional simplificado)
+                            </summary>
+                            <ul className="mt-1 grid gap-1 md:grid-cols-2">
+                                {Object.entries(concepts).map(
+                                    ([code, label]) => (
+                                        <li key={code}>
+                                            {code}. {label}
+                                        </li>
+                                    ),
+                                )}
+                            </ul>
+                        </details>
+                    </Card>
+
+                    <Card title="Informe de Inventarios">
+                        <p className="text-sm text-slate-600">
+                            Archivo de texto delimitado por tabulaciones con el
+                            nombre que exige la SAT
+                            (SAT_RSI_NIT_TIPO_dd_mm_aa.txt). El semestral se
+                            presenta con existencias al 30 de junio y al 31 de
+                            diciembre, a costo promedio del kardex.
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-end gap-3">
+                            <Label text="Existencias al">
+                                <input
+                                    className={field}
+                                    type="date"
+                                    value={asOf}
+                                    onChange={(e) => setAsOf(e.target.value)}
+                                />
+                            </Label>
+                            <Label text="Tipo de inventario">
+                                <select
+                                    className={field}
+                                    value={type}
+                                    onChange={(e) => setType(e.target.value)}
+                                >
+                                    {Object.entries(inventoryTypes).map(
+                                        ([code, label]) => (
+                                            <option key={code} value={code}>
+                                                {code} · {label}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                            </Label>
+                            <label className="flex items-center gap-2 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={byRequest}
+                                    onChange={(e) =>
+                                        setByRequest(e.target.checked)
+                                    }
+                                />
+                                A requerimiento de Fiscalización
+                            </label>
+                            {link(
+                                primary,
+                                `${base}/inventarios?as_of=${asOf}&type=${type}&by_request=${byRequest ? 1 : 0}`,
+                                'Descargar .txt',
+                            )}
+                        </div>
+                    </Card>
+                </>
+            ) : (
+                <Card title="RetenISR e Informe de Inventarios">
+                    <p className="text-sm text-slate-600">
+                        Los archivos de RetenISR 2 (retenciones de ISR) y el
+                        Informe de Inventarios están disponibles desde el plan
+                        Profesional.
+                    </p>
+                </Card>
+            )}
         </PageShell>
     );
 }

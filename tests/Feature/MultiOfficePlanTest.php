@@ -97,6 +97,11 @@ test('personnel offers a new-collaborator invitation and roles have their own sc
 });
 
 test('modules outside the plan are closed on the server, hidden from the roles and never offered', function () {
+    // Multi-oficina includes payroll; a version published without it must close the module.
+    $version = DB::table('plan_versions')->join('plans', 'plans.id', '=', 'plan_versions.plan_id')->where('plans.code', 'multi_office')->where('plan_versions.status', 'published')
+        ->first(['plan_versions.id', 'plan_versions.entitlements']);
+    expect(json_decode((string) $version->entitlements, true))->toContain('payroll');
+    DB::table('plan_versions')->where('id', $version->id)->update(['entitlements' => json_encode(array_values(array_diff(json_decode((string) $version->entitlements, true), ['payroll'])))]);
     [$owner, $organization] = multiOfficeFirm($this);
 
     $this->actingAs($owner)->get('/payroll/dashboard')->assertForbidden();

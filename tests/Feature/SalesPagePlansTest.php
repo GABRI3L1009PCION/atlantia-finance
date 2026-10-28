@@ -37,8 +37,9 @@ test('a plan without payroll says so and names the plan that has it', function (
     $catalog = collect(app(PublicPlanCatalog::class)->plans())->keyBy('code');
     $texts = fn (string $code): array => collect($catalog[$code]['features'])->pluck('text')->all();
 
-    expect($texts('multi_office'))->toContain('Nómina no incluida (disponible desde el plan Corporativo)')
-        ->and($texts('essential'))->toContain('Nómina no incluida (disponible desde el plan Corporativo)')
+    expect($texts('essential'))->toContain('Nómina no incluida (disponible desde el plan Profesional)')
+        ->and(collect($texts('professional'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty()
+        ->and(collect($texts('multi_office'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty()
         ->and(collect($texts('corporate'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty()
         ->and(collect($texts('enterprise'))->filter(fn (string $text): bool => str_starts_with($text, 'Nómina no incluida')))->toBeEmpty();
 });
@@ -64,12 +65,28 @@ test('catalogs loaded before FEL was in every plan are brought up to date by the
         ->and(json_decode((string) DB::table('plans')->where('id', $plan->id)->value('highlights'), true))->toBe(['Contabilidad y facturación electrónica (FEL)', 'Otra línea']);
 });
 
-test('a plan without the VAT books says so and names the plan that has them', function () {
+test('a plan without the advanced reports says so and names the plan that has them, and the VAT books come with every plan', function () {
     $catalog = collect(app(PublicPlanCatalog::class)->plans())->keyBy('code');
     $texts = fn (string $code): array => collect($catalog[$code]['features'])->pluck('text')->all();
 
-    expect($texts('essential'))->toContain('Libros de IVA y reportes avanzados no incluidos (disponibles desde el plan Profesional)')
-        ->and(collect($texts('professional'))->filter(fn (string $text): bool => str_starts_with($text, 'Libros de IVA')))->toBeEmpty();
+    expect($texts('essential'))->toContain('Presupuestos y reportes avanzados no incluidos (disponibles desde el plan Profesional)')
+        ->toContain('Contabilidad, libros de IVA y facturación electrónica (FEL)')
+        ->and(collect($texts('professional'))->filter(fn (string $text): bool => str_starts_with($text, 'Presupuestos y reportes')))->toBeEmpty();
+});
+
+test('catalogs already sold get payroll from Profesional on and the new highlights through the migration', function () {
+    $professional = DB::table('plans')->where('code', 'professional')->first();
+    $version = DB::table('plan_versions')->where('plan_id', $professional->id)->where('status', 'published')->first();
+    $payroll = DB::table('features')->where('code', 'payroll')->value('id');
+    DB::table('plan_versions')->where('id', $version->id)->update(['entitlements' => json_encode(array_values(array_diff(json_decode($version->entitlements, true), ['payroll'])))]);
+    DB::table('feature_plan')->where('plan_id', $professional->id)->where('feature_id', $payroll)->delete();
+    DB::table('plans')->where('id', $professional->id)->update(['highlights' => json_encode(['Contabilidad, reportes e inventario', 'Texto propio'])]);
+
+    (require database_path('migrations/2026_10_28_204503_include_vat_books_and_payroll_in_plans.php'))->up();
+
+    expect(json_decode((string) DB::table('plan_versions')->where('id', $version->id)->value('entitlements'), true))->toContain('payroll')
+        ->and(DB::table('feature_plan')->where('plan_id', $professional->id)->where('feature_id', $payroll)->exists())->toBeTrue()
+        ->and(json_decode((string) DB::table('plans')->where('id', $professional->id)->value('highlights'), true))->toBe(['Contabilidad, inventario y planilla', 'Texto propio']);
 });
 
 test('a newly published version changes what the sales page shows and retired plans disappear', function () {

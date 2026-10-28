@@ -42,14 +42,14 @@ export type PlanModule =
     | 'reglas';
 
 const moduleFeatures: Record<PlanModule, PlanFeature> = {
-    conciliacion: 'advanced_reports',
+    conciliacion: 'basic_accounting',
     reglas: 'advanced_reports',
-    caja: 'advanced_reports',
+    caja: 'basic_accounting',
     inventario: 'inventory',
     kardex: 'inventory',
     'inventario-fisico': 'inventory',
-    'activos-fijos': 'advanced_reports',
-    impuestos: 'advanced_reports',
+    'activos-fijos': 'basic_accounting',
+    impuestos: 'basic_accounting',
     nomina: 'payroll',
     proyectos: 'advanced_reports',
     presupuestos: 'advanced_reports',
@@ -60,7 +60,7 @@ const moduleFeatures: Record<PlanModule, PlanFeature> = {
     'portal-cliente': 'advanced_reports',
     'notas-credito': 'approval_workflows',
     'ordenes-compra': 'approval_workflows',
-    'libros-iva': 'advanced_reports',
+    'libros-iva': 'basic_accounting',
     'cierre-periodo': 'approval_workflows',
     'estados-cuenta': 'obligation_management',
     recordatorios: 'task_management',

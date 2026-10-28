@@ -243,8 +243,9 @@ test('books export to Excel and stay isolated by tenant, plan and permission', f
     $other = vatBookFixture();
     $this->actingAs($other['owner'])->get(route('accounting.vatBooks', $f['uuid']))->assertNotFound();
 
+    // Every taxpayer keeps the VAT books, so they come with the Esencial plan too.
     $essential = vatBookFixture('essential');
-    $this->actingAs($essential['owner'])->get(route('accounting.vatBooks', $essential['uuid']))->assertForbidden();
+    $this->actingAs($essential['owner'])->get(route('accounting.vatBooks', $essential['uuid']))->assertOk();
 
     $member = User::factory()->create();
     $f['organization']->users()->attach($member->id, ['role' => 'member', 'status' => 'active']);

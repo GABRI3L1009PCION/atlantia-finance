@@ -116,7 +116,7 @@ class VatBookController extends Controller
     private function scope(Request $request, string $company, string $permission): array
     {
         $organization = $this->context->organization($request->user());
-        $this->context->requireFeature($organization, 'advanced_reports');
+        $this->context->requireFeature($organization, 'basic_accounting');
         $isRead = str_ends_with($permission, '.view') || str_ends_with($permission, '.export');
         $record = $this->accounting->company($organization, $request->user(), $company, ! $isRead);
         $this->accounting->assertModule($organization, $record->id, $request->user(), $permission);

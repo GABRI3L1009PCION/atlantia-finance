@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ScopesAccountingCompany;
 use App\Services\AccountingService;
 use App\Services\Fiscal\SatFileService;
+use App\Services\WorkspaceContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -23,7 +24,7 @@ class SatFileController extends Controller
 
     public function index(Request $request, string $company): Response
     {
-        [$organization, $record] = $this->scopeCompany($request, $company, 'fiscal.view', 'advanced_reports');
+        [$organization, $record] = $this->scopeCompany($request, $company, 'fiscal.view');
         [$year, $month] = $this->period($request);
         $today = now();
         $semester = $today->month > 6 ? Carbon::create($today->year, 6, 30) : Carbon::create($today->year - 1, 12, 31);
@@ -38,12 +39,14 @@ class SatFileController extends Controller
             'concepts' => SatFileService::RETENISR_CONCEPTS,
             'semesterDate' => $semester->toDateString(),
             'canExport' => $this->can($request, $organization, $record, 'vat_books.export'),
+            'hasAdvanced' => app(WorkspaceContext::class)->hasFeature($organization, 'advanced_reports'),
         ]);
     }
 
     public function download(Request $request, string $company, string $file): HttpResponse
     {
-        [$organization, $record] = $this->scopeCompany($request, $company, 'vat_books.export', 'advanced_reports');
+        // Asiste Libros (the VAT books) is in every plan; RetenISR and the inventory report come with the advanced reports.
+        [$organization, $record] = $this->scopeCompany($request, $company, 'vat_books.export', $file === 'asiste-libros' ? 'basic_accounting' : 'advanced_reports');
         $data = $request->validate([
             'books' => ['nullable', Rule::in(['all', 'sales', 'purchases'])],
             'kind' => ['nullable', Rule::in(array_keys(SatFileService::RETENISR_FILES))],

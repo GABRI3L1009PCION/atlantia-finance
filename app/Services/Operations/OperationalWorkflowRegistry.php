@@ -49,7 +49,7 @@ class OperationalWorkflowRegistry
         $reasons = ['cancelled', 'rejected', 'reopened', 'ignored', 'disposed', 'superseded'];
 
         return [
-            'conciliacion' => $this->workflow('advanced_reports', true, [
+            'conciliacion' => $this->workflow('basic_accounting', true, [
                 'draft' => ['in_progress', 'cancelled'], 'in_progress' => ['reviewed', 'blocked', 'cancelled'],
                 'blocked' => ['in_progress'], 'reviewed' => ['closed', 'in_progress'],
             ], ['reviewed', 'closed'], $reasons),
@@ -57,7 +57,7 @@ class OperationalWorkflowRegistry
                 'draft' => ['testing', 'cancelled'], 'testing' => ['active', 'draft'],
                 'active' => ['inactive'], 'inactive' => ['active', 'cancelled'],
             ], ['active'], $reasons),
-            'caja' => $this->workflow('advanced_reports', true, [
+            'caja' => $this->workflow('basic_accounting', true, [
                 'draft' => ['open', 'cancelled'], 'open' => ['closing'], 'closing' => ['closed', 'open'],
             ], ['closed'], $reasons),
             'inventario' => $this->workflow('inventory', true, [
@@ -72,7 +72,7 @@ class OperationalWorkflowRegistry
                 'draft' => ['counting', 'cancelled'], 'counting' => ['review'], 'review' => ['adjustment', 'counting'],
                 'adjustment' => ['closed'],
             ], ['adjustment', 'closed'], $reasons),
-            'activos-fijos' => $this->workflow('advanced_reports', true, [
+            'activos-fijos' => $this->workflow('basic_accounting', true, [
                 'draft' => ['active', 'cancelled'], 'active' => ['maintenance', 'transferred', 'disposed'],
                 'maintenance' => ['active'], 'transferred' => ['active'],
             ], ['active', 'disposed'], $reasons),
@@ -111,7 +111,7 @@ class OperationalWorkflowRegistry
                 'approved' => ['issued'], 'issued' => ['partially_received', 'received', 'cancelled'],
                 'partially_received' => ['received', 'cancelled'],
             ], ['approved', 'issued', 'received'], $reasons),
-            'libros-iva' => $this->workflow('advanced_reports', true, [
+            'libros-iva' => $this->workflow('basic_accounting', true, [
                 'draft' => ['review'], 'review' => ['reconciled', 'draft'], 'reconciled' => ['closed'],
             ], ['reconciled', 'closed'], $reasons),
             'cierre-periodo' => $this->workflow('approval_workflows', true, [
@@ -136,7 +136,7 @@ class OperationalWorkflowRegistry
             'reportes' => $this->workflow('advanced_reports', false, [
                 'draft' => ['generating', 'cancelled'], 'generating' => ['completed', 'failed'], 'failed' => ['generating'],
             ], ['completed'], $reasons),
-            'impuestos' => $this->workflow('advanced_reports', true, $review, $approval, $reasons),
+            'impuestos' => $this->workflow('basic_accounting', true, $review, $approval, $reasons),
         ];
     }
 
