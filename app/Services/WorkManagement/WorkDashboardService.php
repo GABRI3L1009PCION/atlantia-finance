@@ -1150,7 +1150,7 @@ class WorkDashboardService
                         ->groupBy('status')
                         ->orderBy('status')
                         ->get()
-                        ->map(fn ($row): array => [$row->status, (string) $row->tasks, (string) $row->overdue])
+                        ->map(fn ($row): array => [$this->statusLabel($row->status), (string) $row->tasks, (string) $row->overdue])
                         ->all(),
                 ],
                 [
@@ -1163,7 +1163,7 @@ class WorkDashboardService
                         ->groupBy('status')
                         ->orderBy('status')
                         ->get()
-                        ->map(fn ($row): array => [$row->status, (string) $row->reviews, (string) $row->last_update])
+                        ->map(fn ($row): array => [$this->statusLabel($row->status), (string) $row->reviews, $this->moment($row->last_update)])
                         ->all(),
                 ],
             ],
@@ -1209,7 +1209,7 @@ class WorkDashboardService
                         ->groupBy('status')
                         ->orderBy('status')
                         ->get()
-                        ->map(fn ($row): array => [$row->status, (string) $row->documents, $this->money((int) $row->total_cents), $this->money((int) $row->tax_cents)])
+                        ->map(fn ($row): array => [$this->statusLabel($row->status), (string) $row->documents, $this->money((int) $row->total_cents), $this->money((int) $row->tax_cents)])
                         ->all(),
                 ],
                 [
@@ -1217,7 +1217,7 @@ class WorkDashboardService
                     'columns' => ['Tipo', 'Reglas', 'Vigentes'],
                     'rows' => (clone $rules)->select('tax_type')->selectRaw('COUNT(*) as rules')->selectRaw('CAST(SUM(CASE WHEN is_active THEN 1 ELSE 0 END) AS BIGINT) as active_rules')
                         ->groupBy('tax_type')->orderBy('tax_type')->get()
-                        ->map(fn ($row): array => [$row->tax_type, (string) $row->rules, (string) $row->active_rules])
+                        ->map(fn ($row): array => [$this->statusLabel($row->tax_type), (string) $row->rules, (string) $row->active_rules])
                         ->all(),
                 ],
             ],
@@ -1274,7 +1274,7 @@ class WorkDashboardService
                     'rows' => (clone $bankTransactions)->whereBetween('transaction_date', [$monthStart, $monthEnd])
                         ->select('flow')->selectRaw('COUNT(*) as movements')->selectRaw('CAST(COALESCE(SUM(amount_cents), 0) AS BIGINT) as total_cents')
                         ->groupBy('flow')->orderBy('flow')->get()
-                        ->map(fn ($row): array => [$row->flow, (string) $row->movements, $this->money((int) $row->total_cents)])
+                        ->map(fn ($row): array => [$this->statusLabel($row->flow), (string) $row->movements, $this->money((int) $row->total_cents)])
                         ->all(),
                 ],
             ],
@@ -1391,7 +1391,7 @@ class WorkDashboardService
                     'rows' => (clone $records)->join('companies', 'companies.id', '=', 'operational_records.company_id')
                         ->orderByDesc('operational_records.effective_on')->limit(8)
                         ->get(['companies.name as company_name', 'operational_records.title', 'operational_records.status', 'operational_records.amount_cents'])
-                        ->map(fn ($row): array => [$row->company_name, $row->title, $row->status, $this->money((int) $row->amount_cents)])
+                        ->map(fn ($row): array => [$row->company_name, $row->title, $this->statusLabel($row->status), $this->money((int) $row->amount_cents)])
                         ->all(),
                 ],
             ],
@@ -1424,7 +1424,7 @@ class WorkDashboardService
                     'columns' => ['Acción', 'Actor', 'Fecha'],
                     'rows' => (clone $activity)->orderByDesc('log.id')->limit(10)
                         ->get(['log.action', 'log.occurred_at', 'users.name as actor'])
-                        ->map(fn ($row): array => [$row->action, $row->actor ?? 'Sistema', (string) $row->occurred_at])
+                        ->map(fn ($row): array => [$this->statusLabel($row->action), $row->actor ?? 'Sistema', $this->moment($row->occurred_at)])
                         ->all(),
                 ],
             ],
@@ -1458,7 +1458,7 @@ class WorkDashboardService
                     'rows' => (clone $fel)->join('companies', 'companies.id', '=', 'fel_documents.company_id')
                         ->orderByDesc('fel_documents.issued_on')->limit(8)
                         ->get(['companies.name as company_name', 'fel_documents.series', 'fel_documents.number', 'fel_documents.status', 'fel_documents.total_cents'])
-                        ->map(fn ($row): array => [$row->company_name, $row->series.'-'.$row->number, $row->status, $this->money((int) $row->total_cents)])
+                        ->map(fn ($row): array => [$row->company_name, $row->series.'-'.$row->number, $this->statusLabel($row->status), $this->money((int) $row->total_cents)])
                         ->all(),
                 ],
                 [
@@ -1466,7 +1466,7 @@ class WorkDashboardService
                     'columns' => ['Estado', 'Documentos', 'Total'],
                     'rows' => (clone $sales)->select('status')->selectRaw('COUNT(*) as documents')->selectRaw('CAST(COALESCE(SUM(total_cents), 0) AS BIGINT) as total_cents')
                         ->groupBy('status')->orderBy('status')->get()
-                        ->map(fn ($row): array => [$row->status, (string) $row->documents, $this->money((int) $row->total_cents)])
+                        ->map(fn ($row): array => [$this->statusLabel($row->status), (string) $row->documents, $this->money((int) $row->total_cents)])
                         ->all(),
                 ],
             ],
@@ -1491,7 +1491,7 @@ class WorkDashboardService
             ->get(['work_tasks.title', 'work_tasks.status', 'work_tasks.due_at', 'companies.name as company_name'])
             ->map(fn ($task): array => [
                 'title' => $task->title,
-                'detail' => ($task->company_name ?? 'Sin empresa').' · '.($task->due_at ? 'vence '.$task->due_at : 'sin vencimiento'),
+                'detail' => ($task->company_name ?? 'Sin empresa').' · '.($task->due_at ? 'vence '.$this->moment($task->due_at) : 'sin vencimiento'),
                 'tone' => in_array($task->status, ['blocked', 'changes_requested'], true) || ($task->due_at && $task->due_at < now()->toDateTimeString()) ? 'red' : 'amber',
             ])
             ->all();
@@ -1667,5 +1667,43 @@ class WorkDashboardService
             ->where('user_id', $user->id)
             ->where('status', 'active')
             ->value('role') ?? 'member');
+    }
+
+    /** Words for the codes the dashboards group by (task, review and document statuses, bank flows, tax types, audit actions). */
+    private function statusLabel(?string $code): string
+    {
+        $labels = ['pending' => 'Pendiente', 'in_progress' => 'En proceso', 'ready_for_review' => 'Lista para revisión', 'in_review' => 'En revisión',
+            'changes_requested' => 'Cambios solicitados', 'first_level_approved' => 'Aprobada (primer nivel)', 'approved' => 'Aprobada', 'completed' => 'Completada',
+            'cancelled' => 'Cancelada', 'blocked' => 'Bloqueada', 'draft' => 'Borrador', 'submitted' => 'Enviada', 'closed' => 'Cerrada', 'open' => 'Abierta',
+            'certified' => 'Certificado', 'failed' => 'Con error', 'issued' => 'Emitido', 'void' => 'Anulado', 'paid' => 'Pagado', 'posted' => 'Contabilizado',
+            'reversed' => 'Revertido', 'rejected' => 'Rechazado', 'sent' => 'Enviado', 'executed' => 'Ejecutado', 'scheduled' => 'Programado',
+            'inflow' => 'Entradas', 'outflow' => 'Salidas', 'in' => 'Entradas', 'out' => 'Salidas', 'vat' => 'IVA', 'income_tax' => 'ISR', 'isr' => 'ISR',
+            'withholding' => 'Retenciones', 'stamp' => 'Timbres', 'other' => 'Otros'];
+        if ($code === null || $code === '') {
+            return '—';
+        }
+        if (isset($labels[$code])) {
+            return $labels[$code];
+        }
+        // Audit actions such as "company.created": the subject and the verb in words.
+        $subjects = ['company' => 'Empresa', 'task' => 'Tarea', 'user' => 'Usuario', 'office' => 'Oficina', 'journal_entry' => 'Asiento', 'journal' => 'Asiento',
+            'sales' => 'Venta', 'purchase' => 'Compra', 'payroll' => 'Nómina', 'fiscal' => 'Fiscal', 'vat_book' => 'Libro IVA', 'bank' => 'Banco', 'treasury' => 'Tesorería'];
+        $verbs = ['created' => 'creada', 'updated' => 'actualizada', 'deleted' => 'eliminada', 'user_assigned' => 'responsable asignado', 'user_unassigned' => 'responsable retirado',
+            'posted' => 'contabilizado', 'approved' => 'aprobada', 'exported' => 'exportado', 'closed' => 'cerrado', 'reopened' => 'reabierto', 'completed' => 'completada'];
+        $parts = explode('.', $code);
+        if (count($parts) >= 2) {
+            $subject = $subjects[$parts[0]] ?? ucfirst(str_replace('_', ' ', $parts[0]));
+            $verb = $verbs[$parts[count($parts) - 1]] ?? str_replace('_', ' ', $parts[count($parts) - 1]);
+
+            return $subject.' · '.$verb;
+        }
+
+        return ucfirst(str_replace('_', ' ', $code));
+    }
+
+    /** A date and time as people read it in Guatemala (29/10/2026 08:15). */
+    private function moment(?string $value): string
+    {
+        return $value === null || $value === '' ? '—' : Carbon::parse($value)->setTimezone('America/Guatemala')->format('d/m/Y H:i');
     }
 }

@@ -7,6 +7,7 @@ use App\Services\FinancialReportService;
 use App\Services\ReportExportService;
 use App\Services\WorkspaceContext;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,7 +21,8 @@ class AccountingReportController extends Controller
         $record = $this->authorizedCompany($request, $company, 'reports.view');
         [$from, $to] = $this->dates($request);
 
-        return Inertia::render('accounting/reports', ['company' => $record, 'filters' => compact('from', 'to'), 'statements' => $this->reports->statements($record->id, $from, $to)]);
+        return Inertia::render('accounting/reports', ['company' => $record, 'filters' => compact('from', 'to'), 'statements' => $this->reports->statements($record->id, $from, $to),
+            'recent' => $this->recentExports($record->id), 'canExport' => $this->accounting->canModule($this->context->organization($request->user()), $record->id, $request->user(), 'reports.export')]);
     }
 
     /** GET export: all matching posted rows, not just current page; private PDF/XLSX. */
@@ -54,10 +56,25 @@ class AccountingReportController extends Controller
             'trial_view' => 'nullable|string|max:30',
         ]);
         $book = $this->reports->book($record->id, $data['kind'], $from, $to, $data['format'] === 'pdf' ? 1000 : 10000, $data);
+        $this->accounting->audit($this->context->organization($request->user()), $request->user(), 'accounting_report.exported', 'companies', $record->id,
+            ['kind' => $data['kind'], 'format' => $data['format'], 'from' => $from, 'to' => $to]);
 
         return $exporter->download([...$book, 'company' => $record->name.' · NIT '.$record->tax_id,
             'scope' => $data['kind'] === 'accounts' ? 'Catálogo vigente' : ($data['kind'] === 'balance' ? 'Acumulado desde el inicio de registros hasta '.$to : 'Desde '.$from.' hasta '.$to),
             'note' => $data['kind'] === 'accounts' ? 'Catálogo interno vigente de cuentas contables.' : 'GTQ · Solo asientos contabilizados. Reporte interno no certificado. El balance general incluye resultados acumulados no transferidos; los libros por rango no incluyen saldos anteriores.'], $data['format']);
+    }
+
+    /**
+     * The last reports downloaded for the company, from the audit log (every export of a book, statement or SAT file).
+     *
+     * @return list<array{action: string, details: array<string, mixed>, user: string, at: string}>
+     */
+    private function recentExports(int $companyId): array
+    {
+        return array_values(DB::table('audit_logs as a')->leftJoin('users as u', 'u.id', '=', 'a.user_id')->where('a.auditable_type', 'companies')->where('a.auditable_id', $companyId)
+            ->where('a.action', 'like', '%exported')->orderByDesc('a.occurred_at')->limit(8)->get(['a.action', 'a.new_values', 'u.name', 'a.occurred_at'])
+            ->map(fn (\stdClass $row): array => ['action' => (string) $row->action, 'details' => (array) json_decode((string) ($row->new_values ?? '{}'), true),
+                'user' => (string) ($row->name ?? 'Sistema'), 'at' => (string) $row->occurred_at])->all());
     }
 
     private function authorizedCompany(Request $request, string $company, string $permission): \stdClass

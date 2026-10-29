@@ -288,7 +288,7 @@ export default function AccountantDashboard({
                     </Card>
                 </div>
 
-                <div className="grid gap-3 xl:grid-cols-[2fr_1fr]">
+                <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                     <Card
                         title="Mis empresas"
                         action={

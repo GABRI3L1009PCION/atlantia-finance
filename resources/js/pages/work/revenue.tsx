@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { shortDate } from '@/components/accounting-ui';
 import { ConfirmDialog } from '@/components/office-admin/kit';
 
 type Invoice = {
@@ -122,19 +123,19 @@ function Kpi({
     return (
         <div className={`${card} flex min-w-0 items-center gap-3 !p-4`}>
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-[#6b1d1d]">
+                <p className="line-clamp-2 text-xs leading-snug font-bold text-[#6b1d1d]">
                     {label}
                 </p>
                 <p className="text-2xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
                 <p
-                    className={`truncate text-xs font-semibold ${bad === null || bad === undefined ? 'text-slate-500' : bad ? 'text-red-600' : 'text-emerald-600'}`}
+                    className={`line-clamp-2 text-xs leading-snug font-semibold ${bad === null || bad === undefined ? 'text-slate-500' : bad ? 'text-red-600' : 'text-emerald-600'}`}
                 >
                     {hint}
                 </p>
@@ -804,7 +805,7 @@ export default function Revenue(props: Props) {
                                                 {money(notice.amount_cents)}
                                             </td>
                                             <td className="px-3 py-2">
-                                                {notice.paid_on}
+                                                {shortDate(notice.paid_on)}
                                             </td>
                                             <td className="px-3 py-2">
                                                 {notice.method}

@@ -60,6 +60,8 @@ test('statements separate range results from accumulated position and ignore dra
     expect($accountsBook['title'])->toBe('Plan de cuentas')->and($accountsBook['rows'])->toHaveCount(4);
     $url = route('accounting.export', [$f['uuid'], 'from' => '2026-08-01', 'to' => '2026-08-31', 'kind' => 'journal', 'format' => 'xlsx']);
     $response = $this->get($url)->assertOk()->assertDownload('atlantia-reporte.xlsx');
+    $this->get(route('accounting.reports', [$f['uuid'], 'from' => '2026-08-01', 'to' => '2026-08-31']))
+        ->assertInertia(fn (Assert $p) => $p->where('canExport', true)->where('recent.0.action', 'accounting_report.exported')->where('recent.0.details.kind', 'journal'));
     $file = tempnam(sys_get_temp_dir(), 'atlantia-xlsx-');
     try {
         file_put_contents($file, $response->streamedContent());

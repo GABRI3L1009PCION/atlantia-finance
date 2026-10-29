@@ -37,7 +37,7 @@ export default function Checkout({
         <>
             <Head title="Completa tu suscripción" />
             <main className="min-h-screen bg-[#f8f6f5] px-5 py-10 text-slate-950">
-                <div className="mx-auto grid max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl lg:grid-cols-[1.05fr_.95fr]">
+                <div className="mx-auto grid max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl lg:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
                     <section className="bg-[#640000] p-8 text-white sm:p-12">
                         <p className="text-xs font-bold tracking-[0.24em] text-rose-100 uppercase">
                             Atlantia Systems

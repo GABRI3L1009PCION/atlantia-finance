@@ -121,7 +121,7 @@ function Kpi({
     return (
         <div className={`${card} flex items-center gap-4 !p-4`}>
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>
@@ -564,7 +564,7 @@ export default function DirectorAudit(props: Props) {
                         </div>
                     </section>
 
-                    <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+                    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                         <div className={`${card} overflow-x-auto`}>
                             <h2 className="mb-3 font-black">
                                 Revisiones pendientes

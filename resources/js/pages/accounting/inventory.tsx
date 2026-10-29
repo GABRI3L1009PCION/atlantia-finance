@@ -23,6 +23,7 @@ import {
     field,
     money,
     primary,
+    shortDate,
 } from '@/components/accounting-ui';
 import { InventoryCountCard } from '@/components/inventory-count';
 import type {
@@ -483,7 +484,7 @@ export default function Inventory({
                                                 className="border-b border-slate-100"
                                             >
                                                 <td className={cell}>
-                                                    {movement.date}
+                                                    {shortDate(movement.date)}
                                                 </td>
                                                 <td className={cell}>
                                                     {movement.type_label}

@@ -105,7 +105,7 @@ export default function ServiceHours({ hours }: { hours: Hours }) {
                         </p>
                     </header>
 
-                    <section className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.05fr_1fr]">
+                    <section className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
                         <div>
                             <h1 className="text-4xl leading-[1.05] font-extrabold tracking-tight sm:text-5xl xl:text-6xl">
                                 Nuestro horario de servicio{' '}

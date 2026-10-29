@@ -80,19 +80,19 @@ function Kpi({
     return (
         <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-[#ebe3df] bg-white p-4 shadow-[0_10px_28px_-22px_rgba(49,11,8,.55)]">
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-[#8a0b0b]">
+                <p className="line-clamp-2 text-xs leading-snug font-bold text-[#8a0b0b]">
                     {label}
                 </p>
                 <p className="text-3xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
                 <p
-                    className={`truncate text-xs font-semibold ${bad ? 'text-red-600' : 'text-emerald-700'}`}
+                    className={`line-clamp-2 text-xs leading-snug font-semibold ${bad ? 'text-red-600' : 'text-emerald-700'}`}
                 >
                     {hint}
                 </p>
@@ -644,7 +644,7 @@ export default function DirectorIndicators({
                         </div>
                     </section>
 
-                    <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+                    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
                         <div className={`${card} overflow-x-auto`}>
                             <Title>Indicadores clave por oficina</Title>
                             <table className="w-full min-w-[560px] text-sm">

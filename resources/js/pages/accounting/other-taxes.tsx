@@ -19,6 +19,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 
 type Property = {
@@ -433,7 +434,9 @@ export default function OtherTaxes({
                                 >
                                     <td className={cell}>{row.label}</td>
                                     <td className={cell}>{row.law}</td>
-                                    <td className={cell}>{row.due_on}</td>
+                                    <td className={cell}>
+                                        {shortDate(row.due_on)}
+                                    </td>
                                     <td className={`${cell} font-semibold`}>
                                         {money(row.tax_cents)}
                                     </td>
@@ -565,7 +568,9 @@ export default function OtherTaxes({
                                         key={row.id}
                                         className="border-t border-slate-100"
                                     >
-                                        <td className={cell}>{row.date}</td>
+                                        <td className={cell}>
+                                            {shortDate(row.date)}
+                                        </td>
                                         <td className={cell}>
                                             {row.description}
                                             <p className="text-xs text-slate-500">
@@ -682,7 +687,9 @@ export default function OtherTaxes({
                                     <td className={`${cell} font-semibold`}>
                                         {money(row.total_cents)}
                                     </td>
-                                    <td className={cell}>{row.due_on}</td>
+                                    <td className={cell}>
+                                        {shortDate(row.due_on)}
+                                    </td>
                                 </tr>
                             ))}
                         </Table>
@@ -749,7 +756,9 @@ export default function OtherTaxes({
                                     <td className={cell}>
                                         Trimestre {row.quarter}
                                     </td>
-                                    <td className={cell}>{row.due_on}</td>
+                                    <td className={cell}>
+                                        {shortDate(row.due_on)}
+                                    </td>
                                     <td className={cell}>
                                         {money(row.iso_cents)}
                                     </td>

@@ -1,6 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import { Clock3, Plus, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
+import { shortDate } from '@/components/accounting-ui';
 
 type Props = {
     entries: {
@@ -248,7 +249,7 @@ export default function Time({
                                             className="border-b border-slate-100"
                                         >
                                             <td className="px-3 py-2">
-                                                {entry.date}
+                                                {shortDate(entry.date)}
                                             </td>
                                             <td className="px-3 py-2 font-semibold">
                                                 {entry.company}

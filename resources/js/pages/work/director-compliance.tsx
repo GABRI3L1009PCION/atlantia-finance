@@ -116,13 +116,13 @@ function Kpi({
     return (
         <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-[#ebe3df] bg-white p-4 shadow-[0_10px_28px_-22px_rgba(49,11,8,.55)]">
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>
             <div className="min-w-0 flex-1">
                 <p
-                    className={`truncate text-sm font-bold ${bad ? 'text-red-600' : 'text-emerald-700'}`}
+                    className={`line-clamp-2 text-sm leading-snug font-bold ${bad ? 'text-red-600' : 'text-emerald-700'}`}
                 >
                     {label}
                 </p>
@@ -136,7 +136,9 @@ function Kpi({
                         {rate}
                     </p>
                 </div>
-                <p className="truncate text-xs text-slate-500">{caption}</p>
+                <p className="line-clamp-2 text-xs leading-snug text-slate-500">
+                    {caption}
+                </p>
             </div>
         </div>
     );
@@ -521,7 +523,7 @@ export default function DirectorCompliance({
                     </section>
 
                     <section className="grid gap-4 xl:grid-cols-[1.35fr_1fr_0.9fr]">
-                        <div className="space-y-4 xl:col-span-2 xl:grid xl:grid-cols-[1.35fr_1fr] xl:gap-4 xl:space-y-0">
+                        <div className="space-y-4 xl:col-span-2 xl:grid xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] xl:gap-4 xl:space-y-0">
                             <CalendarCard calendar={calendar} />
                             <div className="space-y-4">
                                 <div className={card}>

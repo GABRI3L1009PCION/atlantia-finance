@@ -533,7 +533,7 @@ export default function WorkDashboard({ dashboard, notice }: Props) {
                         </section>
                     )}
 
-                    <section className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
+                    <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
                         <div className={`${panel} overflow-hidden`}>
                             <div className="flex items-center justify-between border-b border-slate-100 p-5">
                                 <h2 className="text-lg font-bold">
@@ -724,7 +724,7 @@ export default function WorkDashboard({ dashboard, notice }: Props) {
                         </div>
                     </section>
 
-                    <section className="grid gap-5 xl:grid-cols-[1fr_.85fr]">
+                    <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,.85fr)]">
                         <div className={`${panel} overflow-hidden`}>
                             <div className="flex items-center justify-between border-b border-slate-100 p-5">
                                 <h2 className="flex items-center gap-2 text-lg font-bold">
@@ -1252,7 +1252,7 @@ function SpecializedDashboard({ data }: { data: Specialized }) {
             </div>
 
             {(data.alerts.length > 0 || data.sections.length > 0) && (
-                <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
                     <div className={`${panel} p-5`}>
                         <h3 className="mb-4 text-base font-bold">
                             Alertas prioritarias

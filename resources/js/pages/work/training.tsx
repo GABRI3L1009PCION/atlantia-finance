@@ -160,7 +160,7 @@ function Kpi({
     return (
         <div className={`${card} flex items-center gap-4 !p-4`}>
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>
@@ -168,9 +168,13 @@ function Kpi({
                 <p className="text-3xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
-                <p className="truncate text-sm font-bold">{label}</p>
+                <p className="line-clamp-2 text-sm leading-snug font-bold">
+                    {label}
+                </p>
                 {hint && (
-                    <p className="truncate text-xs text-slate-500">{hint}</p>
+                    <p className="line-clamp-2 text-xs leading-snug text-slate-500">
+                        {hint}
+                    </p>
                 )}
             </div>
         </div>

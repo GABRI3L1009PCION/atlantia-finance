@@ -231,7 +231,7 @@ export default function Subscription({
                         </div>
                     </header>
 
-                    <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
                         <div className="space-y-4">
                             <section className={card}>
                                 <div className="flex flex-wrap items-center gap-3">

@@ -313,7 +313,7 @@ export default function EssentialObligation(props: Props) {
                     </p>
                 )}
 
-                <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                     <div className="space-y-4">
                         <Card title="Requisitos de la preparación">
                             {obligation.status === 'pending' && (
@@ -1135,7 +1135,7 @@ function ActionDialog({
                                     }
                                 />
                             </label>
-                            <div className="grid grid-cols-[1fr_1fr] gap-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
                                 <label className="text-sm font-semibold">
                                     Registro observado (opcional)
                                     <select

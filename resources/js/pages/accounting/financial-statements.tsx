@@ -20,6 +20,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import {
     StatementReviewCard,
@@ -343,7 +344,7 @@ export default function FinancialStatements({
     const { position, income, cash_flow: flow, equity } = set;
     const hasPrevious = set.previous_period !== null;
     const previousLabel = set.previous_period
-        ? `Al ${set.previous_period.to}`
+        ? `Al ${shortDate(set.previous_period.to)}`
         : undefined;
     const balanced = position.totals.difference === 0;
     const maxMonth = Math.max(
@@ -370,7 +371,7 @@ export default function FinancialStatements({
         <PageShell
             company={company}
             title="Estados financieros"
-            subtitle={`Del ${set.period.from} al ${set.period.to}`}
+            subtitle={`Del ${shortDate(set.period.from)} al ${shortDate(set.period.to)}`}
             icon={FileChartColumn}
             actions={
                 canExport &&

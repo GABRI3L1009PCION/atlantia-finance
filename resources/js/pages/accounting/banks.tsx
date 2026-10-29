@@ -391,7 +391,7 @@ export default function Banks({
                     ].map((metric) => (
                         <article
                             key={metric.label}
-                            className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#e4e8ef] bg-white p-4 shadow-[0_7px_20px_rgba(31,38,55,.05)]"
+                            className="flex min-h-28 flex-col items-start gap-2 rounded-2xl border border-[#e4e8ef] bg-white p-4 shadow-[0_7px_20px_rgba(31,38,55,.05)]"
                         >
                             <span
                                 className={`grid size-11 shrink-0 place-items-center rounded-full ${metric.tone}`}
@@ -403,7 +403,7 @@ export default function Banks({
                                 <p className="text-[11px] font-medium text-slate-500">
                                     {metric.label}
                                 </p>
-                                <strong className="mt-1 block truncate text-lg">
+                                <strong className="mt-1 block text-lg whitespace-nowrap tabular-nums">
                                     {metric.value}
                                 </strong>
                                 <p className="mt-1 truncate text-[11px] text-slate-400">
@@ -521,7 +521,7 @@ export default function Banks({
                     </form>
                 </section>
 
-                <section className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
+                <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
                     <div className="space-y-5">
                         <div className="rounded-2xl border border-[#e4e8ef] bg-white p-5 shadow-sm">
                             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

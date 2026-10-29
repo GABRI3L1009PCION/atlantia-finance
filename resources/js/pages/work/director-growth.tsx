@@ -95,19 +95,19 @@ function Kpi({
     return (
         <div className={`${card} flex min-w-0 items-center gap-3 !p-4`}>
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-[#8a0b0b]">
+                <p className="line-clamp-2 text-xs leading-snug font-bold text-[#8a0b0b]">
                     {label}
                 </p>
                 <p className="text-2xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
                 <p
-                    className={`truncate text-xs font-semibold ${good === null || good === undefined ? 'text-slate-500' : good ? 'text-emerald-600' : 'text-red-600'}`}
+                    className={`line-clamp-2 text-xs leading-snug font-semibold ${good === null || good === undefined ? 'text-slate-500' : good ? 'text-emerald-600' : 'text-red-600'}`}
                 >
                     {hint}
                 </p>
@@ -514,7 +514,7 @@ export default function DirectorGrowth({
                         </div>
                     </section>
 
-                    <section className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
+                    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
                         <div className={card}>
                             <Title note="Servicios incluidos en los contratos vigentes.">
                                 Demanda de servicios
@@ -564,7 +564,7 @@ export default function DirectorGrowth({
                         </div>
                     </section>
 
-                    <section className="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
+                    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                         <div className={`${card} overflow-x-auto`}>
                             <Title note="Oportunidades en el pipeline y espacio del equipo.">
                                 Oficinas con mayor potencial

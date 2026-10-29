@@ -12,6 +12,12 @@ export const money = (cents: number | string) =>
         style: 'currency',
         currency: 'GTQ',
     }).format(Number(cents) / 100);
+/** A date as Guatemalan documents write it (31/12/2026); anything that is not an ISO date is returned as is. */
+export const shortDate = (value: string | null | undefined) => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
+
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : (value ?? '');
+};
 export type Page<T> = {
     data: T[];
     current_page: number;

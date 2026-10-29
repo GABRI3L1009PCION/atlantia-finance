@@ -17,6 +17,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import { ConfirmDialog } from '@/components/office-admin/kit';
 
@@ -408,7 +409,7 @@ export default function Checks({
                                             {item.label}
                                         </td>
                                         <td className={cell}>
-                                            {item.issued_on}
+                                            {shortDate(item.issued_on)}
                                         </td>
                                         <td className={cell}>
                                             {item.payee}

@@ -868,7 +868,7 @@ function OfficeDetailScreen({ admin }: { admin: Props['admin'] }) {
     return (
         <div className="space-y-5">
             <OfficeForm office={office} />
-            <section className="grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
                 <div className={`${panel} overflow-hidden`}>
                     <TableHeader title="Empresas de la oficina" />
                     <SimpleTable
@@ -2363,7 +2363,7 @@ function TaskDetailScreen({ admin }: { admin: Props['admin'] }) {
                 )}
             </section>
             <TaskActionPanel admin={admin} task={task} />
-            <section className="grid gap-5 xl:grid-cols-[1fr_.8fr]">
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,.8fr)]">
                 <div className={`${panel} overflow-hidden`}>
                     <TableHeader title="Comentarios y observaciones" />
                     <SimpleTable

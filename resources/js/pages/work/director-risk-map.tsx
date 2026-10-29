@@ -113,17 +113,17 @@ function Kpi({
 }) {
     return (
         <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-red-100 bg-red-50/40 p-4">
-            <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-red-100 text-red-600">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-red-100 text-red-600">
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-red-700">
+                <p className="line-clamp-2 text-sm leading-snug font-bold text-red-700">
                     {label}
                 </p>
                 <p className="text-3xl leading-tight font-black text-[#061633]">
                     {value}
                 </p>
-                <p className="truncate text-xs font-semibold text-slate-600">
+                <p className="line-clamp-2 text-xs leading-snug font-semibold text-slate-600">
                     {hint}
                 </p>
             </div>

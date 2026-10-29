@@ -18,6 +18,7 @@ import {
     field,
     money,
     primary,
+    shortDate,
 } from '@/components/accounting-ui';
 import { ConfirmDialog } from '@/components/office-admin/kit';
 
@@ -405,7 +406,9 @@ export default function FixedAssets({
                                                 </p>
                                                 <p className="text-xs text-slate-500">
                                                     {asset.code} · en servicio{' '}
-                                                    {asset.in_service_on}
+                                                    {shortDate(
+                                                        asset.in_service_on,
+                                                    )}
                                                     {asset.cost_center
                                                         ? ` · CC ${asset.cost_center}`
                                                         : ''}
@@ -448,7 +451,10 @@ export default function FixedAssets({
                                                 {asset.status ===
                                                     'disposed' && (
                                                     <Badge tone="red">
-                                                        Baja {asset.disposed_on}
+                                                        Baja{' '}
+                                                        {shortDate(
+                                                            asset.disposed_on,
+                                                        )}
                                                     </Badge>
                                                 )}
                                                 {asset.status ===

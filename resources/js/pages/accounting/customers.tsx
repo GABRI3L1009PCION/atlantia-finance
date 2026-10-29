@@ -29,6 +29,7 @@ import {
     Pager,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
 import { CollectionAutomationButton } from '@/components/collection-automation';
@@ -279,7 +280,7 @@ export default function Customers({
                     ].map((metric) => (
                         <article
                             key={metric.label}
-                            className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#e4e8ef] bg-white p-4 shadow-[0_7px_20px_rgba(31,38,55,.05)]"
+                            className="flex min-h-28 flex-col items-start gap-2 rounded-2xl border border-[#e4e8ef] bg-white p-4 shadow-[0_7px_20px_rgba(31,38,55,.05)]"
                         >
                             <span
                                 className={`grid size-11 shrink-0 place-items-center rounded-full ${metric.tone}`}
@@ -290,7 +291,7 @@ export default function Customers({
                                 <p className="text-[11px] font-medium text-slate-500">
                                     {metric.label}
                                 </p>
-                                <strong className="mt-1 block truncate text-lg text-[#172033]">
+                                <strong className="mt-1 block text-lg whitespace-nowrap text-[#172033] tabular-nums">
                                     {metric.value}
                                 </strong>
                                 <p className="mt-1 text-[10px] text-slate-400">
@@ -830,7 +831,7 @@ function CustomerPanel({
                                             {documentLabel(document)}
                                         </p>
                                         <p className="mt-0.5 text-slate-400">
-                                            {document.issued_on} ·{' '}
+                                            {shortDate(document.issued_on)} ·{' '}
                                             {money(document.total_cents)}
                                         </p>
                                     </div>

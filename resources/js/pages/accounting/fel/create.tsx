@@ -9,6 +9,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import * as fel from '@/routes/accounting/fel';
 import { decimal, TestNotice } from './types';
@@ -178,7 +179,10 @@ export function FelInvoiceForm({
                                                     value={invoice.id}
                                                 >
                                                     #{invoice.number} ·{' '}
-                                                    {invoice.issued_on} · Q{' '}
+                                                    {shortDate(
+                                                        invoice.issued_on,
+                                                    )}{' '}
+                                                    · Q{' '}
                                                     {decimal(
                                                         invoice.total_cents,
                                                     )}

@@ -205,7 +205,7 @@ function Kpi({
     return (
         <div className={`${card} flex items-center gap-4 p-4`}>
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>

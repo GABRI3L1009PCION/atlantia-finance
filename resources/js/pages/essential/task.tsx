@@ -213,7 +213,7 @@ export default function EssentialTask({ detail }: Props) {
                     </p>
                 )}
 
-                <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                     <div className="space-y-4">
                         {source && (
                             <Card title={`Origen · ${source.label}`}>

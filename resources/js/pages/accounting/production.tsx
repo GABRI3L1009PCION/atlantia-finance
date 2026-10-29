@@ -17,6 +17,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 
 type Recipe = {
@@ -621,7 +622,9 @@ export default function Production({
                                         className="border-t border-slate-100"
                                     >
                                         <td className={cell}>OP-{row.id}</td>
-                                        <td className={cell}>{row.date}</td>
+                                        <td className={cell}>
+                                            {shortDate(row.date)}
+                                        </td>
                                         <td className={cell}>{row.product}</td>
                                         <td className={cell}>
                                             {row.quantity} {row.unit}

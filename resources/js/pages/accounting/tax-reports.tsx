@@ -19,6 +19,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import {
     CertificateCell,
@@ -667,7 +668,7 @@ export default function TaxReports({
                                                 className="border-t border-slate-100"
                                             >
                                                 <td className={cell}>
-                                                    {row.date}
+                                                    {shortDate(row.date)}
                                                 </td>
                                                 <td className={cell}>
                                                     {row.supplier}

@@ -23,6 +23,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import { statusLabel as translateStatus } from '@/lib/status-labels';
 import * as routes from '@/routes/accounting';
@@ -352,10 +353,11 @@ export default function Purchase({
                                     Fechas
                                 </p>
                                 <p className="mt-1">
-                                    Documento: {document.document_date}
+                                    Documento:{' '}
+                                    {shortDate(document.document_date)}
                                 </p>
                                 <p className="text-sm text-slate-500">
-                                    Vence: {document.due_on}
+                                    Vence: {shortDate(document.due_on)}
                                 </p>
                                 {payable &&
                                     payable.currency !== 'GTQ' &&
@@ -902,7 +904,8 @@ export default function Purchase({
                                             {money(row.amount_cents)}
                                         </strong>
                                         <p className="text-sm text-slate-500">
-                                            {row.paid_on} · {row.reference}
+                                            {shortDate(row.paid_on)} ·{' '}
+                                            {row.reference}
                                         </p>
                                         {(row.withholdings?.length ?? 0) >
                                             0 && (
@@ -1080,7 +1083,7 @@ export default function Purchase({
                                                 (IVA {money(note.vat_cents)})
                                             </span>
                                             <p className="text-sm text-slate-500">
-                                                {note.issued_on} ·{' '}
+                                                {shortDate(note.issued_on)} ·{' '}
                                                 {[
                                                     note.fiscal_series,
                                                     note.fiscal_number,

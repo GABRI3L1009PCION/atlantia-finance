@@ -608,7 +608,7 @@ export default function ConfigurationWorkspace({
                                 ].map(([key, value]) => (
                                     <div
                                         key={key}
-                                        className="grid grid-cols-[1.3fr_1fr] gap-3 py-2"
+                                        className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-3 py-2"
                                     >
                                         <dt className="text-slate-500">
                                             {key}

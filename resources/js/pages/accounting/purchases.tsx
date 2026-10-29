@@ -34,6 +34,7 @@ import {
     Pager,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
 import {
@@ -452,7 +453,7 @@ export default function Purchases({
                         key={label}
                         className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_24px_rgba(15,23,42,.05)]"
                     >
-                        <div className="flex items-start gap-3">
+                        <div className="flex flex-col items-start gap-2">
                             <span className={`rounded-full p-3 ${tone}`}>
                                 <Icon className="size-5" />
                             </span>
@@ -460,7 +461,7 @@ export default function Purchases({
                                 <p className="text-xs font-medium text-slate-600">
                                     {label}
                                 </p>
-                                <p className="mt-1 truncate text-xl font-bold text-[#121d35]">
+                                <p className="mt-1 text-xl font-bold whitespace-nowrap text-[#121d35] tabular-nums">
                                     {value}
                                 </p>
                                 <p className="mt-2 text-[11px] text-slate-500">
@@ -608,7 +609,9 @@ export default function Purchases({
                                                         'Sin referencia externa'}
                                                 </p>
                                             </td>
-                                            <td>{row.document_date}</td>
+                                            <td>
+                                                {shortDate(row.document_date)}
+                                            </td>
                                             <td className="text-right">
                                                 {money(row.total_cents)}
                                             </td>
@@ -715,7 +718,7 @@ export default function Purchases({
                                             Emisión
                                         </span>
                                         <p className="font-semibold">
-                                            {selected.document_date}
+                                            {shortDate(selected.document_date)}
                                         </p>
                                     </div>
                                     <div>
@@ -724,7 +727,7 @@ export default function Purchases({
                                             Vencimiento
                                         </span>
                                         <p className="font-semibold">
-                                            {selected.due_on}
+                                            {shortDate(selected.due_on)}
                                         </p>
                                     </div>
                                     <div>
@@ -845,7 +848,9 @@ export default function Purchases({
                                                     className="grid grid-cols-3 gap-2 border-b border-slate-100 py-2"
                                                 >
                                                     <span>
-                                                        {payment.paid_on}
+                                                        {shortDate(
+                                                            payment.paid_on,
+                                                        )}
                                                     </span>
                                                     <span>
                                                         {payment.reference}

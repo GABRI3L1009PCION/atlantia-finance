@@ -9,6 +9,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 
 export type InventoryCount = {
@@ -128,7 +129,8 @@ export function InventoryCountCard({
             ) : (
                 <>
                     <p className="mb-3 text-sm">
-                        Toma física del <strong>{count.count_date}</strong>
+                        Toma física del{' '}
+                        <strong>{shortDate(count.count_date)}</strong>
                         {count.notes && ` · ${count.notes}`}. Escribe lo
                         contado; deja en blanco lo que aún no cuentas.
                     </p>
@@ -265,8 +267,8 @@ export function InventoryCountCard({
                         .filter((row) => row.status === 'applied')
                         .map((row) => (
                             <li key={row.id}>
-                                Toma física del {row.count_date} · {row.lines}{' '}
-                                producto(s) · diferencia{' '}
+                                Toma física del {shortDate(row.count_date)} ·{' '}
+                                {row.lines} producto(s) · diferencia{' '}
                                 {money(row.difference_cents)}
                             </li>
                         ))}

@@ -26,6 +26,7 @@ import {
     Pager,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
 import * as routes from '@/routes/accounting';
@@ -318,7 +319,7 @@ export default function Payables({
                     ].map((metric) => (
                         <article
                             key={metric.label}
-                            className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#e4e8ef] bg-white p-4 shadow-[0_7px_20px_rgba(31,38,55,.05)]"
+                            className="flex min-h-28 flex-col items-start gap-2 rounded-2xl border border-[#e4e8ef] bg-white p-4 shadow-[0_7px_20px_rgba(31,38,55,.05)]"
                         >
                             <span
                                 className={`grid size-11 shrink-0 place-items-center rounded-full ${metric.tone}`}
@@ -329,7 +330,7 @@ export default function Payables({
                                 <p className="text-[11px] font-medium text-slate-500">
                                     {metric.label}
                                 </p>
-                                <strong className="mt-1 block truncate text-lg">
+                                <strong className="mt-1 block text-lg whitespace-nowrap tabular-nums">
                                     {metric.value}
                                 </strong>
                                 <p className="mt-1 text-[10px] text-slate-400">
@@ -499,12 +500,14 @@ export default function Payables({
                                                     </p>
                                                 </td>
                                                 <td className="p-4">
-                                                    {row.document_date}
+                                                    {shortDate(
+                                                        row.document_date,
+                                                    )}
                                                 </td>
                                                 <td
                                                     className={`p-4 ${days < 0 ? 'text-rose-700' : 'text-emerald-700'}`}
                                                 >
-                                                    {row.due_on}
+                                                    {shortDate(row.due_on)}
                                                     <p className="text-[9px]">
                                                         ({Math.abs(days)} días)
                                                     </p>
@@ -676,7 +679,7 @@ function PayablePanel({
                     </div>
                     <div>
                         <p className="text-[9px] text-slate-400">Vencimiento</p>
-                        <b className="text-xs">{payable.due_on}</b>
+                        <b className="text-xs">{shortDate(payable.due_on)}</b>
                     </div>
                 </div>
                 <div className="mt-5 flex gap-5 overflow-x-auto border-b text-[10px] font-semibold text-slate-500">
@@ -704,7 +707,7 @@ function PayablePanel({
                             </div>
                             <div className="flex justify-between">
                                 <dt>Fecha documento</dt>
-                                <dd>{payable.document_date}</dd>
+                                <dd>{shortDate(payable.document_date)}</dd>
                             </div>
                             <div className="flex justify-between">
                                 <dt>Fecha contabilización</dt>
@@ -761,7 +764,7 @@ function PayablePanel({
                                 Próximo vencimiento
                             </p>
                             <p className="mt-2 text-sm font-semibold">
-                                {payable.due_on}
+                                {shortDate(payable.due_on)}
                             </p>
                             <p
                                 className={`text-[10px] ${days < 0 ? 'text-rose-600' : 'text-emerald-600'}`}
@@ -785,7 +788,7 @@ function PayablePanel({
                             key={payment.id}
                             className="grid grid-cols-3 gap-2 border-b px-4 py-3 text-[10px]"
                         >
-                            <span>{payment.paid_on}</span>
+                            <span>{shortDate(payment.paid_on)}</span>
                             <span>{payment.reference}</span>
                             <b className="text-right text-emerald-700">
                                 {money(payment.amount_cents)}

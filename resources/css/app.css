@@ -203,6 +203,19 @@
     --sidebar-accent-foreground: #ffffff;
     --sidebar-border: rgb(255 255 255 / 0.1);
     --sidebar-ring: #c99b43;
+    /*
+     * The Tailwind color tokens (--color-sidebar-*) are resolved where they are declared (:root), so they are declared
+     * again here; otherwise text-sidebar-* utilities and the wrapper's text color keep the light theme's dark colors.
+     */
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+    color: var(--sidebar-foreground);
 }
 
 .atlantia-plan-sidebar [data-sidebar='sidebar'] {

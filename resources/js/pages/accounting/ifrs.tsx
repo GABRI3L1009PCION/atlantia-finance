@@ -18,6 +18,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 
 type ScheduleRow = {
@@ -150,7 +151,8 @@ export default function Ifrs({
                                                     {row.name}
                                                 </p>
                                                 <p className="text-xs text-slate-500">
-                                                    Desde {row.starts_on} ·{' '}
+                                                    Desde{' '}
+                                                    {shortDate(row.starts_on)} ·{' '}
                                                     {row.months} meses ·{' '}
                                                     {money(row.payment_cents)}{' '}
                                                     al mes ·{' '}

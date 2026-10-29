@@ -8,6 +8,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import * as routes from '@/routes/accounting';
 
@@ -44,7 +45,7 @@ function ReceiptRow({
                         </span>
                     )}
                     <p className="mt-1 text-sm text-slate-500">
-                        {r.received_on} · {r.reference}
+                        {shortDate(r.received_on)} · {r.reference}
                     </p>
                 </div>
                 <span
@@ -132,7 +133,7 @@ function CreditNoteRow({
                         NC {note.number} · {money(note.amount_cents)}
                     </strong>
                     <p className="mt-1 text-sm text-slate-500">
-                        {note.issued_on} · {note.reason}
+                        {shortDate(note.issued_on)} · {note.reason}
                     </p>
                 </div>
                 <span
@@ -272,7 +273,7 @@ export default function Invoice({
                 <div className="flex flex-wrap justify-between gap-4">
                     <p className="text-sm text-slate-500">
                         NIT {i.customer_tax_id || 'No indicado'} · Emisión{' '}
-                        {i.issued_on} · Vence {i.due_on}
+                        {shortDate(i.issued_on)} · Vence {shortDate(i.due_on)}
                     </p>
                     <a
                         className={secondary}

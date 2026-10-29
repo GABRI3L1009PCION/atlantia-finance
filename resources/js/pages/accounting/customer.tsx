@@ -10,6 +10,7 @@ import {
     Pager,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
 import { CustomerAutomationToggle } from '@/components/collection-automation';
@@ -287,8 +288,8 @@ export default function Customer({
                                                 : 'Borrador'}
                                         </td>
                                         <td className="p-3">
-                                            {invoice.issued_on} ·{' '}
-                                            {invoice.due_on}
+                                            {shortDate(invoice.issued_on)} ·{' '}
+                                            {shortDate(invoice.due_on)}
                                         </td>
                                         <td
                                             className={`p-3 ${state === 'Vencido' ? 'font-semibold text-red-700' : ''}`}
@@ -439,7 +440,7 @@ export default function Customer({
                                     <strong>
                                         {money(receipt.amount_cents)}
                                     </strong>{' '}
-                                    · {receipt.received_on}
+                                    · {shortDate(receipt.received_on)}
                                 </p>
                                 <p className="mt-1 text-sm text-slate-500">
                                     {receipt.reference} ·{' '}

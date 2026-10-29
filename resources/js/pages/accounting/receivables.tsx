@@ -15,7 +15,13 @@ import {
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Company } from '@/components/accounting-section';
-import { money, Pager, primary, secondary } from '@/components/accounting-ui';
+import {
+    money,
+    Pager,
+    primary,
+    secondary,
+    shortDate,
+} from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
 import * as routes from '@/routes/accounting';
 
@@ -215,7 +221,7 @@ export default function Receivables({
                             key={metric.label}
                             className="min-h-28 rounded-2xl border border-[#e4e8ef] bg-white p-4 shadow-[0_7px_20px_rgba(31,38,55,.05)]"
                         >
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-start gap-2">
                                 <span
                                     className={`grid size-10 shrink-0 place-items-center rounded-full ${metric.tone}`}
                                 >
@@ -225,7 +231,7 @@ export default function Receivables({
                                     <p className="text-[10px] font-medium text-slate-500">
                                         {metric.label}
                                     </p>
-                                    <strong className="mt-1 block truncate text-base">
+                                    <strong className="mt-1 block text-base whitespace-nowrap tabular-nums">
                                         {metric.value}
                                     </strong>
                                 </div>
@@ -399,10 +405,12 @@ export default function Receivables({
                                                     </p>
                                                 </td>
                                                 <td className="p-4">
-                                                    {invoice.issued_on}
+                                                    {shortDate(
+                                                        invoice.issued_on,
+                                                    )}
                                                 </td>
                                                 <td className="p-4">
-                                                    {invoice.due_on}
+                                                    {shortDate(invoice.due_on)}
                                                 </td>
                                                 <td className="p-4 text-right">
                                                     {money(invoice.total_cents)}
@@ -611,7 +619,7 @@ function ReceivablePanel({
                     <div>
                         <p className="text-[9px] text-slate-400">Emisión</p>
                         <p className="mt-1 font-semibold">
-                            {invoice.issued_on}
+                            {shortDate(invoice.issued_on)}
                         </p>
                     </div>
                     <div>
@@ -619,7 +627,7 @@ function ReceivablePanel({
                         <p
                             className={`mt-1 font-semibold ${days < 0 ? 'text-rose-700' : ''}`}
                         >
-                            {invoice.due_on}
+                            {shortDate(invoice.due_on)}
                         </p>
                         <p className="mt-1 text-[9px] text-slate-400">
                             {days < 0
@@ -653,7 +661,7 @@ function ReceivablePanel({
                                 key={payment.id}
                                 className="grid grid-cols-[90px_1fr_auto] gap-3 px-4 py-3 text-[10px]"
                             >
-                                <span>{payment.received_on}</span>
+                                <span>{shortDate(payment.received_on)}</span>
                                 <span className="truncate text-slate-500">
                                     {payment.reference}
                                 </span>

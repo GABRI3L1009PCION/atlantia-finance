@@ -83,7 +83,7 @@ function Kpi({
                 {icon}
             </span>
             <div className="min-w-0">
-                <p className="truncate text-xs font-bold text-[#6b1d1d]">
+                <p className="line-clamp-2 text-xs leading-snug font-bold text-[#6b1d1d]">
                     {label}
                 </p>
                 <p
@@ -91,7 +91,7 @@ function Kpi({
                 >
                     {value}
                 </p>
-                <p className="truncate text-xs font-semibold text-slate-500">
+                <p className="line-clamp-2 text-xs leading-snug font-semibold text-slate-500">
                     {hint}
                 </p>
             </div>

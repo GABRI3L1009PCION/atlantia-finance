@@ -41,6 +41,7 @@ import {
     Pager,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import type { Page } from '@/components/accounting-ui';
 import {
@@ -600,7 +601,7 @@ function LedgerView({
                         key={metric.label}
                         className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_7px_18px_rgba(31,38,55,.05)]"
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-start gap-2">
                             <span
                                 className={`grid size-11 shrink-0 place-items-center rounded-full ${metric.tone}`}
                             >
@@ -610,7 +611,7 @@ function LedgerView({
                                 <p className="text-[11px] font-medium text-slate-500">
                                     {metric.label}
                                 </p>
-                                <strong className="mt-1 block truncate text-base text-[#172033]">
+                                <strong className="mt-1 block text-base whitespace-nowrap text-[#172033] tabular-nums">
                                     {metric.value}
                                 </strong>
                                 <p className="mt-1 text-[10px] text-slate-400">
@@ -1445,7 +1446,7 @@ function TrialBalanceView({
                         key={metric.label}
                         className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_7px_18px_rgba(31,38,55,.05)]"
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-start gap-2">
                             <span
                                 className={`grid size-11 shrink-0 place-items-center rounded-full ${metric.tone}`}
                             >
@@ -1455,7 +1456,7 @@ function TrialBalanceView({
                                 <p className="text-[11px] font-medium text-slate-500">
                                     {metric.label}
                                 </p>
-                                <strong className="mt-1 block truncate text-base text-[#172033]">
+                                <strong className="mt-1 block text-base whitespace-nowrap text-[#172033] tabular-nums">
                                     {metric.value}
                                 </strong>
                                 <p className="mt-1 text-[10px] text-slate-400">
@@ -2674,7 +2675,9 @@ function ChartOfAccountsView({
                                                                 'Usuario'}
                                                         </strong>
                                                         <p className="mt-1 text-slate-500">
-                                                            {change.date}
+                                                            {shortDate(
+                                                                change.date,
+                                                            )}
                                                         </p>
                                                         <p className="mt-2">
                                                             {
@@ -3342,7 +3345,7 @@ function AccountingPeriodsView({
                                     </div>
                                 )}
                             </div>
-                            <div className="grid gap-4 p-5 lg:grid-cols-[1fr_1fr]">
+                            <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                                 <div>
                                     <h3 className="mb-3 text-xs font-semibold">
                                         Checklist de cierre
@@ -4268,7 +4271,11 @@ export default function CompanyAccounting(props: Props) {
                                                             {item.origin}
                                                         </td>
                                                         <td>{item.document}</td>
-                                                        <td>{item.date}</td>
+                                                        <td>
+                                                            {shortDate(
+                                                                item.date,
+                                                            )}
+                                                        </td>
                                                         <td>
                                                             {money(
                                                                 item.amount_cents,
@@ -4434,7 +4441,7 @@ export default function CompanyAccounting(props: Props) {
                                                         {item.description}
                                                     </strong>
                                                     <small className="text-slate-500">
-                                                        {item.date}
+                                                        {shortDate(item.date)}
                                                         {item.actor
                                                             ? ` · ${item.actor}`
                                                             : ''}
@@ -5204,7 +5211,9 @@ export default function CompanyAccounting(props: Props) {
                                             <p className="text-slate-500">
                                                 Fecha
                                                 <strong className="mt-0.5 block text-[#25334b]">
-                                                    {selectedEntry.entry_date}
+                                                    {shortDate(
+                                                        selectedEntry.entry_date,
+                                                    )}
                                                 </strong>
                                             </p>
                                             <p className="text-slate-500">

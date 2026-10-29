@@ -94,7 +94,7 @@ function Kpi({
     return (
         <div className={`${card} flex min-w-0 items-center gap-3 !p-4`}>
             <span
-                className={`grid size-14 shrink-0 place-items-center rounded-2xl ${tone}`}
+                className={`grid size-11 shrink-0 place-items-center rounded-xl ${tone}`}
             >
                 {icon}
             </span>
@@ -411,7 +411,7 @@ export default function DirectorWorkload({
                         />
                     </section>
 
-                    <section className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
+                    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
                         <div className={`${card} min-w-0`}>
                             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                                 <h2 className="text-lg font-black">

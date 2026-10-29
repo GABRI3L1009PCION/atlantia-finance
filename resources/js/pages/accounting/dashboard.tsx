@@ -306,26 +306,24 @@ function Kpi({
         <div
             className={`${card} kpi-card p-4 transition hover:-translate-y-0.5 hover:shadow-lg`}
         >
-            <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                    <p className="mb-1 truncate text-xs font-medium text-slate-500">
-                        {label}
-                    </p>
-                    <p className="text-[1.18rem] leading-tight font-bold text-slate-800">
-                        {money(value)}
-                    </p>
-                    <p
-                        className={`mt-1 truncate text-[11px] font-medium ${value < 0 ? 'text-red-500' : 'text-emerald-600'}`}
-                    >
-                        {change}
-                    </p>
-                </div>
+            <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 text-xs leading-snug font-medium text-slate-500">
+                    {label}
+                </p>
                 <span
-                    className={`grid size-10 shrink-0 place-items-center rounded-full ${tone}`}
+                    className={`grid size-8 shrink-0 place-items-center rounded-full ${tone}`}
                 >
-                    <Icon className="size-[18px]" />
+                    <Icon className="size-4" />
                 </span>
             </div>
+            <p className="mt-2 text-[1.18rem] leading-tight font-bold whitespace-nowrap text-slate-800 tabular-nums">
+                {money(value)}
+            </p>
+            <p
+                className={`mt-1 text-[11px] leading-snug font-medium ${value < 0 ? 'text-red-500' : 'text-emerald-600'}`}
+            >
+                {change}
+            </p>
         </div>
     );
 

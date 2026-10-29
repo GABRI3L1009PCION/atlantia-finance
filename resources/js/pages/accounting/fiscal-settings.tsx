@@ -19,6 +19,7 @@ import {
     field,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 import { TaxCatalog } from '@/components/fiscal/tax-catalog';
 import type {
@@ -299,7 +300,7 @@ export default function FiscalSettings({
                     </article>
                 </section>
 
-                <div className="grid gap-6 xl:grid-cols-[1.05fr_.95fr]">
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
                     <div id="perfil-fiscal">
                         <Card title="Configuración regional y tributaria">
                             <form
@@ -650,7 +651,9 @@ export default function FiscalSettings({
                                                 className="border-t border-slate-100"
                                             >
                                                 <td className="p-3">
-                                                    {rate.effective_on}
+                                                    {shortDate(
+                                                        rate.effective_on,
+                                                    )}
                                                 </td>
                                                 <td className="p-3 font-semibold">
                                                     {rate.currency}/

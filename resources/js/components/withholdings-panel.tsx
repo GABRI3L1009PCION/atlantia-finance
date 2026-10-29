@@ -8,6 +8,7 @@ import {
     money,
     primary,
     secondary,
+    shortDate,
 } from '@/components/accounting-ui';
 
 export type WithholdingSettings = {
@@ -254,7 +255,7 @@ export function WithholdingReconciliationCard({
                                     className="border-t border-slate-100"
                                 >
                                     <td className={cell}>
-                                        {row.certificate_date}
+                                        {shortDate(row.certificate_date)}
                                     </td>
                                     <td className={cell}>
                                         {row.customer}

@@ -304,7 +304,7 @@ export default function Tickets({
                         ))}
                     </select>
                 </div>
-                <div className="grid gap-3 xl:grid-cols-[1fr_1fr]">
+                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <Panel title={`${tickets.length} tickets`}>
                         <Table
                             headers={[
