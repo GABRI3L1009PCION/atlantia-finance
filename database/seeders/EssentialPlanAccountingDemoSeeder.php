@@ -13,11 +13,15 @@ use App\Services\Accounting\AccountReconciliationService;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
 use App\Services\Fiscal\VatBookService;
+use App\Services\WorkManagement\CompanyAdministrationService;
 use Carbon\CarbonImmutable;
+use Closure;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
 use stdClass;
@@ -38,42 +42,123 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
 
     private User $owner;
 
-    private User $collaborator;
-
-    /** The person who keeps the books of the company being seeded. */
+    /** The person who keeps the books of the company being seeded: its accountant in charge, or the owner. */
     private User $bookkeeper;
 
     /** @var array<int|string, int> Ledger account ids by code. */
     private array $accounts = [];
 
+    /** @var (Closure(string): void)|null */
+    private ?Closure $warn = null;
+
     public function run(): void
     {
         $this->refuseInProduction();
 
-        $owner = User::query()->where('email', 'esencial.propietario@atlantia.test')->first();
-        $collaborator = User::query()->where('email', 'esencial.colaborador@atlantia.test')->first();
         $organization = Organization::query()->where('country_code', 'GT')->where('tax_identifier', '3344556-7')->first();
-        if ($owner === null || $collaborator === null || $organization === null) {
+        $owner = $organization === null ? null : $this->ownerOf($organization);
+        if ($organization === null || $owner === null) {
             $this->command->warn('Ejecuta EssentialPlanDemoSeeder antes de EssentialPlanAccountingDemoSeeder.');
 
             return;
         }
-        $this->owner = $owner;
-        $this->collaborator = $collaborator;
-        $this->organization = $organization;
 
-        foreach ($this->profiles() as $taxId => $profile) {
-            $company = DB::table('companies')->where('organization_id', $organization->id)->where('tax_id', $taxId)->first();
-            if ($company !== null) {
+        $this->seedOrganization($organization, $owner, 4, fn (string $message) => $this->command->warn($message));
+    }
+
+    /**
+     * Books three months for the organization's clients, creating demo clients until it has $clients of them.
+     * Existing clients keep their data: the demo only adds its own documents next to it.
+     *
+     * @param  (Closure(string): void)|null  $warn
+     * @return list<string> The clients that received the demo books.
+     */
+    public function seedOrganization(Organization $organization, User $owner, int $clients, ?Closure $warn = null): array
+    {
+        $this->organization = $organization;
+        $this->owner = $owner;
+        $this->warn = $warn;
+        $this->ensureClients($clients);
+
+        $profiles = $this->profiles();
+        $companies = $this->activeCompanies()->orderBy('id')->limit($clients)->get();
+        $byTaxId = array_column($profiles, null, 'tax_id');
+        $unused = array_values(array_filter($profiles, fn (array $profile): bool => ! $companies->contains('tax_id', $profile['tax_id'])));
+        $seeded = [];
+        foreach ($companies as $company) {
+            $profile = $byTaxId[$company->tax_id] ?? $this->takeProfileFor((string) $company->name, $unused);
+            if ($profile !== null) {
                 $this->company($company, $profile);
+                $seeded[] = (string) $company->name;
             }
+        }
+
+        return $seeded;
+    }
+
+    /**
+     * The unused profile whose line of business matches the client's name, or the first one left.
+     *
+     * @param  list<array<string, mixed>>  $unused
+     * @return array<string, mixed>|null
+     */
+    private function takeProfileFor(string $name, array &$unused): ?array
+    {
+        $name = mb_strtolower($name);
+        foreach ($unused as $index => $profile) {
+            foreach ($profile['keywords'] ?? [] as $keyword) {
+                if (str_contains($name, $keyword)) {
+                    array_splice($unused, $index, 1);
+
+                    return $profile;
+                }
+            }
+        }
+
+        return array_shift($unused);
+    }
+
+    /** Clients of the organization that are not in the trash. */
+    private function activeCompanies(): Builder
+    {
+        return DB::table('companies')->where('organization_id', $this->organization->id)
+            ->whereNotIn('id', DB::table('company_deletions')->whereNull('restored_at')->select('company_id'));
+    }
+
+    public function ownerOf(Organization $organization): ?User
+    {
+        $id = DB::table('organization_user')->where('organization_id', $organization->id)->where('role', 'owner')->where('status', 'active')->orderBy('user_id')->value('user_id');
+
+        return $id === null ? null : User::query()->whereKey((int) $id)->first();
+    }
+
+    /** Creates demo clients, through the same service as the Clients screen, until the organization has as many as asked. */
+    private function ensureClients(int $wanted): void
+    {
+        $existing = $this->activeCompanies()->pluck('tax_id')->all();
+        $missing = $wanted - count($existing);
+        $officeId = (int) DB::table('offices')->where('organization_id', $this->organization->id)->where('status', 'active')->orderByDesc('is_primary')->orderBy('id')->value('id');
+        $member = DB::table('organization_user')->where('organization_id', $this->organization->id)
+            ->where('status', 'active')->where('user_id', '<>', $this->owner->id)->orderBy('user_id')->value('user_id');
+        $ownerInOrganization = $this->owner->organizations()->whereKey($this->organization->id)->firstOrFail();
+        foreach ($this->profiles() as $profile) {
+            if ($missing <= 0 || $officeId === 0) {
+                break;
+            }
+            if (in_array($profile['tax_id'], $existing, true)) {
+                continue;
+            }
+            $company = app(CompanyAdministrationService::class)->create($ownerInOrganization, $this->owner, ['name' => $profile['name'], 'tax_id' => $profile['tax_id'],
+                'office_id' => $officeId, 'accountant_id' => $member === null ? null : (int) $member]);
+            DB::table('companies')->where('id', $company['id'])->update(['created_at' => now()->subMonths(6)]);
+            $missing--;
         }
     }
 
     /** @param array<string, mixed> $profile */
     private function company(stdClass $company, array $profile): void
     {
-        $this->bookkeeper = $profile['preparer'] === 'collaborator' ? $this->collaborator : $this->owner;
+        $this->bookkeeper = $this->bookkeeperOf($company);
         $automation = app(AccountingAutomationService::class);
         $mapping = $automation->ensureMapping((int) $company->id);
         $this->accounts = DB::table('ledger_accounts')->where('company_id', $company->id)->pluck('id', 'code')->map(fn ($id): int => (int) $id)->all();
@@ -84,6 +169,7 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
         }
 
         $months = $this->months();
+        $this->openPeriods($company, $months);
         $this->openingCapital($company, $months[0], $profile['capital']);
         $customers = $this->customers($company, $profile['customers']);
         $suppliers = $this->suppliers($company, $profile['suppliers']);
@@ -123,9 +209,44 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
         }
 
         $this->postDrafts($company);
-        $this->reconcile($company, $bank, $months[count($months) - 2], $profile['preparer'] === 'collaborator');
+        // A client with its own earlier movements may not reconcile or close with the demo figures alone: that is reported, not forced.
+        $this->attempt($company, 'la conciliación bancaria', fn () => $this->reconcile($company, $bank, $months[count($months) - 2]));
         foreach (array_slice($months, 0, -1) as $month) {
-            $this->closeVatBook($company, $month);
+            $this->attempt($company, 'el libro de IVA de '.$month->format('m/Y'), fn () => $this->closeVatBook($company, $month));
+        }
+    }
+
+    /** The accountant in charge of the client when it has one; otherwise the owner keeps its books. */
+    private function bookkeeperOf(stdClass $company): User
+    {
+        $id = DB::table('company_assignments')->where('company_id', $company->id)->where('assignment_role', 'accountant_in_charge')->where('status', 'active')
+            ->whereNull('deleted_at')->where('user_id', '<>', $this->owner->id)->orderByDesc('is_primary')->value('user_id');
+
+        return ($id === null ? null : User::query()->whereKey((int) $id)->first()) ?? $this->owner;
+    }
+
+    /** @param Closure(): void $callback */
+    private function attempt(stdClass $company, string $step, Closure $callback): void
+    {
+        try {
+            DB::transaction($callback);
+        } catch (ValidationException $exception) {
+            if ($this->warn !== null) {
+                ($this->warn)("{$company->name}: no se completó {$step}. ".collect($exception->errors())->flatten()->implode(' '));
+            }
+        }
+    }
+
+    /** @param list<CarbonImmutable> $months */
+    private function openPeriods(stdClass $company, array $months): void
+    {
+        foreach ($months as $month) {
+            $covered = DB::table('accounting_periods')->where('company_id', $company->id)->where('starts_on', '<=', $month->toDateString())
+                ->where('ends_on', '>=', $month->toDateString())->exists();
+            if (! $covered) {
+                DB::table('accounting_periods')->insert(['company_id' => $company->id, 'name' => 'Período '.$month->format('Y-m'), 'starts_on' => $month->toDateString(),
+                    'ends_on' => $month->endOfMonth()->toDateString(), 'created_at' => now(), 'updated_at' => now()]);
+            }
         }
     }
 
@@ -309,14 +430,14 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
     }
 
     /** Bank account reconciled at the end of last month: a check in transit and the fee not yet booked explain the difference. */
-    private function reconcile(stdClass $company, stdClass $bank, CarbonImmutable $month, bool $byCollaborator): void
+    private function reconcile(stdClass $company, stdClass $bank, CarbonImmutable $month): void
     {
         $asOf = $month->endOfMonth()->toDateString();
         if (DB::table('account_reconciliations')->where('company_id', $company->id)->where('ledger_account_id', $this->account('1102'))->where('as_of', $asOf)->exists()) {
             return;
         }
         $service = app(AccountReconciliationService::class);
-        $preparer = $byCollaborator ? $this->collaborator : $this->owner;
+        $preparer = $this->bookkeeper;
         $statement = (int) DB::table('bank_transactions')->where('bank_account_id', $bank->id)->where('transaction_date', '<=', $asOf)
             ->selectRaw("COALESCE(SUM(CASE WHEN flow = 'inflow' THEN amount_cents ELSE -amount_cents END), 0) AS balance")->value('balance');
         $inTransit = DB::table('bank_transactions')->where('bank_account_id', $bank->id)->where('transaction_date', '>', $asOf)->where('reference', 'like', 'CHQ-%')
@@ -332,7 +453,7 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
         $service->addItem($this->organization, $preparer, (int) $company->id, $id, ['kind' => 'pending_adjustment',
             'description' => 'Comisión bancaria del mes pendiente de registrar', 'amount' => self::BANK_FEE]);
         $service->reconcile($this->organization, $preparer, (int) $company->id, $id);
-        if ($byCollaborator) {
+        if ($preparer->id !== $this->owner->id) {
             $service->review($this->organization, $this->owner, (int) $company->id, $id);
         }
     }
@@ -393,13 +514,14 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
      * Fictitious clients of the practice. Sales repeat every month: [customer, day, lines [description, quantity, unit price with VAT, treatment], share collected].
      * Purchases: [supplier, day, account, treatment, description, total with VAT].
      *
-     * @return array<string, array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
     private function profiles(): array
     {
         return [
-            '4455667-8' => [
-                'revenue' => '4201', 'capital' => '60000.00', 'series' => 'PLE', 'preparer' => 'collaborator',
+            [
+                'tax_id' => '4455667-8', 'name' => 'Panadería La Esperanza',
+                'revenue' => '4201', 'capital' => '60000.00', 'series' => 'PLE',
                 'bank' => ['Banco Agromercantil', 'Cuenta monetaria Panadería La Esperanza', '3104'],
                 'customers' => [
                     ['Cafetería El Portal', '5566778-1', 'compras@elportal.test', 15],
@@ -426,8 +548,9 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
                     ['Energía del Valle, S.A.', 12, '5204', 'services', 'Energía eléctrica de hornos y local', '2380.00'],
                 ],
             ],
-            '7788990-1' => [
-                'revenue' => '4201', 'capital' => '120000.00', 'series' => 'FET', 'preparer' => 'collaborator',
+            [
+                'tax_id' => '7788990-1', 'name' => 'Ferretería El Tornillo',
+                'revenue' => '4201', 'capital' => '120000.00', 'series' => 'FET',
                 'bank' => ['Banco Industrial', 'Cuenta monetaria Ferretería El Tornillo', '5571'],
                 'customers' => [
                     ['Constructora Altos del Lago, S.A.', '7766554-3', 'compras@altosdellago.test', 30],
@@ -456,8 +579,9 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
                     ['Transportes Rápidos del Altiplano', 20, '5201', 'services', 'Fletes de entrega a obras', '2750.00'],
                 ],
             ],
-            '1239876-5' => [
-                'revenue' => '4101', 'capital' => '45000.00', 'series' => 'CDS', 'preparer' => 'owner',
+            [
+                'tax_id' => '1239876-5', 'name' => 'Clínica Dental Sonrisas',
+                'revenue' => '4101', 'capital' => '45000.00', 'series' => 'CDS',
                 'bank' => ['Banco G&T Continental', 'Cuenta monetaria Clínica Dental Sonrisas', '8826'],
                 'customers' => [
                     ['Aseguradora Vida Plena, S.A.', '9900112-3', 'reclamos@vidaplena.test', 30],
@@ -484,8 +608,9 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
                     ['Energía del Valle, S.A.', 14, '5204', 'services', 'Energía eléctrica de la clínica', '1650.00'],
                 ],
             ],
-            '5512347-0' => [
-                'revenue' => '4101', 'capital' => '80000.00', 'series' => 'ALR', 'preparer' => 'collaborator',
+            [
+                'tax_id' => '5512347-0', 'name' => 'Arquitectura Línea Recta',
+                'revenue' => '4101', 'capital' => '80000.00', 'series' => 'ALR',
                 'bank' => ['Banco Industrial', 'Cuenta monetaria Arquitectura Línea Recta', '6640'],
                 'customers' => [
                     ['Constructora Altos del Lago, S.A.', '7766554-3', 'proyectos@altosdellago.test', 30],
@@ -508,6 +633,62 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
                     ['Software de Diseño Centroamérica', 3, '5201', 'services', 'Suscripción mensual de software de diseño', '1450.00'],
                     ['Impresiones y Planos Express', 9, '5201', 'goods', 'Impresión de planos y maquetas', '980.00'],
                     ['Estudio de Ingeniería Estructural Cifuentes', 17, '5208', 'services', 'Cálculo estructural subcontratado', '8400.00'],
+                ],
+            ],
+            [
+                'tax_id' => '6789012-3', 'name' => 'Agroservicios San Isidro', 'keywords' => ['agr', 'distribu', 'agro'],
+                'revenue' => '4201', 'capital' => '150000.00', 'series' => 'AGR',
+                'bank' => ['Banco de Desarrollo Rural', 'Cuenta monetaria agroservicio', '7215'],
+                'customers' => [
+                    ['Cooperativa Agrícola Nuevo Amanecer', '3579135-7', 'compras@nuevoamanecer.test', 30],
+                    ['Agropecuaria Los Volcanes, S.A.', '2468024-6', 'proveeduria@losvolcanes.test', 30],
+                    ['Hortalizas del Altiplano', '1357913-5', 'pedidos@hortalizasaltiplano.test', 15],
+                    ['Consumidor final', 'CF', null, 0],
+                ],
+                'suppliers' => [
+                    ['Fertilizantes de Centroamérica, S.A.', '9753197-5', 'ventas@fertica.test', '+502 2420 1500', 30],
+                    ['Semillas Mejoradas del Pacífico', '8642086-4', 'pedidos@semillaspacifico.test', '+502 7880 3030', 30],
+                    ['Inmobiliaria Los Álamos', '4433221-7', 'cobros@losalamos.test', '+502 2333 4455', 0],
+                    ['Transportes Rápidos del Altiplano', '9911223-6', 'fletes@rapidosaltiplano.test', '+502 7760 2020', 0],
+                ],
+                'sales' => [
+                    ['Cooperativa Agrícola Nuevo Amanecer', 5, [['Fertilizante 15-15-15, quintal', 120, '285.00', 'goods'], ['Urea 46 %, quintal', 60, '310.00', 'goods']], 1.0],
+                    ['Agropecuaria Los Volcanes, S.A.', 12, [['Semilla de maíz híbrido, bolsa 25 kg', 40, '1150.00', 'goods']], 1.0],
+                    ['Hortalizas del Altiplano', 19, [['Fungicida agrícola, galón', 30, '245.00', 'goods'], ['Bomba de mochila 20 litros', 6, '525.00', 'goods']], 1.0],
+                    ['Consumidor final', 27, [['Ventas de mostrador del mes', 1, '26900.00', 'goods']], 1.0],
+                ],
+                'purchases' => [
+                    ['Fertilizantes de Centroamérica, S.A.', 2, '5103', 'goods', 'Fertilizantes granulados, 200 quintales', '41500.00'],
+                    ['Semillas Mejoradas del Pacífico', 6, '5103', 'goods', 'Semilla certificada de maíz y frijol', '28600.00'],
+                    ['Inmobiliaria Los Álamos', 1, '5203', 'services', 'Alquiler de bodega y sala de ventas', '7800.00'],
+                    ['Transportes Rápidos del Altiplano', 16, '5201', 'services', 'Fletes de entrega a fincas', '3200.00'],
+                ],
+            ],
+            [
+                'tax_id' => '5432109-8', 'name' => 'Finca El Mirador', 'keywords' => ['finca', 'cafe', 'café', 'hacienda'],
+                'revenue' => '4201', 'capital' => '200000.00', 'series' => 'FEM',
+                'bank' => ['Banco de Desarrollo Rural', 'Cuenta monetaria de la finca', '4093'],
+                'customers' => [
+                    ['Exportadora de Café de Altura, S.A.', '7531975-3', 'compras@cafealtura.test', 30],
+                    ['Beneficio La Cumbre', '6420864-2', 'recepcion@lacumbre.test', 15],
+                    ['Mercado Mayorista Central', '5319753-1', 'administracion@mayorista.test', 15],
+                ],
+                'suppliers' => [
+                    ['Fertilizantes de Centroamérica, S.A.', '9753197-5', 'ventas@fertica.test', '+502 2420 1500', 30],
+                    ['Agroquímicos del Sur', '4208642-0', 'ventas@agroquimicossur.test', '+502 7830 4141', 30],
+                    ['Transportes Rápidos del Altiplano', '9911223-6', 'fletes@rapidosaltiplano.test', '+502 7760 2020', 0],
+                    ['Energía del Valle, S.A.', '1122334-4', 'facturacion@energiadelvalle.test', '+502 2277 0000', 10],
+                ],
+                'sales' => [
+                    ['Exportadora de Café de Altura, S.A.', 8, [['Café pergamino, quintal', 45, '1650.00', 'goods']], 1.0],
+                    ['Beneficio La Cumbre', 15, [['Café en cereza, quintal', 120, '420.00', 'goods']], 1.0],
+                    ['Mercado Mayorista Central', 23, [['Banano de sombra, caja', 300, '65.00', 'goods'], ['Aguacate Hass, caja', 80, '210.00', 'goods']], 1.0],
+                ],
+                'purchases' => [
+                    ['Fertilizantes de Centroamérica, S.A.', 3, '5103', 'goods', 'Fertilizante para cafetal', '24800.00'],
+                    ['Agroquímicos del Sur', 9, '5103', 'goods', 'Control de roya y broca', '9650.00'],
+                    ['Transportes Rápidos del Altiplano', 18, '5201', 'services', 'Flete de café al beneficio', '4100.00'],
+                    ['Energía del Valle, S.A.', 12, '5204', 'services', 'Energía del beneficio húmedo', '2950.00'],
                 ],
             ],
         ];

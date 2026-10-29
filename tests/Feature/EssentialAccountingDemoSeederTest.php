@@ -7,7 +7,10 @@ use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     $this->travelTo(now()->setDate(2026, 10, 29)->setTime(10, 0));
-    $this->seed([EssentialPlanDemoSeeder::class, EssentialPlanAccountingDemoSeeder::class]);
+    $this->seed(EssentialPlanDemoSeeder::class);
+    if (! str_contains($this->name(), 'demo_books')) {
+        $this->seed(EssentialPlanAccountingDemoSeeder::class);
+    }
     $organizationId = (int) DB::table('organizations')->where('tax_identifier', '3344556-7')->value('id');
     $this->companies = DB::table('companies')->where('organization_id', $organizationId)->orderBy('id')->get();
 });
@@ -50,4 +53,23 @@ test('running the accounting demo again adds nothing', function () {
     $this->seed(EssentialPlanAccountingDemoSeeder::class);
 
     expect($count())->toBe($before);
+});
+
+test('demo:books fills an organization of its own: matching books for its clients and new clients up to the number asked', function () {
+    $organizationId = (int) $this->companies->first()->organization_id;
+    DB::table('companies')->where('tax_id', '4455667-8')->update(['name' => 'Distribuidora Agrícola El Progreso, S.A.', 'tax_id' => '1112223-4']);
+    DB::table('companies')->where('tax_id', '7788990-1')->update(['name' => 'Finca Las Margaritas', 'tax_id' => '5556667-8']);
+
+    $this->artisan('demo:books', ['organization' => '3344556-7', '--clients' => 6])->assertSuccessful();
+
+    $customer = fn (string $taxId): array => DB::table('sales_customers as c')->join('companies as co', 'co.id', '=', 'c.company_id')
+        ->where('co.tax_id', $taxId)->where('co.organization_id', $organizationId)->pluck('c.name')->all();
+    expect($customer('1112223-4'))->toContain('Cooperativa Agrícola Nuevo Amanecer')
+        ->and($customer('5556667-8'))->toContain('Exportadora de Café de Altura, S.A.')
+        ->and($customer('4455667-8'))->toContain('Cafetería El Portal')
+        ->and($customer('7788990-1'))->toContain('Constructora Altos del Lago, S.A.');
+
+    $companies = DB::table('companies')->where('organization_id', $organizationId)->pluck('id');
+    expect($companies)->toHaveCount(6)
+        ->and(DB::table('vat_book_periods')->whereIn('company_id', $companies)->where('status', 'closed')->count())->toBe(12);
 });
