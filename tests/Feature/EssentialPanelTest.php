@@ -43,7 +43,7 @@ test('the owner sees the whole practice and the accountant only the clients assi
     $this->actingAs($this->owner)->get('/essential/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('essential/dashboard')
         ->where('essential.owner', true)
-        ->where('panel.kpis.clients', 3)
+        ->where('panel.kpis.clients', 4)
         ->where('panel.kpis.open_tasks', fn ($open) => $open >= 3)
         ->has('panel.usage', 4)
         ->has('panel.upcoming')
@@ -51,7 +51,7 @@ test('the owner sees the whole practice and the accountant only the clients assi
 
     $this->actingAs($this->accountant)->get('/essential/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page
         ->where('essential.owner', false)
-        ->where('panel.kpis.clients', 2)
+        ->where('panel.kpis.clients', 3)
         ->where('panel.kpis.open_tasks', fn ($open) => $open >= 2)
         ->where('panel.activity', []));
 });

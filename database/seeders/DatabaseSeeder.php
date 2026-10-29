@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
                 AtlantiaOperationalSeeder::class,
                 EnterprisePlanDemoUsersSeeder::class,
                 EssentialPlanDemoSeeder::class,
+                EssentialPlanAccountingDemoSeeder::class,
                 PlatformStaffDemoSeeder::class,
             ]);
         }

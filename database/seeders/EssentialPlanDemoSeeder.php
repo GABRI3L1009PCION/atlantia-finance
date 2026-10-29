@@ -62,7 +62,7 @@ class EssentialPlanDemoSeeder extends Seeder
         $ownerInOrganization = $owner->organizations()->whereKey($organization->id)->firstOrFail();
         $companies = app(CompanyAdministrationService::class);
         $created = [];
-        foreach ([['Panadería La Esperanza', '4455667-8', $collaborator->id], ['Ferretería El Tornillo', '7788990-1', $collaborator->id], ['Clínica Dental Sonrisas', '1239876-5', null]] as [$name, $taxId, $accountantId]) {
+        foreach ([['Panadería La Esperanza', '4455667-8', $collaborator->id], ['Ferretería El Tornillo', '7788990-1', $collaborator->id], ['Clínica Dental Sonrisas', '1239876-5', null], ['Arquitectura Línea Recta', '5512347-0', $collaborator->id]] as [$name, $taxId, $accountantId]) {
             $existing = DB::table('companies')->where('organization_id', $organization->id)->where('tax_id', $taxId)->value('id');
             if ($existing !== null) {
                 $created[] = (int) $existing;

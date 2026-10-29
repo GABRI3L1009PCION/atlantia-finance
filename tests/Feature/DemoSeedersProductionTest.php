@@ -5,6 +5,7 @@ use Database\Seeders\AtlantiaProductionDemoSeeder;
 use Database\Seeders\CrmDemoSeeder;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\EnterprisePlanDemoUsersSeeder;
+use Database\Seeders\EssentialPlanAccountingDemoSeeder;
 use Database\Seeders\EssentialPlanDemoSeeder;
 use Database\Seeders\PlatformStaffDemoSeeder;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,7 @@ test('los seeders de demostración se niegan a correr en producción', function 
     CrmDemoSeeder::class,
     EnterprisePlanDemoUsersSeeder::class,
     EssentialPlanDemoSeeder::class,
+    EssentialPlanAccountingDemoSeeder::class,
     PlatformStaffDemoSeeder::class,
 ]);
 
