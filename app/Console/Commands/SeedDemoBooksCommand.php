@@ -10,11 +10,11 @@ use Illuminate\Console\Command;
 
 /**
  * Loads three months of demo bookkeeping into an existing organization so its workflow can be tried with data.
- * It creates no users or passwords, only clients, documents and entries, all with fictitious names.
+ * Names are fictitious. When the plan has a free seat it adds an accounting assistant, whose temporary password is shown once.
  */
 class SeedDemoBooksCommand extends Command
 {
-    protected $signature = 'demo:books {organization : ID o NIT de la organización} {--clients=4 : Cuántos clientes debe tener al terminar (se crean los que falten)} {--force : No pedir confirmación en producción}';
+    protected $signature = 'demo:books {organization : ID o NIT de la organización} {--clients=4 : Cuántos clientes debe tener al terminar (se crean los que falten)} {--sin-auxiliar : No agregar un auxiliar contable aunque haya un puesto libre} {--force : No pedir confirmación en producción}';
 
     protected $description = 'Carga tres meses de contabilidad de demostración (ventas, compras, cobros, pagos, banco, conciliación e IVA) en los clientes de una organización.';
 
@@ -39,8 +39,13 @@ class SeedDemoBooksCommand extends Command
             return self::FAILURE;
         }
 
-        $seeded = $books->seedOrganization($organization, $owner, $clients, fn (string $message) => $this->warn($message));
-        $this->info('Contabilidad de demostración cargada en: '.implode(', ', $seeded).'.');
+        $result = $books->seedOrganization($organization, $owner, $clients, ! $this->option('sin-auxiliar'), fn (string $message) => $this->warn($message));
+        $this->info('Contabilidad de demostración cargada en: '.implode(', ', $result['clients']).'.');
+        if ($result['assistant'] !== null) {
+            $this->newLine();
+            $this->info('Auxiliar contable agregado al equipo (cambiará la contraseña al entrar por primera vez):');
+            $this->line('  '.$result['assistant']['name'].' · '.$result['assistant']['email'].' · contraseña temporal: '.$result['assistant']['password']);
+        }
 
         return self::SUCCESS;
     }

@@ -12,15 +12,25 @@ use App\Models\User;
 use App\Services\Accounting\AccountReconciliationService;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
+use App\Services\Fiscal\FiscalObligationGenerationService;
+use App\Services\Fiscal\FiscalObligationWorkflowService;
 use App\Services\Fiscal\VatBookService;
 use App\Services\WorkManagement\CompanyAdministrationService;
+use App\Services\WorkManagement\CompanyAssignmentService;
+use App\Services\WorkManagement\ReviewPolicyService;
+use App\Services\WorkManagement\WorkAuthorizationService;
+use App\Services\WorkManagement\WorkTaskService;
+use App\Services\WorkspaceContext;
+use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
@@ -63,22 +73,25 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
             return;
         }
 
-        $this->seedOrganization($organization, $owner, 4, fn (string $message) => $this->command->warn($message));
+        $this->seedOrganization($organization, $owner, 4, false, fn (string $message) => $this->command->warn($message));
     }
 
     /**
-     * Books three months for the organization's clients, creating demo clients until it has $clients of them.
+     * Books three months for the organization's clients, creating demo clients until it has $clients of them, and leaves
+     * the practice up to date: past fiscal obligations filed and past tasks finished, as an established office would be.
      * Existing clients keep their data: the demo only adds its own documents next to it.
      *
      * @param  (Closure(string): void)|null  $warn
-     * @return list<string> The clients that received the demo books.
+     * @return array{clients: list<string>, assistant: array{name: string, email: string, password: string}|null}
      */
-    public function seedOrganization(Organization $organization, User $owner, int $clients, ?Closure $warn = null): array
+    public function seedOrganization(Organization $organization, User $owner, int $clients, bool $hireAssistant = false, ?Closure $warn = null): array
     {
         $this->organization = $organization;
         $this->owner = $owner;
         $this->warn = $warn;
+        $assistant = $hireAssistant ? $this->hireAssistant() : null;
         $this->ensureClients($clients);
+        $this->assignAssistant($clients);
 
         $profiles = $this->profiles();
         $companies = $this->activeCompanies()->orderBy('id')->limit($clients)->get();
@@ -92,8 +105,204 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
                 $seeded[] = (string) $company->name;
             }
         }
+        $ids = array_values($companies->pluck('id')->map(fn ($id): int => (int) $id)->all());
+        $this->fileObligations($ids);
+        $this->finishPastTasks($ids);
 
-        return $seeded;
+        return ['clients' => $seeded, 'assistant' => $assistant];
+    }
+
+    /**
+     * An Esencial practice has two seats: when the second is free, an accounting assistant joins the team. The password is
+     * random, shown once, and must be changed at the first sign-in.
+     *
+     * @return array{name: string, email: string, password: string}|null
+     */
+    private function hireAssistant(): ?array
+    {
+        $members = DB::table('organization_user')->where('organization_id', $this->organization->id)->where('status', 'active')->count();
+        if ($members >= app(WorkspaceContext::class)->limit($this->organization, 'users')) {
+            return null;
+        }
+        $officeId = $this->primaryOfficeId();
+        $email = 'auxiliar.contable.'.$this->organization->id.'@atlantia.test';
+        $password = Str::password(16, symbols: false);
+        $user = User::query()->firstOrNew(['email' => $email]);
+        $user->forceFill(['name' => 'Andrea Méndez', 'password' => $password, 'must_change_password' => true, 'email_verified_at' => now()])->save();
+        DB::table('organization_user')->updateOrInsert(['organization_id' => $this->organization->id, 'user_id' => $user->id],
+            ['role' => 'member', 'status' => 'active', 'joined_at' => now()->subMonths(4), 'invited_by' => $this->owner->id, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('office_user')->updateOrInsert(['office_id' => $officeId, 'user_id' => $user->id],
+            ['role' => 'member', 'status' => 'active', 'assigned_at' => now()->subMonths(4), 'created_at' => now(), 'updated_at' => now()]);
+        app(WorkAuthorizationService::class)->ensureDefaults($this->organization);
+        $roleId = (int) DB::table('workspace_roles')->where('organization_id', $this->organization->id)->where('code', 'accountant_in_charge')->whereNull('deleted_at')->value('id');
+        DB::table('user_role_assignments')->updateOrInsert(['organization_id' => $this->organization->id, 'user_id' => $user->id, 'workspace_role_id' => $roleId],
+            ['office_id' => $officeId, 'assigned_by' => $this->owner->id, 'status' => 'active', 'starts_at' => now()->subMonths(4), 'ends_at' => null,
+                'created_at' => now(), 'updated_at' => now(), 'deleted_at' => null]);
+
+        return ['name' => (string) $user->name, 'email' => $email, 'password' => $password];
+    }
+
+    /** The second member of the practice is the accountant in charge of every client that has none. */
+    private function assignAssistant(int $clients): void
+    {
+        $member = DB::table('organization_user')->where('organization_id', $this->organization->id)->where('status', 'active')
+            ->where('user_id', '<>', $this->owner->id)->orderBy('user_id')->value('user_id');
+        if ($member === null) {
+            return;
+        }
+        foreach ($this->activeCompanies()->orderBy('id')->limit($clients)->get(['id', 'office_id']) as $company) {
+            $assigned = DB::table('company_assignments')->where('company_id', $company->id)->where('assignment_role', 'accountant_in_charge')
+                ->where('status', 'active')->whereNull('deleted_at')->exists();
+            if (! $assigned) {
+                app(CompanyAssignmentService::class)->assign($this->organization, $this->owner, (int) $company->office_id, (int) $company->id, (int) $member, 'accountant_in_charge', true);
+            }
+        }
+    }
+
+    private function primaryOfficeId(): int
+    {
+        return (int) DB::table('offices')->where('organization_id', $this->organization->id)->where('status', 'active')->orderByDesc('is_primary')->orderBy('id')->value('id');
+    }
+
+    /**
+     * Every obligation of a month already closed goes through the real workflow: the preparer starts and submits it, the
+     * owner approves it and the filing is recorded with its SAT reference and receipt, each on its own date.
+     *
+     * @param  list<int>  $companyIds
+     */
+    private function fileObligations(array $companyIds): void
+    {
+        app(FiscalObligationGenerationService::class)->generate($this->organization, $this->owner, $companyIds);
+        $workflow = app(FiscalObligationWorkflowService::class);
+        $policy = app(ReviewPolicyService::class)->policy($this->organization);
+        $currentMonth = CarbonImmutable::now()->startOfMonth();
+        $obligations = DB::table('fiscal_obligations')->whereIn('company_id', $companyIds)->whereNotIn('status', ['completed', 'cancelled', 'not_applicable'])
+            ->orderBy('due_on')->orderBy('id')->get();
+        foreach ($obligations as $obligation) {
+            if (CarbonImmutable::create((int) $obligation->reference_year, (int) $obligation->reference_month, 1)->greaterThanOrEqualTo($currentMonth)) {
+                continue;
+            }
+            $company = DB::table('companies')->where('id', $obligation->company_id)->first();
+            $preparer = $this->bookkeeperOf($company);
+            if ($obligation->status === 'pending' && (int) $obligation->assigned_to !== $preparer->id) {
+                // Months older than the generator's window keep the responsible they were created with: they follow the current team, as generation does.
+                DB::table('fiscal_obligations')->where('id', $obligation->id)->update(['assigned_to' => $preparer->id,
+                    'reviewer_id' => $preparer->id === $this->owner->id ? null : $this->owner->id, 'updated_at' => now()]);
+            }
+            $filedOn = CarbonImmutable::parse((string) $obligation->due_on)->subDays(3)->min(CarbonImmutable::today());
+            $this->attempt($company, 'la presentación de '.$obligation->name.' · '.$obligation->reference_period, function () use ($workflow, $policy, $obligation, $preparer, $filedOn, $company): void {
+                $id = (int) $obligation->id;
+                $status = (string) $obligation->status;
+                $this->at($filedOn->subDays(4)->setTime(9, 15), function () use ($workflow, $preparer, $id, &$status): void {
+                    if (in_array($status, ['pending', 'changes_requested'], true)) {
+                        $workflow->start($this->organization, $preparer, $id);
+                        $status = 'in_progress';
+                    }
+                });
+                $this->at($filedOn->subDays(2)->setTime(16, 40), function () use ($workflow, $policy, $preparer, $id, &$status): void {
+                    if ($status === 'in_progress' && $preparer->id === $this->owner->id) {
+                        $workflow->finalizeOwn($this->organization, $preparer, $id, $policy);
+                        $status = 'approved';
+                    } elseif ($status === 'in_progress') {
+                        $workflow->submit($this->organization, $preparer, $id);
+                        $status = 'ready_for_review';
+                    }
+                });
+                $this->at($filedOn->subDay()->setTime(10, 30), function () use ($workflow, $id, &$status): void {
+                    if ($status === 'ready_for_review') {
+                        $workflow->approve($this->organization, $this->owner, $id, 'Revisada contra libros y conciliación.');
+                        $status = 'approved';
+                    }
+                });
+                $this->at($filedOn->setTime(11, 5), function () use ($workflow, $obligation, $preparer, $id, $filedOn, $company): void {
+                    $reference = sprintf('%d%09d', $filedOn->year, crc32($company->id.':'.$obligation->generation_key) % 1000000000);
+                    $receipt = UploadedFile::fake()->createWithContent('constancia-sat-'.$reference.'.pdf', $this->receiptPdf($company, $obligation, $reference, $filedOn));
+                    $workflow->complete($this->organization, $preparer, $id, $filedOn->toDateString(), $reference, $receipt, 'Presentada en Declaraguate.');
+                });
+            });
+        }
+    }
+
+    /**
+     * Other work of past days is finished the way the team finishes it: the assignee works it and the owner reviews it.
+     *
+     * @param  list<int>  $companyIds
+     */
+    private function finishPastTasks(array $companyIds): void
+    {
+        $tasks = app(WorkTaskService::class);
+        $open = DB::table('work_tasks')->where('organization_id', $this->organization->id)->whereIn('company_id', $companyIds)->whereNull('deleted_at')
+            ->whereIn('status', ['pending', 'in_progress', 'ready_for_review', 'in_review', 'approved'])->where('due_at', '<', CarbonImmutable::today())
+            ->where(fn ($query) => $query->whereNull('automation_key')->orWhere('automation_key', 'not like', 'fiscal_obligation:%'))->orderBy('due_at')->get();
+        foreach ($open as $task) {
+            $company = DB::table('companies')->where('id', $task->company_id)->first();
+            $assignee = ($task->assigned_to === null ? null : User::query()->whereKey((int) $task->assigned_to)->first()) ?? $this->owner;
+            $reviewer = $task->reviewer_id !== null && (int) $task->reviewer_id !== $assignee->id ? User::query()->whereKey((int) $task->reviewer_id)->first() : null;
+            $reviewer ??= $assignee->id !== $this->owner->id ? $this->owner : null;
+            $this->attempt($company, 'la tarea '.$task->title, function () use ($tasks, $task, $assignee, $reviewer): void {
+                $due = CarbonImmutable::parse((string) $task->due_at);
+                $this->at($due->subDays(2)->setTime(9, 0), function () use ($tasks, $task, $assignee, $reviewer): void {
+                    $status = (string) $task->status;
+                    if ($status === 'pending') {
+                        $tasks->transition($this->organization, $assignee, (int) $task->id, 'in_progress');
+                        $status = 'in_progress';
+                    }
+                    if ($reviewer === null) {
+                        if ($status === 'in_progress') {
+                            $tasks->finishOwn($this->organization, $assignee, (int) $task->id, 'Terminada.');
+                        }
+
+                        return;
+                    }
+                    foreach (['in_progress' => [$assignee, 'ready_for_review'], 'ready_for_review' => [$reviewer, 'in_review'], 'in_review' => [$reviewer, 'approved'], 'approved' => [$reviewer, 'completed']] as $from => [$actor, $to]) {
+                        if ($status === $from) {
+                            $tasks->transition($this->organization, $actor, (int) $task->id, $to);
+                            $status = $to;
+                        }
+                    }
+                });
+            });
+        }
+    }
+
+    /** Runs the callback as if it happened at the given moment (never in the future), so the history carries real dates. */
+    private function at(CarbonImmutable $moment, Closure $callback): void
+    {
+        $previous = Carbon::getTestNow();
+        Carbon::setTestNow($moment->isAfter(Carbon::now()) ? Carbon::now() : $moment);
+        try {
+            $callback();
+        } finally {
+            Carbon::setTestNow($previous);
+        }
+    }
+
+    /** A one-page PDF standing in for the SAT filing receipt. */
+    private function receiptPdf(stdClass $company, stdClass $obligation, string $reference, CarbonImmutable $filedOn): string
+    {
+        $lines = ['Constancia de presentacion - documento de demostracion', 'Contribuyente: '.Str::ascii((string) $company->name).'  NIT '.$company->tax_id,
+            'Formulario: '.Str::ascii($obligation->name.' - '.$obligation->reference_period), 'Numero de acceso: '.$reference, 'Fecha de presentacion: '.$filedOn->format('d/m/Y')];
+        $text = 'BT /F1 12 Tf 60 760 Td 18 TL';
+        foreach ($lines as $line) {
+            $text .= ' ('.str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $line).') Tj T*';
+        }
+        $text .= ' ET';
+        $objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+            '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+            '<< /Length '.strlen($text)." >>\nstream\n".$text."\nendstream", '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+        $pdf = "%PDF-1.4\n";
+        $offsets = [];
+        foreach ($objects as $index => $object) {
+            $offsets[] = strlen($pdf);
+            $pdf .= ($index + 1)." 0 obj\n".$object."\nendobj\n";
+        }
+        $xref = strlen($pdf);
+        $pdf .= 'xref'."\n0 ".(count($objects) + 1)."\n0000000000 65535 f \n";
+        foreach ($offsets as $offset) {
+            $pdf .= sprintf("%010d 00000 n \n", $offset);
+        }
+
+        return $pdf.'trailer << /Size '.(count($objects) + 1)." /Root 1 0 R >>\nstartxref\n".$xref."\n%EOF\n";
     }
 
     /**
@@ -137,7 +346,7 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
     {
         $existing = $this->activeCompanies()->pluck('tax_id')->all();
         $missing = $wanted - count($existing);
-        $officeId = (int) DB::table('offices')->where('organization_id', $this->organization->id)->where('status', 'active')->orderByDesc('is_primary')->orderBy('id')->value('id');
+        $officeId = $this->primaryOfficeId();
         $member = DB::table('organization_user')->where('organization_id', $this->organization->id)
             ->where('status', 'active')->where('user_id', '<>', $this->owner->id)->orderBy('user_id')->value('user_id');
         $ownerInOrganization = $this->owner->organizations()->whereKey($this->organization->id)->firstOrFail();
@@ -170,6 +379,7 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
 
         $months = $this->months();
         $this->openPeriods($company, $months);
+        $this->closeEarlierVatBooks($company, $months[0]);
         $this->openingCapital($company, $months[0], $profile['capital']);
         $customers = $this->customers($company, $profile['customers']);
         $suppliers = $this->suppliers($company, $profile['suppliers']);
@@ -184,8 +394,8 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
                 }
                 $reference = sprintf('%s-%d', $month->format('Ym'), $number + 1);
                 $invoice = $this->sale($company, $customers[$customer], $date, $lines, $reference, $profile['series']);
-                // Older months are collected; the current one keeps balances open so receivables and reminders have data.
-                $share = $last ? $collected * 0.5 : ($index === 0 && $number === 0 ? 0.0 : $collected);
+                // Closed months are fully collected; the current one keeps balances open, still within their terms.
+                $share = $last ? $collected * 0.5 : $collected;
                 if ($share > 0) {
                     $this->collect($company, $bank, $invoice, $this->paidOn($date, 6), $share);
                 }
@@ -210,9 +420,10 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
 
         $this->postDrafts($company);
         // A client with its own earlier movements may not reconcile or close with the demo figures alone: that is reported, not forced.
-        $this->attempt($company, 'la conciliación bancaria', fn () => $this->reconcile($company, $bank, $months[count($months) - 2]));
+        $reconciled = $months[count($months) - 2];
+        $this->attempt($company, 'la conciliación bancaria', fn () => $this->at($reconciled->addMonth()->setDay(5)->setTime(12, 0), fn () => $this->reconcile($company, $bank, $reconciled)));
         foreach (array_slice($months, 0, -1) as $month) {
-            $this->attempt($company, 'el libro de IVA de '.$month->format('m/Y'), fn () => $this->closeVatBook($company, $month));
+            $this->attempt($company, 'el libro de IVA de '.$month->format('m/Y'), fn () => $this->at($month->addMonth()->setDay(8)->setTime(17, 0), fn () => $this->closeVatBook($company, $month)));
         }
     }
 
@@ -234,6 +445,17 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
             if ($this->warn !== null) {
                 ($this->warn)("{$company->name}: no se completó {$step}. ".collect($exception->errors())->flatten()->implode(' '));
             }
+        }
+    }
+
+    /** The client was already declaring before its books moved to Atlantia: the months it was a client here are closed, without movements. */
+    private function closeEarlierVatBooks(stdClass $company, CarbonImmutable $firstMonth): void
+    {
+        $month = CarbonImmutable::parse((string) $company->created_at)->startOfMonth()->max($firstMonth->subMonths(4));
+        while ($month->lessThan($firstMonth)) {
+            $closing = $month;
+            $this->attempt($company, 'el libro de IVA de '.$closing->format('m/Y'), fn () => $this->at($closing->addMonth()->setDay(8)->setTime(17, 0), fn () => $this->closeVatBook($company, $closing)));
+            $month = $month->addMonth();
         }
     }
 
@@ -339,13 +561,13 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
     private function sale(stdClass $company, int $customerId, string $date, array $lines, string $reference, string $series): stdClass
     {
         $requestId = $this->uuid($company, 'sale:'.$reference);
-        $this->act($this->bookkeeper, SalesController::class, 'store', ['request_id' => $requestId, 'customer_id' => $customerId, 'issued_on' => $date,
+        $this->at(CarbonImmutable::parse($date)->setTime(10, 20), fn () => $this->act($this->bookkeeper, SalesController::class, 'store', ['request_id' => $requestId, 'customer_id' => $customerId, 'issued_on' => $date,
             'fiscal_document_type' => 'FACT', 'fiscal_series' => $series, 'fiscal_number' => str_replace('-', '', $reference),
             'fiscal_authorization' => strtoupper(substr(str_replace('-', '', $requestId), 0, 32)),
-            'lines' => array_map(fn (array $line): array => ['description' => $line[0], 'quantity' => $line[1], 'unit_price' => $line[2], 'tax_treatment' => $line[3]], $lines)], $company);
+            'lines' => array_map(fn (array $line): array => ['description' => $line[0], 'quantity' => $line[1], 'unit_price' => $line[2], 'tax_treatment' => $line[3]], $lines)], $company));
         $invoice = DB::table('sales_invoices')->where('public_id', $requestId)->first();
         if ($invoice->status === 'draft') {
-            $this->act($this->owner, SalesController::class, 'process', ['action' => 'issue'], $company, ['invoice' => $requestId]);
+            $this->at(CarbonImmutable::parse($date)->setTime(10, 35), fn () => $this->act($this->owner, SalesController::class, 'process', ['action' => 'issue'], $company, ['invoice' => $requestId]));
         }
 
         return DB::table('sales_invoices')->where('public_id', $requestId)->first();
@@ -359,8 +581,8 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
         }
         $amount = $this->decimal((int) round((int) $invoice->total_cents * $share));
         $reference = 'DEP-'.$invoice->fiscal_number;
-        $this->act($this->bookkeeper, SalesController::class, 'receipt', ['request_id' => $requestId, 'amount' => $amount, 'received_on' => $date,
-            'reference' => $reference], $company, ['invoice' => $invoice->public_id]);
+        $this->at(CarbonImmutable::parse($date)->setTime(15, 10), fn () => $this->act($this->bookkeeper, SalesController::class, 'receipt', ['request_id' => $requestId,
+            'amount' => $amount, 'received_on' => $date, 'reference' => $reference], $company, ['invoice' => $invoice->public_id]));
         $this->bankMovement($company, $bank, $date, $reference, 'Depósito de '.$invoice->customer_name, 'inflow', $amount);
     }
 
@@ -368,15 +590,15 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
     {
         $requestId = $this->uuid($company, 'purchase:'.$number.':'.$supplierId);
         $supplier = DB::table('purchase_suppliers')->where('id', $supplierId)->first();
-        $this->act($this->bookkeeper, PurchaseController::class, 'store', ['request_id' => $requestId, 'supplier_id' => $supplierId,
+        $this->at(CarbonImmutable::parse($date)->setTime(11, 40), fn () => $this->act($this->bookkeeper, PurchaseController::class, 'store', ['request_id' => $requestId, 'supplier_id' => $supplierId,
             'document_type' => $treatment === 'goods' && str_starts_with($account, '51') ? 'purchase' : 'expense', 'external_reference' => 'FAC-'.$number,
             'document_date' => $date, 'due_on' => CarbonImmutable::parse($date)->addDays((int) ($supplier->payment_terms_days ?? 15))->toDateString(),
             'fiscal_document_type' => 'FACT', 'fiscal_series' => strtoupper(substr(preg_replace('/[^A-Za-z]/', '', (string) $supplier->name) ?? 'PROV', 0, 4)),
             'fiscal_number' => $number, 'lines' => [['account_id' => $this->account($account), 'description' => $description, 'quantity' => 1,
-                'unit_price' => $amount, 'tax_treatment' => $treatment]]], $company);
+                'unit_price' => $amount, 'tax_treatment' => $treatment]]], $company));
         $document = DB::table('purchase_documents')->where('public_id', $requestId)->first();
         if ($document->status === 'draft') {
-            $this->act($this->owner, PurchaseController::class, 'process', ['action' => 'approve'], $company, ['document' => $requestId]);
+            $this->at(CarbonImmutable::parse($date)->setTime(17, 0), fn () => $this->act($this->owner, PurchaseController::class, 'process', ['action' => 'approve'], $company, ['document' => $requestId]));
         }
 
         return DB::table('purchase_documents')->where('public_id', $requestId)->first();
@@ -390,8 +612,8 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
         }
         $reference = 'CHQ-'.str_pad((string) $document->number, 5, '0', STR_PAD_LEFT);
         $amount = $this->decimal((int) $document->total_cents);
-        $this->act($this->owner, PurchaseController::class, 'payment', ['request_id' => $requestId, 'amount' => $amount, 'paid_on' => $date, 'reference' => $reference],
-            $company, ['document' => $document->public_id]);
+        $this->at(CarbonImmutable::parse($date)->setTime(16, 20), fn () => $this->act($this->owner, PurchaseController::class, 'payment', ['request_id' => $requestId,
+            'amount' => $amount, 'paid_on' => $date, 'reference' => $reference], $company, ['document' => $document->public_id]));
         // An uncashed check reaches the bank in the first days of the next month.
         $clearedOn = $cashed ? $date : $this->paidOn(CarbonImmutable::parse($date)->startOfMonth()->addMonth()->toDateString(), 2);
         $this->bankMovement($company, $bank, $clearedOn, $reference, 'Cheque pagado a '.$document->supplier_name, 'outflow', $amount);
@@ -425,7 +647,7 @@ class EssentialPlanAccountingDemoSeeder extends Seeder
         $entries = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
             ->where('p.company_id', $company->id)->where('e.status', 'draft')->orderBy('e.entry_date')->orderBy('e.id')->get(['e.*']);
         foreach ($entries as $entry) {
-            $accounting->post((int) $company->id, $entry, $this->owner);
+            $this->at(CarbonImmutable::parse((string) $entry->entry_date)->setTime(18, 30), fn () => $accounting->post((int) $company->id, $entry, $this->owner));
         }
     }
 

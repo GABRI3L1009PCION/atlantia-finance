@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use App\Services\FinancialReportService;
 use Database\Seeders\EssentialPlanAccountingDemoSeeder;
 use Database\Seeders\EssentialPlanDemoSeeder;
@@ -29,15 +30,24 @@ test('the Esencial clients get three months of books kept the way the screens ke
             ->and($statements['income'])->toBeGreaterThan(0)
             ->and($statements['profit'])->toBeGreaterThan(0);
 
-        // August and September are declared; October stays open for the month's work.
-        expect(DB::table('vat_book_periods')->where('company_id', $company->id)->where('status', 'closed')->orderBy('month')->pluck('month')->all())->toBe([8, 9]);
+        // Every month up to September is declared (the earlier ones without movements); October stays open for the month's work.
+        expect(DB::table('vat_book_periods')->where('company_id', $company->id)->where('status', 'closed')->orderBy('month')->pluck('month')->all())->toBe([4, 5, 6, 7, 8, 9]);
 
         // Every invoice was issued and every purchase approved; some balances stay open to work on.
         expect(DB::table('sales_invoices')->where('company_id', $company->id)->where('status', '<>', 'issued')->count())->toBe(0)
             ->and(DB::table('purchase_documents')->where('company_id', $company->id)->where('status', '<>', 'approved')->count())->toBe(0);
         $invoiced = (int) DB::table('sales_invoices')->where('company_id', $company->id)->sum('total_cents');
         $collected = (int) DB::table('sales_receipts as r')->join('sales_invoices as i', 'i.id', '=', 'r.sales_invoice_id')->where('i.company_id', $company->id)->sum('r.amount_cents');
-        expect($collected)->toBeGreaterThan(0)->toBeLessThan($invoiced);
+        expect($collected)->toBeGreaterThan(0)->toBeLessThan($invoiced)
+            ->and(DB::table('sales_invoices')->where('company_id', $company->id)->where('issued_on', '<', '2026-10-01')->whereNotIn('id', DB::table('sales_receipts')->select('sales_invoice_id'))->count())->toBe(0);
+
+        // The practice is up to date: every obligation of a closed month was filed with its receipt, nothing is overdue.
+        $obligations = DB::table('fiscal_obligations')->where('company_id', $company->id);
+        expect((clone $obligations)->where('reference_month', '<', 10)->where('status', '<>', 'completed')->count())->toBe(0)
+            ->and((clone $obligations)->where('status', 'completed')->whereNull('evidence_path')->count())->toBe(0)
+            ->and((clone $obligations)->where('status', 'completed')->where('filed_on', '>', DB::raw('due_on'))->count())->toBe(0)
+            ->and(DB::table('work_tasks')->where('company_id', $company->id)->whereNull('deleted_at')->where('due_at', '<', now()->startOfDay())
+                ->whereNotIn('status', ['completed', 'cancelled', 'not_applicable'])->count())->toBe(0);
 
         $reconciliation = DB::table('account_reconciliations')->where('company_id', $company->id)->first();
         expect($reconciliation->as_of)->toBe('2026-09-30')
@@ -57,6 +67,10 @@ test('running the accounting demo again adds nothing', function () {
 
 test('demo:books fills an organization of its own: matching books for its clients and new clients up to the number asked', function () {
     $organizationId = (int) $this->companies->first()->organization_id;
+    // A practice of one: its second seat is free for the assistant the command brings in.
+    $collaborator = (int) DB::table('users')->where('email', 'esencial.colaborador@atlantia.test')->value('id');
+    DB::table('organization_user')->where('organization_id', $organizationId)->where('user_id', $collaborator)->update(['status' => 'inactive']);
+    DB::table('company_assignments')->where('user_id', $collaborator)->update(['status' => 'ended', 'ends_at' => now()]);
     DB::table('companies')->where('tax_id', '4455667-8')->update(['name' => 'Distribuidora Agrícola El Progreso, S.A.', 'tax_id' => '1112223-4']);
     DB::table('companies')->where('tax_id', '7788990-1')->update(['name' => 'Finca Las Margaritas', 'tax_id' => '5556667-8']);
 
@@ -71,5 +85,16 @@ test('demo:books fills an organization of its own: matching books for its client
 
     $companies = DB::table('companies')->where('organization_id', $organizationId)->pluck('id');
     expect($companies)->toHaveCount(6)
-        ->and(DB::table('vat_book_periods')->whereIn('company_id', $companies)->where('status', 'closed')->count())->toBe(12);
+        ->and(DB::table('vat_book_periods')->whereIn('company_id', $companies)->where('status', 'closed')->count())->toBe(36);
+
+    $assistant = User::query()->where('email', 'auxiliar.contable.'.$organizationId.'@atlantia.test')->firstOrFail();
+    expect($assistant->must_change_password)->toBeTrue()
+        ->and(DB::table('company_assignments')->where('user_id', $assistant->id)->where('assignment_role', 'accountant_in_charge')->where('status', 'active')->count())->toBe(6);
+
+    // The assistant prepared the filings and the owner approved them.
+    $filed = DB::table('fiscal_obligations')->whereIn('company_id', $companies)->where('status', 'completed');
+    expect((clone $filed)->count())->toBeGreaterThan(30)
+        ->and((clone $filed)->where('assigned_to', '<>', $assistant->id)->count())->toBe(0)
+        ->and((clone $filed)->where('approved_by', $assistant->id)->count())->toBe(0)
+        ->and(DB::table('fiscal_obligations')->whereIn('company_id', $companies)->where('due_on', '<', '2026-10-29')->where('status', '<>', 'completed')->count())->toBe(0);
 });
