@@ -14,7 +14,10 @@ import {
     FileSpreadsheet,
     FilePenLine,
     FilePlus2,
+    FileText,
+    Folder,
     FolderUp,
+    Info,
     Landmark,
     ListTree,
     LockKeyhole,
@@ -30,6 +33,7 @@ import {
     SlidersHorizontal,
     Trash2,
     UsersRound,
+    Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -326,6 +330,7 @@ const kinds: Record<string, string> = {
     reversal: 'Reversión',
 };
 type Props = {
+    closingBalances: { id: number; net_cents: number }[];
     accountHistory: {
         id: number;
         date: string;
@@ -2029,11 +2034,75 @@ function TrialBalanceView({
     );
 }
 
+const chartGroups: Record<
+    string,
+    { label: string; folder: string; badge: string }
+> = {
+    asset: {
+        label: 'Activo',
+        folder: 'fill-[#f6d5d8] text-[#b0233a]',
+        badge: 'bg-[#f8e3e5] text-[#9a1c30]',
+    },
+    liability: {
+        label: 'Pasivo',
+        folder: 'fill-[#d9e6f8] text-[#3567b3]',
+        badge: 'bg-[#e6eefa] text-[#2f5ea6]',
+    },
+    equity: {
+        label: 'Patrimonio',
+        folder: 'fill-[#d6efdf] text-[#23864f]',
+        badge: 'bg-[#e3f4e9] text-[#1f7a48]',
+    },
+    income: {
+        label: 'Ingresos',
+        folder: 'fill-[#fbe8c4] text-[#c98a12]',
+        badge: 'bg-[#fdf1d8] text-[#9a6a0c]',
+    },
+    expense: {
+        label: 'Costos y gastos',
+        folder: 'fill-[#fde0cf] text-[#d2632d]',
+        badge: 'bg-[#fdebe0] text-[#b4531f]',
+    },
+};
+
+/** Second level of the Guatemalan chart, from the first two digits of the code. */
+const chartSubgroups: Record<string, string> = {
+    '11': 'Disponible y exigible',
+    '12': 'Inventarios',
+    '13': 'Impuestos y pagos anticipados',
+    '14': 'Propiedad, planta y equipo',
+    '15': 'Otros activos',
+    '21': 'Cuentas por pagar',
+    '22': 'Impuestos y obligaciones laborales',
+    '23': 'Préstamos',
+    '24': 'Otros pasivos',
+    '31': 'Capital',
+    '32': 'Resultados',
+    '33': 'Superávit',
+    '41': 'Ingresos por servicios',
+    '42': 'Ventas',
+    '43': 'Otros ingresos',
+    '51': 'Costos',
+    '52': 'Gastos de administración',
+    '53': 'Otros gastos y gastos financieros',
+    '54': 'Gastos de venta',
+};
+
+const subgroupOf = (code: string) => {
+    const prefix = code.slice(0, 2);
+
+    return {
+        key: prefix,
+        label: `${prefix.padEnd(4, '0')} · ${chartSubgroups[prefix] ?? 'Otras cuentas'}`,
+    };
+};
+
 function ChartOfAccountsView({
     uuid,
     accounts,
     periods,
     balances,
+    closingBalances,
     ledger,
     filters,
     history,
@@ -2049,6 +2118,7 @@ function ChartOfAccountsView({
     accounts: Account[];
     periods: Period[];
     balances: Balance[];
+    closingBalances: Props['closingBalances'];
     ledger: Page<Movement> | null;
     filters: Props['filters'];
     history: Props['accountHistory'];
@@ -2062,22 +2132,46 @@ function ChartOfAccountsView({
 }) {
     const [search, setSearch] = useState('');
     const [group, setGroup] = useState('all');
+    const [menuOpen, setMenuOpen] = useState(false);
+    const selectedAccount = accounts.find(
+        (account) => account.id === Number(filters.account),
+    );
+    const [expanded, setExpanded] = useState<Set<string>>(() => {
+        const start = selectedAccount ?? accounts[0];
+
+        return new Set(
+            start
+                ? [start.type, `${start.type}:${subgroupOf(start.code).key}`]
+                : [],
+        );
+    });
     const normalizedSearch = search.trim().toLocaleLowerCase();
+    const searching = normalizedSearch !== '';
     const visibleAccounts = accounts.filter(
         (account) =>
             (group === 'all' || account.type === group) &&
-            (!normalizedSearch ||
+            (!searching ||
                 `${account.code} ${account.name}`
                     .toLocaleLowerCase()
                     .includes(normalizedSearch)),
     );
-    const selectedAccount = accounts.find(
-        (account) => account.id === Number(filters.account),
+    const balanceOf = (id: number) => balances.find((row) => row.id === id);
+    const closing = new Map(
+        closingBalances.map((row) => [row.id, Number(row.net_cents)]),
     );
-    const selectedBalance = balances.find(
-        (account) => account.id === Number(filters.account),
-    );
+    const closingOf = (account: Account) => {
+        const net = closing.get(account.id) ?? 0;
+
+        return ['asset', 'expense'].includes(account.type) ? net : -net;
+    };
+    const selectedBalance = selectedAccount
+        ? balanceOf(selectedAccount.id)
+        : undefined;
     const accountsWithMovement = new Set(balances.map((account) => account.id));
+    const operative = accounts.filter(
+        (account) =>
+            account.is_active !== false && account.accepts_movements !== false,
+    ).length;
     const selectedHistory = selectedAccount
         ? history.filter(
               (change) =>
@@ -2091,6 +2185,47 @@ function ChartOfAccountsView({
     const from =
         selectedPeriod?.starts_on ?? periods.at(-1)?.starts_on ?? today();
     const to = selectedPeriod?.ends_on ?? periods[0]?.ends_on ?? today();
+    const isOpen = (key: string) => searching || expanded.has(key);
+    const toggle = (key: string) =>
+        setExpanded((current) => {
+            const next = new Set(current);
+
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+
+            return next;
+        });
+    const tree = Object.keys(chartGroups)
+        .map((type) => {
+            const groupAccounts = visibleAccounts
+                .filter((account) => account.type === type)
+                .sort((a, b) => a.code.localeCompare(b.code));
+            const subgroups = new Map<
+                string,
+                { label: string; accounts: Account[] }
+            >();
+
+            for (const account of groupAccounts) {
+                const subgroup = subgroupOf(account.code);
+                const entry = subgroups.get(subgroup.key) ?? {
+                    label: subgroup.label,
+                    accounts: [],
+                };
+                entry.accounts.push(account);
+                subgroups.set(subgroup.key, entry);
+            }
+
+            return { type, count: groupAccounts.length, subgroups };
+        })
+        .filter((node) => node.count > 0);
+    const selectedSubgroup = selectedAccount
+        ? subgroupOf(selectedAccount.code).label
+        : '';
+    const card =
+        'rounded-2xl border border-[#ece7e5] bg-white shadow-[0_6px_18px_rgba(31,38,55,.04)]';
 
     return (
         <div id="plan-cuentas" className="scroll-mt-20 space-y-4">
@@ -2118,264 +2253,366 @@ function ChartOfAccountsView({
                 </a>
             </div>
 
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <section
+                className={`${card} grid divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0`}
+            >
                 {[
                     {
                         label: 'Total de cuentas',
                         value: accounts.length,
-                        hint: 'Catálogo actual',
+                        hint: 'En el catálogo actual',
                         icon: BookOpen,
                         tone: 'bg-[#eee9fb] text-[#6754b7]',
                     },
                     {
                         label: 'Cuentas operativas',
-                        value: accounts.length,
+                        value: operative,
                         hint: 'Disponibles para registro',
                         icon: Check,
                         tone: 'bg-[#e7f5ec] text-[#218451]',
                     },
                     {
-                        label: 'Con movimiento',
+                        label: 'Cuentas con movimiento',
                         value: accountsWithMovement.size,
-                        hint: 'Asientos contabilizados',
+                        hint: 'Con asientos contabilizados',
                         icon: FileChartColumn,
                         tone: 'bg-[#e9f0fb] text-[#315fa8]',
                     },
-                    {
-                        label: 'Cuentas auxiliares',
-                        value: accounts.length,
-                        hint: 'Aceptan movimientos',
-                        icon: UsersRound,
-                        tone: 'bg-[#fff0e7] text-[#d2632d]',
-                    },
-                    {
-                        label: 'Cuentas inactivas',
-                        value: 0,
-                        hint: 'Sin cuentas bloqueadas',
-                        icon: LockKeyhole,
-                        tone: 'bg-[#fce9eb] text-[#ba3246]',
-                    },
                 ].map((metric) => (
-                    <article
+                    <div
                         key={metric.label}
-                        className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_7px_18px_rgba(31,38,55,.05)]"
+                        className="flex items-center gap-4 px-6 py-5"
                     >
-                        <div className="flex items-center gap-3">
-                            <span
-                                className={`grid size-11 shrink-0 place-items-center rounded-full ${metric.tone}`}
-                            >
-                                <metric.icon size={20} />
-                            </span>
-                            <div className="min-w-0">
-                                <p className="text-[11px] font-medium text-slate-500">
-                                    {metric.label}
-                                </p>
-                                <strong className="mt-1 block text-lg text-[#172033]">
-                                    {metric.value}
-                                </strong>
-                                <p className="mt-1 truncate text-[10px] text-slate-400">
-                                    {metric.hint}
-                                </p>
-                            </div>
+                        <span
+                            className={`grid size-14 shrink-0 place-items-center rounded-full ${metric.tone}`}
+                        >
+                            <metric.icon size={24} />
+                        </span>
+                        <div className="min-w-0">
+                            <p className="text-xs text-slate-500">
+                                {metric.label}
+                            </p>
+                            <strong className="mt-0.5 block text-2xl font-bold text-[#172033] tabular-nums">
+                                {metric.value}
+                            </strong>
+                            <p className="text-[11px] text-slate-400">
+                                {metric.hint}
+                            </p>
                         </div>
-                    </article>
+                    </div>
                 ))}
             </section>
 
-            <section className="grid gap-px overflow-hidden rounded-2xl border border-[#e8e4e2] bg-slate-100 shadow-[0_7px_18px_rgba(31,38,55,.05)] md:grid-cols-3">
-                <div className="flex items-center gap-3 bg-white px-5 py-4">
-                    <Check size={21} className="text-emerald-600" />
-                    <div>
-                        <strong className="block text-xs">
-                            Plantilla contable disponible
-                        </strong>
-                        <span className="mt-1 block text-[10px] text-slate-500">
-                            Catálogo base de cinco grupos
-                        </span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3 bg-white px-5 py-4">
-                    <Scale size={21} className="text-[#315fa8]" />
-                    <div>
-                        <strong className="block text-xs">
-                            {accountsWithMovement.size} cuentas con saldos
-                        </strong>
-                        <span className="mt-1 block text-[10px] text-slate-500">
-                            Solo asientos contabilizados
-                        </span>
-                    </div>
-                </div>
-                <div className="flex items-center justify-between gap-3 bg-white px-5 py-4">
-                    <div>
-                        <strong className="block text-xs">
-                            Catálogo inicial seguro
-                        </strong>
-                        <span className="mt-1 block text-[10px] text-slate-500">
-                            No duplica códigos existentes
-                        </span>
-                    </div>
-                    {canManage && (
-                        <button
-                            type="button"
-                            onClick={onInstall}
-                            className="shrink-0 text-[10px] font-semibold text-[#7d0914] underline"
-                        >
-                            Aplicar plantilla
-                        </button>
-                    )}
-                </div>
-            </section>
-
-            <section className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_7px_18px_rgba(31,38,55,.05)]">
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <label className="relative xl:col-span-2">
+            <section className={`${card} p-4`}>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
+                    <label className="relative">
                         <span className="sr-only">Buscar cuenta</span>
                         <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
                         <input
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Buscar por código o nombre..."
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-[#fbfaf9] pr-3 pl-9 text-xs outline-none focus:border-[#8a1630]"
+                            placeholder="Buscar por código o nombre de cuenta..."
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-[#fbfaf9] pr-3 pl-9 text-sm outline-none focus:border-[#8a1630]"
                         />
                     </label>
-                    <label className="text-[10px] font-medium text-slate-500">
+                    <label className="text-xs font-medium text-slate-500">
                         Grupo contable
                         <select
                             value={group}
                             onChange={(event) => setGroup(event.target.value)}
-                            className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs"
+                            className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800"
                         >
                             <option value="all">Todos</option>
-                            {Object.entries(types).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                    {label}
-                                </option>
-                            ))}
+                            {Object.entries(chartGroups).map(
+                                ([value, meta]) => (
+                                    <option key={value} value={value}>
+                                        {meta.label}
+                                    </option>
+                                ),
+                            )}
                         </select>
                     </label>
-                    <label className="text-[10px] font-medium text-slate-500">
+                    <label className="text-xs font-medium text-slate-500">
                         Período de saldos
-                        <select
-                            value={filters.period}
-                            onChange={(event) =>
-                                onFilter({ period: Number(event.target.value) })
-                            }
-                            className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs"
-                        >
-                            <option value={0}>Todos los períodos</option>
-                            {periods.map((period) => (
-                                <option key={period.id} value={period.id}>
-                                    {period.name}
-                                </option>
-                            ))}
-                        </select>
+                        <span className="relative mt-1 block">
+                            <CalendarDays className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
+                            <select
+                                value={filters.period}
+                                onChange={(event) =>
+                                    onFilter({
+                                        period: Number(event.target.value),
+                                    })
+                                }
+                                className="h-10 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-800"
+                            >
+                                <option value={0}>Todos los períodos</option>
+                                {periods.map((period) => (
+                                    <option key={period.id} value={period.id}>
+                                        {period.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </span>
                     </label>
                 </div>
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-[minmax(300px,.8fr)_minmax(0,2fr)]">
-                <aside className="overflow-hidden rounded-2xl border border-[#e8e4e2] bg-white shadow-[0_7px_18px_rgba(31,38,55,.05)]">
-                    <div className="border-b border-slate-100 px-4 py-3">
-                        <h2 className="text-sm font-semibold">
-                            Árbol de cuentas contables
-                        </h2>
-                        <p className="mt-1 text-[10px] text-slate-400">
-                            Organizado por clasificación contable.
-                        </p>
+            <section className="grid gap-4 xl:grid-cols-[minmax(320px,.85fr)_minmax(0,1.6fr)]">
+                <aside className={`${card} overflow-hidden`}>
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                        <div className="flex items-start gap-3">
+                            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#fbf4f4] text-[#7d0914]">
+                                <ListTree size={18} />
+                            </span>
+                            <div>
+                                <h2 className="text-sm font-semibold text-[#172033]">
+                                    Árbol de cuentas contables
+                                </h2>
+                                <p className="mt-0.5 text-xs text-slate-400">
+                                    Organizado por clasificación contable.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="relative">
+                            <button
+                                type="button"
+                                aria-label="Opciones del árbol"
+                                onClick={() => setMenuOpen((open) => !open)}
+                                className="grid size-9 place-items-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
+                            >
+                                <MoreHorizontal size={17} />
+                            </button>
+                            {menuOpen && (
+                                <div className="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-1 text-sm shadow-lg">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setExpanded(
+                                                new Set(
+                                                    tree.flatMap((node) => [
+                                                        node.type,
+                                                        ...[
+                                                            ...node.subgroups.keys(),
+                                                        ].map(
+                                                            (key) =>
+                                                                `${node.type}:${key}`,
+                                                        ),
+                                                    ]),
+                                                ),
+                                            );
+                                            setMenuOpen(false);
+                                        }}
+                                        className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50"
+                                    >
+                                        Expandir todo
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setExpanded(new Set());
+                                            setMenuOpen(false);
+                                        }}
+                                        className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50"
+                                    >
+                                        Contraer todo
+                                    </button>
+                                    {canManage && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMenuOpen(false);
+                                                onInstall();
+                                            }}
+                                            className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50"
+                                        >
+                                            Aplicar plantilla de cuentas
+                                            <span className="block text-[11px] text-slate-400">
+                                                Agrega las que falten, sin
+                                                duplicar códigos
+                                            </span>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="max-h-[610px] overflow-y-auto p-2">
-                        {Object.entries(types).map(([type, label]) => {
-                            const groupAccounts = visibleAccounts.filter(
-                                (account) => account.type === type,
-                            );
-                            const groupBalance = balances
-                                .filter((account) => account.type === type)
-                                .reduce(
-                                    (sum, account) =>
-                                        sum +
-                                        Number(account.debit_cents) -
-                                        Number(account.credit_cents),
-                                    0,
-                                );
-
-                            if (!groupAccounts.length) {
-                                return null;
-                            }
+                    <div className="max-h-[640px] overflow-y-auto p-2">
+                        {tree.map((node) => {
+                            const meta = chartGroups[node.type];
+                            const groupOpen = isOpen(node.type);
 
                             return (
-                                <div key={type} className="mb-2">
-                                    <div className="flex items-center justify-between rounded-lg bg-[#f8f7f6] px-3 py-2 text-[11px] font-bold">
-                                        <span>{label.toLocaleUpperCase()}</span>
-                                        <span>
-                                            {money(Math.abs(groupBalance))}
+                                <div key={node.type} className="mb-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggle(node.type)}
+                                        className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left transition ${groupOpen ? 'bg-[#fbf2f2]' : 'hover:bg-[#faf8f7]'}`}
+                                    >
+                                        <ChevronRight
+                                            size={15}
+                                            className={`shrink-0 text-slate-400 transition-transform ${groupOpen ? 'rotate-90' : ''}`}
+                                        />
+                                        <Folder
+                                            size={18}
+                                            className={`shrink-0 ${meta.folder}`}
+                                        />
+                                        <span className="flex-1 text-sm font-semibold tracking-wide text-[#172033] uppercase">
+                                            {meta.label}
                                         </span>
-                                    </div>
-                                    <div className="mt-1 space-y-1 pl-2">
-                                        {groupAccounts.map((account) => {
-                                            const balance = balances.find(
-                                                (row) => row.id === account.id,
-                                            );
-                                            const net =
-                                                Number(
-                                                    balance?.debit_cents ?? 0,
-                                                ) -
-                                                Number(
-                                                    balance?.credit_cents ?? 0,
-                                                );
+                                        <span
+                                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${meta.badge}`}
+                                        >
+                                            {node.count}
+                                        </span>
+                                    </button>
+                                    {groupOpen && (
+                                        <div className="ml-4 border-l border-slate-200 pl-2">
+                                            {[...node.subgroups.entries()].map(
+                                                ([key, subgroup]) => {
+                                                    const subgroupKey = `${node.type}:${key}`;
+                                                    const subgroupOpen =
+                                                        isOpen(subgroupKey);
 
-                                            return (
-                                                <button
-                                                    key={account.id}
-                                                    type="button"
-                                                    onClick={() =>
-                                                        onFilter({
-                                                            account: account.id,
-                                                        })
-                                                    }
-                                                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition ${Number(filters.account) === account.id ? 'bg-[#f8e9ea] text-[#760b20]' : 'hover:bg-[#faf8f7]'}`}
-                                                >
-                                                    <span className="min-w-0 truncate text-[11px]">
-                                                        <strong>
-                                                            {account.code}
-                                                        </strong>{' '}
-                                                        · {account.name}
-                                                    </span>
-                                                    <span className="shrink-0 text-[10px] font-semibold tabular-nums">
-                                                        {money(Math.abs(net))}
-                                                    </span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
+                                                    return (
+                                                        <div key={subgroupKey}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    toggle(
+                                                                        subgroupKey,
+                                                                    )
+                                                                }
+                                                                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-[#faf8f7]"
+                                                            >
+                                                                <ChevronRight
+                                                                    size={14}
+                                                                    className={`shrink-0 text-slate-400 transition-transform ${subgroupOpen ? 'rotate-90' : ''}`}
+                                                                />
+                                                                <Folder
+                                                                    size={16}
+                                                                    className={`shrink-0 ${meta.folder}`}
+                                                                />
+                                                                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-700">
+                                                                    {
+                                                                        subgroup.label
+                                                                    }
+                                                                </span>
+                                                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500 tabular-nums">
+                                                                    {
+                                                                        subgroup
+                                                                            .accounts
+                                                                            .length
+                                                                    }
+                                                                </span>
+                                                            </button>
+                                                            {subgroupOpen && (
+                                                                <div className="ml-4 border-l border-dashed border-slate-200 pl-2">
+                                                                    {subgroup.accounts.map(
+                                                                        (
+                                                                            account,
+                                                                        ) => {
+                                                                            const active =
+                                                                                Number(
+                                                                                    filters.account,
+                                                                                ) ===
+                                                                                account.id;
+                                                                            const balance =
+                                                                                closingOf(
+                                                                                    account,
+                                                                                );
+
+                                                                            return (
+                                                                                <button
+                                                                                    key={
+                                                                                        account.id
+                                                                                    }
+                                                                                    type="button"
+                                                                                    onClick={() =>
+                                                                                        onFilter(
+                                                                                            {
+                                                                                                account:
+                                                                                                    account.id,
+                                                                                            },
+                                                                                        )
+                                                                                    }
+                                                                                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition ${active ? 'bg-[#f8e3e5] text-[#7d0914]' : 'text-slate-700 hover:bg-[#faf8f7]'}`}
+                                                                                >
+                                                                                    <FileText
+                                                                                        size={
+                                                                                            14
+                                                                                        }
+                                                                                        className={`shrink-0 ${active ? 'text-[#9a1c30]' : 'text-slate-400'}`}
+                                                                                    />
+                                                                                    <span className="min-w-0 flex-1 truncate text-[13px]">
+                                                                                        <span
+                                                                                            className={
+                                                                                                active
+                                                                                                    ? 'font-semibold'
+                                                                                                    : 'font-medium text-slate-900'
+                                                                                            }
+                                                                                        >
+                                                                                            {
+                                                                                                account.code
+                                                                                            }
+                                                                                        </span>{' '}
+                                                                                        ·{' '}
+                                                                                        {
+                                                                                            account.name
+                                                                                        }
+                                                                                    </span>
+                                                                                    <span
+                                                                                        className={`shrink-0 text-xs whitespace-nowrap tabular-nums ${balance === 0 ? 'text-slate-400' : 'font-semibold'}`}
+                                                                                    >
+                                                                                        {money(
+                                                                                            balance,
+                                                                                        )}
+                                                                                    </span>
+                                                                                </button>
+                                                                            );
+                                                                        },
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                },
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
-                        {!visibleAccounts.length && (
-                            <p className="p-6 text-center text-xs text-slate-500">
+                        {!tree.length && (
+                            <p className="p-6 text-center text-sm text-slate-500">
                                 No hay cuentas con estos filtros.
                             </p>
                         )}
                     </div>
                 </aside>
 
-                <div className="overflow-hidden rounded-2xl border border-[#e8e4e2] bg-white shadow-[0_7px_18px_rgba(31,38,55,.05)]">
+                <div className={`${card} overflow-hidden`}>
                     {selectedAccount ? (
-                        <>
-                            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-4">
+                        <div className="space-y-4 p-5">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
-                                    <h2 className="text-lg font-bold text-[#172033]">
+                                    <h2 className="text-2xl font-bold tracking-tight text-[#172033]">
                                         {selectedAccount.code} ·{' '}
                                         {selectedAccount.name}
                                     </h2>
-                                    <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-semibold">
-                                        <span className="rounded-full bg-[#eee9fb] px-2 py-1 text-[#6754b7]">
+                                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold">
+                                        <span className="rounded-full bg-[#eee9fb] px-2.5 py-1 text-[#6754b7]">
                                             Auxiliar
                                         </span>
-                                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">
-                                            Operativa
+                                        <span className="rounded-full bg-[#f8e3e5] px-2.5 py-1 text-[#9a1c30]">
+                                            {selectedAccount.is_active === false
+                                                ? 'Inactiva'
+                                                : 'Operativa'}
                                         </span>
-                                        <span className="rounded-full bg-[#e9f0fb] px-2 py-1 text-[#315fa8]">
-                                            Permite movimientos
+                                        <span className="rounded-full bg-[#e6eefa] px-2.5 py-1 text-[#2f5ea6]">
+                                            {selectedAccount.accepts_movements ===
+                                            false
+                                                ? 'Sin movimientos'
+                                                : 'Permite movimientos'}
                                         </span>
                                     </div>
                                 </div>
@@ -2404,24 +2641,17 @@ function ChartOfAccountsView({
                                 </div>
                             </div>
 
-                            <div className="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-4">
+                            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
                                 {[
                                     {
-                                        label: 'Saldo actual',
+                                        label: selectedPeriod
+                                            ? `Saldo al ${shortDate(selectedPeriod.ends_on)}`
+                                            : 'Saldo actual',
                                         value: money(
-                                            Math.abs(
-                                                Number(
-                                                    selectedBalance?.debit_cents ??
-                                                        0,
-                                                ) -
-                                                    Number(
-                                                        selectedBalance?.credit_cents ??
-                                                            0,
-                                                    ),
-                                            ),
+                                            closingOf(selectedAccount),
                                         ),
-                                        icon: BookOpen,
-                                        tone: 'text-[#6754b7]',
+                                        icon: Wallet,
+                                        tone: 'bg-[#eee9fb] text-[#6754b7]',
                                     },
                                     {
                                         label: 'Débitos del período',
@@ -2432,7 +2662,7 @@ function ChartOfAccountsView({
                                             ),
                                         ),
                                         icon: ArrowUpRight,
-                                        tone: 'text-emerald-700',
+                                        tone: 'bg-[#e7f5ec] text-[#218451]',
                                     },
                                     {
                                         label: 'Créditos del período',
@@ -2443,28 +2673,33 @@ function ChartOfAccountsView({
                                             ),
                                         ),
                                         icon: ArrowDownLeft,
-                                        tone: 'text-rose-700',
+                                        tone: 'bg-[#fce9eb] text-[#ba3246]',
                                     },
                                     {
-                                        label: 'Movimientos visibles',
-                                        value: ledger?.data.length ?? 0,
+                                        label: 'Movimientos',
+                                        value: String(
+                                            selectedBalance?.movement_count ??
+                                                ledger?.data.length ??
+                                                0,
+                                        ),
                                         icon: NotebookTabs,
-                                        tone: 'text-[#315fa8]',
+                                        tone: 'bg-[#e9f0fb] text-[#315fa8]',
                                     },
                                 ].map((summary) => (
                                     <div
                                         key={summary.label}
                                         className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"
                                     >
-                                        <summary.icon
-                                            size={18}
-                                            className={summary.tone}
-                                        />
-                                        <div>
-                                            <p className="text-[9px] text-slate-500">
+                                        <span
+                                            className={`grid size-10 shrink-0 place-items-center rounded-full ${summary.tone}`}
+                                        >
+                                            <summary.icon size={18} />
+                                        </span>
+                                        <div className="min-w-0">
+                                            <p className="text-[11px] text-slate-500">
                                                 {summary.label}
                                             </p>
-                                            <strong className="mt-1 block text-sm">
+                                            <strong className="block text-base whitespace-nowrap text-[#172033] tabular-nums">
                                                 {summary.value}
                                             </strong>
                                         </div>
@@ -2472,156 +2707,162 @@ function ChartOfAccountsView({
                                 ))}
                             </div>
 
-                            <div className="grid gap-4 border-b border-slate-100 p-4 md:grid-cols-3">
-                                <div>
-                                    <h3 className="text-xs font-semibold">
-                                        Ficha de la cuenta
-                                    </h3>
-                                    <dl className="mt-3 space-y-2 text-[10px]">
-                                        <div className="flex justify-between gap-3">
+                            <div className="rounded-xl border border-slate-200 p-4">
+                                <h3 className="flex items-center gap-2 text-sm font-semibold text-[#172033]">
+                                    <Info
+                                        size={16}
+                                        className="text-slate-500"
+                                    />
+                                    Información general
+                                </h3>
+                                <div className="mt-3 grid gap-x-8 gap-y-2 text-[13px] md:grid-cols-2">
+                                    {[
+                                        ['Código', selectedAccount.code],
+                                        ['Nombre', selectedAccount.name],
+                                        ['Grupo contable', selectedSubgroup],
+                                        ['Tipo de cuenta', 'Auxiliar'],
+                                        [
+                                            'Naturaleza de saldo',
+                                            ['asset', 'expense'].includes(
+                                                selectedAccount.type,
+                                            )
+                                                ? 'Deudora'
+                                                : 'Acreedora',
+                                        ],
+                                        [
+                                            'Clasificación',
+                                            chartGroups[selectedAccount.type]
+                                                ?.label ?? '',
+                                        ],
+                                        ['Moneda', 'GTQ'],
+                                        [
+                                            'Permite movimientos',
+                                            selectedAccount.accepts_movements ===
+                                            false
+                                                ? 'No'
+                                                : 'Sí',
+                                        ],
+                                        ['Es cuenta de mayor', 'No'],
+                                        ['Cuenta padre', selectedSubgroup],
+                                    ].map(([label, value]) => (
+                                        <div
+                                            key={label}
+                                            className="grid grid-cols-[minmax(110px,auto)_minmax(0,1fr)] gap-3"
+                                        >
                                             <dt className="text-slate-500">
-                                                Código
+                                                {label}
                                             </dt>
-                                            <dd className="font-medium">
-                                                {selectedAccount.code}
+                                            <dd className="font-medium text-slate-800">
+                                                {value}
                                             </dd>
                                         </div>
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Nombre
-                                            </dt>
-                                            <dd className="text-right font-medium">
-                                                {selectedAccount.name}
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Grupo
-                                            </dt>
-                                            <dd className="font-medium">
-                                                {types[selectedAccount.type]}
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                </div>
-                                <div>
-                                    <h3 className="text-xs font-semibold">
-                                        Configuración
-                                    </h3>
-                                    <dl className="mt-3 space-y-2 text-[10px]">
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Naturaleza
-                                            </dt>
-                                            <dd className="font-medium">
-                                                {['asset', 'expense'].includes(
-                                                    selectedAccount.type,
-                                                )
-                                                    ? 'Deudora'
-                                                    : 'Acreedora'}
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Moneda
-                                            </dt>
-                                            <dd className="font-medium">GTQ</dd>
-                                        </div>
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Estado
-                                            </dt>
-                                            <dd className="font-medium text-emerald-700">
-                                                Operativa
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                </div>
-                                <div>
-                                    <h3 className="text-xs font-semibold">
-                                        Control
-                                    </h3>
-                                    <dl className="mt-3 space-y-2 text-[10px]">
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Permite movimientos
-                                            </dt>
-                                            <dd className="font-medium text-emerald-700">
-                                                Sí
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Creada
-                                            </dt>
-                                            <dd className="font-medium">
-                                                {selectedAccount.created_at ??
-                                                    'No disponible'}
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between gap-3">
-                                            <dt className="text-slate-500">
-                                                Última modificación
-                                            </dt>
-                                            <dd className="font-medium">
-                                                {selectedAccount.updated_at ??
-                                                    'No disponible'}
-                                            </dd>
-                                        </div>
-                                    </dl>
+                                    ))}
+                                    <div className="grid grid-cols-[minmax(110px,auto)_minmax(0,1fr)] gap-3">
+                                        <dt className="text-slate-500">
+                                            Estado
+                                        </dt>
+                                        <dd>
+                                            <span
+                                                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${selectedAccount.is_active === false ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'}`}
+                                            >
+                                                <span
+                                                    className={`size-1.5 rounded-full ${selectedAccount.is_active === false ? 'bg-slate-400' : 'bg-emerald-500'}`}
+                                                />
+                                                {selectedAccount.is_active ===
+                                                false
+                                                    ? 'Inactiva'
+                                                    : 'Activa'}
+                                            </span>
+                                        </dd>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(240px,.8fr)]">
-                                <div>
-                                    <h3 className="mb-3 text-xs font-semibold">
+                            <div className="rounded-xl border border-slate-200">
+                                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                                    <h3 className="flex items-center gap-2 text-sm font-semibold text-[#172033]">
+                                        <Clock3
+                                            size={16}
+                                            className="text-slate-500"
+                                        />
                                         Movimientos recientes
                                     </h3>
-                                    {!ledger?.data.length ? (
-                                        <div className="rounded-xl border border-dashed border-slate-200 p-7 text-center text-xs text-slate-500">
-                                            Esta cuenta todavía no tiene
-                                            movimientos contabilizados.
-                                        </div>
-                                    ) : (
-                                        <div className="overflow-x-auto rounded-xl border border-slate-200">
-                                            <table className="w-full min-w-[560px] text-[10px]">
-                                                <thead className="bg-[#f8f7f6] text-left text-slate-500">
-                                                    <tr>
-                                                        <th className="px-3 py-2">
-                                                            Fecha
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Asiento
-                                                        </th>
-                                                        <th className="px-3 py-2">
-                                                            Concepto
-                                                        </th>
-                                                        <th className="px-3 py-2 text-right">
-                                                            Debe
-                                                        </th>
-                                                        <th className="px-3 py-2 text-right">
-                                                            Haber
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {ledger.data
-                                                        .slice(0, 6)
-                                                        .map(
-                                                            (
-                                                                movement,
-                                                                index,
-                                                            ) => (
-                                                                <tr
-                                                                    key={`${movement.number}-${index}`}
-                                                                    className="border-t border-slate-100"
-                                                                >
-                                                                    <td className="px-3 py-2">
-                                                                        {
-                                                                            movement.entry_date
-                                                                        }
-                                                                    </td>
-                                                                    <td className="px-3 py-2 text-[#8a1630]">
+                                    {!!ledger?.data.length && (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                onViewLedger(selectedAccount.id)
+                                            }
+                                            className="rounded-lg border border-[#e5dada] px-3 py-1.5 text-xs font-semibold text-[#7d0914] hover:bg-[#fbf4f4]"
+                                        >
+                                            Ver todos
+                                        </button>
+                                    )}
+                                </div>
+                                {!ledger?.data.length ? (
+                                    <div className="mx-4 mb-4 rounded-xl border border-dashed border-slate-200 p-7 text-center text-sm text-slate-500">
+                                        Esta cuenta todavía no tiene movimientos
+                                        contabilizados en el período.
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full min-w-[520px] text-xs">
+                                            <thead className="bg-[#f8f7f6] text-left text-xs text-slate-500">
+                                                <tr>
+                                                    <th className="px-3 py-2 font-medium">
+                                                        Fecha
+                                                    </th>
+                                                    <th className="px-3 py-2 font-medium">
+                                                        Tipo
+                                                    </th>
+                                                    <th className="px-3 py-2 font-medium">
+                                                        Descripción
+                                                    </th>
+                                                    <th className="px-3 py-2 text-right font-medium">
+                                                        Débito (Q)
+                                                    </th>
+                                                    <th className="px-3 py-2 text-right font-medium">
+                                                        Crédito (Q)
+                                                    </th>
+                                                    <th className="px-3 py-2 text-right font-medium">
+                                                        Saldo (Q)
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {ledger.data
+                                                    .slice(0, 6)
+                                                    .map((movement, index) => {
+                                                        const debit =
+                                                            Number(
+                                                                movement.debit_cents,
+                                                            ) > 0;
+
+                                                        return (
+                                                            <tr
+                                                                key={`${movement.number}-${index}`}
+                                                                className="border-t border-slate-100"
+                                                            >
+                                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                                    {shortDate(
+                                                                        movement.entry_date,
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2.5">
+                                                                    <span
+                                                                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${debit ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}
+                                                                    >
+                                                                        {debit
+                                                                            ? 'Cargo'
+                                                                            : 'Abono'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="max-w-[240px] px-3 py-2.5">
+                                                                    <span className="block truncate">
+                                                                        {movement.line_description ??
+                                                                            movement.description}
+                                                                    </span>
+                                                                    <span className="block text-[11px] text-[#8a1630]">
                                                                         DI-
                                                                         {String(
                                                                             movement.number,
@@ -2629,69 +2870,57 @@ function ChartOfAccountsView({
                                                                             6,
                                                                             '0',
                                                                         )}
-                                                                    </td>
-                                                                    <td className="px-3 py-2">
-                                                                        {
-                                                                            movement.description
-                                                                        }
-                                                                    </td>
-                                                                    <td className="px-3 py-2 text-right text-emerald-700">
-                                                                        {money(
-                                                                            movement.debit_cents,
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="px-3 py-2 text-right text-rose-700">
-                                                                        {money(
-                                                                            movement.credit_cents,
-                                                                        )}
-                                                                    </td>
-                                                                </tr>
-                                                            ),
-                                                        )}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                                <aside>
-                                    <h3 className="mb-3 text-xs font-semibold">
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">
+                                                                    {money(
+                                                                        movement.debit_cents,
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">
+                                                                    {money(
+                                                                        movement.credit_cents,
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap tabular-nums">
+                                                                    {money(
+                                                                        movement.running_balance_cents,
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+
+                            {selectedHistory.length > 0 && (
+                                <div className="rounded-xl border border-slate-200 p-4">
+                                    <h3 className="text-sm font-semibold text-[#172033]">
                                         Historial de cambios
                                     </h3>
-                                    {!selectedHistory.length ? (
-                                        <div className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-[10px] text-slate-500">
-                                            Sin correcciones registradas.
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {selectedHistory
-                                                .slice(0, 4)
-                                                .map((change) => (
-                                                    <article
-                                                        key={change.id}
-                                                        className="rounded-xl border border-slate-200 p-3 text-[10px]"
-                                                    >
-                                                        <strong>
-                                                            {change.actor ??
-                                                                'Usuario'}
-                                                        </strong>
-                                                        <p className="mt-1 text-slate-500">
-                                                            {shortDate(
-                                                                change.date,
-                                                            )}
-                                                        </p>
-                                                        <p className="mt-2">
-                                                            {
-                                                                change.after
-                                                                    .reason
-                                                            }
-                                                        </p>
-                                                    </article>
-                                                ))}
-                                        </div>
-                                    )}
-                                </aside>
-                            </div>
-                        </>
+                                    <div className="mt-3 space-y-2">
+                                        {selectedHistory
+                                            .slice(0, 4)
+                                            .map((change) => (
+                                                <p
+                                                    key={change.id}
+                                                    className="text-[13px] text-slate-600"
+                                                >
+                                                    <strong className="text-slate-800">
+                                                        {change.actor ??
+                                                            'Usuario'}
+                                                    </strong>{' '}
+                                                    · {shortDate(change.date)} ·{' '}
+                                                    {change.after.reason}
+                                                </p>
+                                            ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     ) : (
                         <div className="grid min-h-[580px] place-items-center p-8 text-center">
                             <div>
@@ -2700,7 +2929,7 @@ function ChartOfAccountsView({
                                     Selecciona una cuenta del árbol
                                 </p>
                                 <p className="mt-1 text-xs text-slate-500">
-                                    Aquí aparecerán su configuración, saldos y
+                                    Aquí aparecerán su información, saldos y
                                     movimientos.
                                 </p>
                             </div>
@@ -6054,6 +6283,7 @@ export default function CompanyAccounting(props: Props) {
                         accounts={accounts}
                         periods={periods}
                         balances={balances}
+                        closingBalances={props.closingBalances}
                         ledger={ledger}
                         filters={filters}
                         history={props.accountHistory}

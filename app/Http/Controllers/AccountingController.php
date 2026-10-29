@@ -13,6 +13,7 @@ use App\Services\Accounting\CostCenterService;
 use App\Services\Accounting\LedgerService;
 use App\Services\Accounting\TrialBalanceService;
 use App\Services\AccountingService;
+use App\Services\FinancialReportService;
 use App\Services\WorkManagement\CompanyAdministrationService;
 use App\Services\WorkManagement\CompanyAssignmentService;
 use App\Services\WorkManagement\CompanyPortfolioService;
@@ -41,6 +42,7 @@ class AccountingController extends Controller
         private LedgerService $ledgerService,
         private TrialBalanceService $trialBalanceService,
         private CompanyAssignmentService $companyAssignments,
+        private FinancialReportService $reports,
     ) {}
 
     /** GET accounting: company directory, scoped by office and assignment. No writes. */
@@ -315,6 +317,8 @@ class AccountingController extends Controller
                 'import' => $this->accounting->canJournal($org, $record->id, $request->user(), 'import'),
             ],
             'accounts' => $accounts, 'periods' => $periods, 'journal' => $journal, 'balances' => $balances, 'ledger' => $ledger,
+            // The chart shows what each account holds at the end of the selected period, not only that period's movement.
+            'closingBalances' => array_map(fn (array $row): array => ['id' => $row['id'], 'net_cents' => $row['net']], $this->reports->balances($record->id, $ledgerTo ?: now()->toDateString())),
             'ledgerOverview' => $ledgerOverview, 'ledgerSummary' => $ledgerSummary, 'trialBalance' => $trialBalance,
             'accountingDashboard' => $this->accountingDashboard->forCompany($record->id, $periodId ?: null),
             'reopeningRequests' => DB::table('accounting_period_reopening_requests as request')

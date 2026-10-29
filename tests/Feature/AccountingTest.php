@@ -337,6 +337,7 @@ test('drafts do not affect books posting is exact numbered audited and cannot re
     $this->post(route('accounting.entry', $f['uuid']), $data)->assertSessionHasErrors('accounting');
     $this->get(route('accounting.show', $f['uuid']))->assertInertia(fn (Assert $p) => $p
         ->has('balances', 0)
+        ->has('closingBalances', 0)
         ->has('journal.data', 1)
         ->where('periods.0.entries_count', 1)
         ->where('periods.0.draft_count', 1)
@@ -348,6 +349,9 @@ test('drafts do not affect books posting is exact numbered audited and cannot re
     $this->get(route('accounting.show', ['company' => $f['uuid'], 'account' => $f['account1']]))->assertInertia(fn (Assert $p) => $p
         ->has('balances', 2)
         ->where('balances.0.debit_cents', fn ($v) => (int) $v === 100010)
+        ->has('closingBalances', 2)
+        ->where('closingBalances.0.net_cents', 100010)
+        ->where('closingBalances.1.net_cents', -100010)
         ->has('ledger.data', 1)
         ->where('periods.0.entries_count', 1)
         ->where('periods.0.draft_count', 0)
