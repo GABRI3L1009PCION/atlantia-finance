@@ -3809,6 +3809,7 @@ export default function CompanyAccounting(props: Props) {
     } = props;
     const uuid = company.public_id;
     const [tab, setTab] = useState('overview');
+    const [activeModuleGroup, setModuleGroup] = useState('main');
     const [journalSearch, setJournalSearch] = useState(
         filters.journal_search ?? '',
     );
@@ -4227,6 +4228,52 @@ export default function CompanyAccounting(props: Props) {
             module.requiredFeature === undefined ||
             hasPlanFeature(planFeatures, module.requiredFeature),
     );
+    const moduleGroups: { id: string; label: string; modules: string[] }[] = [
+        { id: 'main', label: 'Módulos principales', modules: [] },
+        {
+            id: 'reports',
+            label: 'Reportes',
+            modules: [
+                'Libro Diario',
+                'Libro Mayor',
+                'Balance de Comprobación',
+                'Auxiliares Contables',
+                'Estados Financieros',
+                'Presupuestos',
+            ],
+        },
+        {
+            id: 'processes',
+            label: 'Procesos',
+            modules: [
+                'Asientos Contables',
+                'Ajustes Contables',
+                'Activos Fijos',
+                'Períodos Contables',
+                'Cierre Contable',
+                'Importación Contable',
+            ],
+        },
+        {
+            id: 'setup',
+            label: 'Configuración',
+            modules: [
+                'Plan de Cuentas',
+                'Centros de Costos',
+                'Saldos Iniciales',
+                'Períodos Contables',
+                'Importación Contable',
+            ],
+        },
+    ];
+    const selectedModuleGroup = moduleGroups.find(
+        (item) => item.id === activeModuleGroup,
+    );
+    const groupedModules = selectedModuleGroup?.modules.length
+        ? visibleAccountingModules.filter((module) =>
+              selectedModuleGroup.modules.includes(module.title),
+          )
+        : visibleAccountingModules;
     const moduleTones: Record<string, string> = {
         wine: 'bg-[#f8e9ea] text-[#8a1630]',
         blue: 'bg-[#e9f0fb] text-[#315fa8]',
@@ -4308,151 +4355,388 @@ export default function CompanyAccounting(props: Props) {
                 </header>
                 {tab === 'overview' && (
                     <>
-                        <section className="grid gap-4 xl:grid-cols-[minmax(0,2.2fr)_minmax(280px,.9fr)]">
-                            <div
-                                className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-                                aria-label="Resumen contable"
-                            >
-                                {[
-                                    {
-                                        label: 'Débitos',
-                                        value: money(
-                                            accountingDashboard.trial_balance
-                                                .debits_cents,
-                                        ),
-                                        hint: 'Este período',
-                                        icon: ArrowDownLeft,
-                                        tone: 'bg-[#fce9eb] text-[#ba3246]',
-                                    },
-                                    {
-                                        label: 'Créditos',
-                                        value: money(
-                                            accountingDashboard.trial_balance
-                                                .credits_cents,
-                                        ),
-                                        hint: 'Este período',
-                                        icon: ArrowUpRight,
-                                        tone: 'bg-[#e7f5ec] text-[#3b9b68]',
-                                    },
-                                    {
-                                        label: 'Asientos',
-                                        value: accountingDashboard.summary
-                                            .posted_entries,
-                                        hint: 'Este período',
-                                        icon: FileChartColumn,
-                                        tone: 'bg-[#eee9fb] text-[#6754b7]',
-                                    },
-                                    {
-                                        label: 'Pendientes',
-                                        value: accountingDashboard.summary
-                                            .pending_entries,
-                                        hint: 'Requieren atención',
-                                        icon: Clock3,
-                                        tone: 'bg-[#fff0e7] text-[#d2632d]',
-                                    },
-                                ].map((metric) => (
-                                    <article
-                                        key={metric.label}
-                                        className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_8px_22px_rgba(31,38,55,.06)]"
-                                    >
-                                        <div className="flex items-center gap-2">
+                        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_330px]">
+                            <div className="min-w-0 space-y-4">
+                                <div
+                                    className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+                                    aria-label="Resumen contable"
+                                >
+                                    {[
+                                        {
+                                            label: 'Débitos del período',
+                                            value: money(
+                                                accountingDashboard
+                                                    .trial_balance.debits_cents,
+                                            ),
+                                            icon: ArrowDownLeft,
+                                            tone: 'bg-[#fce9eb] text-[#ba3246]',
+                                        },
+                                        {
+                                            label: 'Créditos del período',
+                                            value: money(
+                                                accountingDashboard
+                                                    .trial_balance
+                                                    .credits_cents,
+                                            ),
+                                            icon: ArrowUpRight,
+                                            tone: 'bg-[#e7f5ec] text-[#3b9b68]',
+                                        },
+                                        {
+                                            label: 'Asientos contabilizados',
+                                            value: accountingDashboard.summary
+                                                .posted_entries,
+                                            hint: 'En este período',
+                                            icon: FileChartColumn,
+                                            tone: 'bg-[#eee9fb] text-[#6754b7]',
+                                        },
+                                        {
+                                            label: 'Pendientes de contabilizar',
+                                            value: accountingDashboard.summary
+                                                .pending_entries,
+                                            link: true,
+                                            icon: Clock3,
+                                            tone: 'bg-[#fff0e7] text-[#d2632d]',
+                                        },
+                                    ].map((metric) => (
+                                        <article
+                                            key={metric.label}
+                                            className="flex items-center gap-3 rounded-2xl border border-[#ece7e5] bg-white px-3.5 py-3 shadow-[0_6px_18px_rgba(31,38,55,.04)]"
+                                        >
                                             <span
                                                 className={`grid size-10 shrink-0 place-items-center rounded-full ${metric.tone}`}
                                             >
                                                 <metric.icon size={19} />
                                             </span>
                                             <div className="min-w-0">
-                                                <p className="text-xs font-medium text-slate-500">
+                                                <p className="text-xs text-slate-500">
                                                     {metric.label}
                                                 </p>
-                                                <strong className="mt-1 block text-base whitespace-nowrap text-[#172033]">
+                                                <strong className="block text-base font-bold whitespace-nowrap text-[#172033] tabular-nums 2xl:text-lg">
                                                     {metric.value}
                                                 </strong>
-                                                <p className="mt-1 text-[10px] text-slate-400">
-                                                    {metric.hint}
-                                                </p>
+                                                {metric.link ? (
+                                                    <a
+                                                        href="#pendientes-contabilizacion"
+                                                        className="text-[11px] font-semibold text-[#8a1630]"
+                                                    >
+                                                        Ver pendientes →
+                                                    </a>
+                                                ) : (
+                                                    metric.hint && (
+                                                        <p className="text-[11px] text-slate-400">
+                                                            {metric.hint}
+                                                        </p>
+                                                    )
+                                                )}
                                             </div>
-                                        </div>
-                                    </article>
-                                ))}
-                            </div>
-                            <aside className="overflow-hidden rounded-2xl border border-[#e8e4e2] bg-white shadow-[0_8px_22px_rgba(31,38,55,.06)]">
-                                {[
-                                    {
-                                        icon: Check,
-                                        label: accountingDashboard.trial_balance
-                                            .balanced
-                                            ? 'Balance cuadrado'
-                                            : 'Balance por revisar',
-                                        tone: 'text-emerald-600',
-                                    },
-                                    {
-                                        icon: Clock3,
-                                        label: `${accountingDashboard.summary.pending_entries} partidas pendientes de contabilización`,
-                                        tone: 'text-amber-500',
-                                    },
-                                    {
-                                        icon: NotebookTabs,
-                                        label: `${accounts.length} cuentas configuradas`,
-                                        tone: 'text-[#6550b5]',
-                                    },
-                                    {
-                                        icon: CalendarDays,
-                                        label: `Período ${accountingDashboard.period?.status === 'closed' ? 'cerrado' : 'abierto'}: ${accountingPeriodName}`,
-                                        tone: 'text-[#315fa8]',
-                                    },
-                                    {
-                                        icon: LockKeyhole,
-                                        label: `Avance de cierre: ${accountingDashboard.summary.close_progress}%`,
-                                        tone: 'text-[#8a1630]',
-                                    },
-                                ].map((item, index) => (
-                                    <div
-                                        key={item.label}
-                                        className={`flex min-h-9 items-center gap-3 px-4 py-2 text-xs font-medium ${index ? 'border-t border-slate-100' : ''}`}
+                                        </article>
+                                    ))}
+                                </div>
+
+                                <article className="rounded-2xl border border-[#ece7e5] bg-white shadow-[0_6px_18px_rgba(31,38,55,.04)]">
+                                    <nav
+                                        aria-label="Grupos de módulos"
+                                        className="flex gap-6 overflow-x-auto border-b border-slate-100 px-5"
                                     >
-                                        <item.icon
-                                            size={16}
-                                            className={item.tone}
-                                        />
-                                        <span>{item.label}</span>
+                                        {moduleGroups.map((moduleGroup) => (
+                                            <button
+                                                key={moduleGroup.id}
+                                                type="button"
+                                                onClick={() =>
+                                                    setModuleGroup(
+                                                        moduleGroup.id,
+                                                    )
+                                                }
+                                                aria-current={
+                                                    activeModuleGroup ===
+                                                    moduleGroup.id
+                                                        ? 'page'
+                                                        : undefined
+                                                }
+                                                className={`-mb-px border-b-2 py-3 text-sm whitespace-nowrap transition ${activeModuleGroup === moduleGroup.id ? 'border-[#8a1630] font-semibold text-[#172033]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                                            >
+                                                {moduleGroup.label}
+                                            </button>
+                                        ))}
+                                    </nav>
+                                    <div
+                                        className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                                        aria-label="Módulos de contabilidad general"
+                                    >
+                                        {groupedModules.map((module, index) => (
+                                            <button
+                                                key={module.title}
+                                                type="button"
+                                                onClick={module.action}
+                                                className="group relative flex min-h-[104px] flex-col items-start gap-1.5 rounded-xl border border-[#ece7e5] bg-white p-3 text-left transition hover:border-[#e2b9bf] hover:bg-[#fffafa] hover:shadow-[0_10px_24px_rgba(91,0,7,.08)]"
+                                            >
+                                                <ChevronRight
+                                                    size={16}
+                                                    className="absolute top-3.5 right-3 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-[#640000]"
+                                                />
+                                                <span className="flex items-center gap-3">
+                                                    <span
+                                                        className={`grid size-10 shrink-0 place-items-center rounded-xl ${moduleTones[module.tone]}`}
+                                                    >
+                                                        <module.icon
+                                                            size={19}
+                                                        />
+                                                    </span>
+                                                    <span className="min-w-0 pr-4">
+                                                        <span className="block text-[11px] font-semibold text-slate-400 tabular-nums">
+                                                            {String(
+                                                                index + 1,
+                                                            ).padStart(2, '0')}
+                                                        </span>
+                                                        <strong className="block text-[13px] leading-tight text-[#172033]">
+                                                            {module.title}
+                                                        </strong>
+                                                    </span>
+                                                </span>
+                                                <span className="text-[11px] leading-snug text-slate-500">
+                                                    {module.subtitle}
+                                                </span>
+                                            </button>
+                                        ))}
                                     </div>
-                                ))}
+                                </article>
+                            </div>
+
+                            <aside className="space-y-4">
+                                <div className="overflow-hidden rounded-2xl border border-[#ece7e5] bg-white shadow-[0_6px_18px_rgba(31,38,55,.04)]">
+                                    {[
+                                        {
+                                            icon: Check,
+                                            label: accountingDashboard
+                                                .trial_balance.balanced
+                                                ? 'Balance cuadrado'
+                                                : 'Balance por revisar',
+                                            tone: accountingDashboard
+                                                .trial_balance.balanced
+                                                ? 'text-emerald-600'
+                                                : 'text-red-600',
+                                            action: () =>
+                                                switchSection(
+                                                    'trial',
+                                                    'balance-comprobacion',
+                                                ),
+                                        },
+                                        {
+                                            icon: NotebookTabs,
+                                            label: `${accounts.length} cuentas configuradas`,
+                                            tone: 'text-[#6550b5]',
+                                            action: () =>
+                                                switchSection(
+                                                    'setup',
+                                                    'plan-cuentas',
+                                                ),
+                                        },
+                                        {
+                                            icon: CalendarDays,
+                                            label: `Período ${accountingDashboard.period?.status === 'closed' ? 'cerrado' : 'abierto'}: ${accountingPeriodName}`,
+                                            tone: 'text-[#315fa8]',
+                                            action: () =>
+                                                switchSection(
+                                                    'periods',
+                                                    'periodos-contables',
+                                                ),
+                                        },
+                                        {
+                                            icon: Clock3,
+                                            label: `Avance de cierre: ${accountingDashboard.summary.close_progress}%`,
+                                            tone: 'text-amber-500',
+                                            action: () =>
+                                                document
+                                                    .getElementById(
+                                                        'estado-contable',
+                                                    )
+                                                    ?.scrollIntoView({
+                                                        behavior: 'smooth',
+                                                    }),
+                                        },
+                                    ].map((item, index) => (
+                                        <button
+                                            key={item.label}
+                                            type="button"
+                                            onClick={item.action}
+                                            className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium text-slate-700 hover:bg-[#faf8f7] ${index ? 'border-t border-slate-100' : ''}`}
+                                        >
+                                            <item.icon
+                                                size={16}
+                                                className={`shrink-0 ${item.tone}`}
+                                            />
+                                            <span className="flex-1">
+                                                {item.label}
+                                            </span>
+                                            <ChevronRight
+                                                size={15}
+                                                className="text-slate-400"
+                                            />
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="rounded-2xl border border-[#ece7e5] bg-white p-4 shadow-[0_6px_18px_rgba(31,38,55,.04)]">
+                                    <h2 className="flex items-center gap-2 text-sm font-semibold text-[#172033]">
+                                        <SlidersHorizontal
+                                            size={16}
+                                            className="text-slate-500"
+                                        />
+                                        Accesos rápidos
+                                    </h2>
+                                    <div className="mt-2 divide-y divide-slate-100">
+                                        {[
+                                            canWrite && {
+                                                label: 'Nuevo asiento',
+                                                icon: Plus,
+                                                tone: 'bg-[#e7f5ec] text-[#218451]',
+                                                action: () => openJournal(true),
+                                            },
+                                            canManage && {
+                                                label: 'Nueva cuenta',
+                                                icon: ListTree,
+                                                tone: 'bg-[#eee9fb] text-[#6754b7]',
+                                                action: () => {
+                                                    switchSection(
+                                                        'setup',
+                                                        'plan-cuentas',
+                                                    );
+                                                    setNewAccountOpen(true);
+                                                },
+                                            },
+                                            {
+                                                label: 'Importar Excel',
+                                                icon: FileSpreadsheet,
+                                                tone: 'bg-[#e7f5ec] text-[#218451]',
+                                                action: () =>
+                                                    openPreparedModule(
+                                                        'importacion-contable',
+                                                    ),
+                                            },
+                                            {
+                                                label: 'Exportar catálogo',
+                                                icon: FileDown,
+                                                tone: 'bg-[#e9f0fb] text-[#315fa8]',
+                                                action: () =>
+                                                    window.location.assign(
+                                                        routes.exportMethod.url(
+                                                            uuid,
+                                                            {
+                                                                query: {
+                                                                    kind: 'accounts',
+                                                                    format: 'xlsx',
+                                                                    from: today(),
+                                                                    to: today(),
+                                                                },
+                                                            },
+                                                        ),
+                                                    ),
+                                            },
+                                            {
+                                                label: 'Configuración fiscal',
+                                                icon: SlidersHorizontal,
+                                                tone: 'bg-[#f8e9ea] text-[#8a1630]',
+                                                action: () =>
+                                                    router.visit(
+                                                        `/accounting/companies/${uuid}/fiscal-settings`,
+                                                    ),
+                                            },
+                                        ]
+                                            .filter((item) => !!item)
+                                            .map((item) => (
+                                                <button
+                                                    key={item.label}
+                                                    type="button"
+                                                    onClick={item.action}
+                                                    className="flex w-full items-center gap-3 py-2 text-left text-[13px] font-medium text-slate-700 hover:text-[#640000]"
+                                                >
+                                                    <span
+                                                        className={`grid size-8 shrink-0 place-items-center rounded-full ${item.tone}`}
+                                                    >
+                                                        <item.icon size={15} />
+                                                    </span>
+                                                    <span className="flex-1">
+                                                        {item.label}
+                                                    </span>
+                                                    <ChevronRight
+                                                        size={15}
+                                                        className="text-slate-400"
+                                                    />
+                                                </button>
+                                            ))}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-[#ece7e5] bg-white p-4 shadow-[0_6px_18px_rgba(31,38,55,.04)]">
+                                    <h2 className="flex items-center gap-2 text-sm font-semibold text-[#172033]">
+                                        <Clock3
+                                            size={16}
+                                            className="text-slate-500"
+                                        />
+                                        Actividad reciente
+                                    </h2>
+                                    <div className="mt-2 space-y-1">
+                                        {accountingDashboard.recent_activity
+                                            .slice(0, 4)
+                                            .map((item) => (
+                                                <div
+                                                    key={item.entry_id}
+                                                    className="flex items-center gap-3 py-1.5"
+                                                >
+                                                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#e7f5ec] text-[#218451]">
+                                                        <FilePenLine
+                                                            size={15}
+                                                        />
+                                                    </span>
+                                                    <span className="min-w-0">
+                                                        <strong className="block truncate text-[13px] text-[#172033]">
+                                                            {item.number} ·{' '}
+                                                            {item.description}
+                                                        </strong>
+                                                        <small className="text-[11px] text-slate-400">
+                                                            {shortDate(
+                                                                item.date,
+                                                            )}
+                                                            {item.actor
+                                                                ? ` · ${item.actor}`
+                                                                : ''}{' '}
+                                                            ·{' '}
+                                                            {
+                                                                statuses[
+                                                                    item.status
+                                                                ]
+                                                            }
+                                                        </small>
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        {accountingDashboard.recent_activity
+                                            .length === 0 && (
+                                            <p className="py-4 text-center text-xs text-slate-400">
+                                                Sin movimientos en este período.
+                                            </p>
+                                        )}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            switchSection(
+                                                'journal',
+                                                'libro-diario',
+                                            )
+                                        }
+                                        className="mt-2 text-xs font-semibold text-[#8a1630] underline-offset-2 hover:underline"
+                                    >
+                                        Ver toda la actividad →
+                                    </button>
+                                </div>
                             </aside>
                         </section>
-                        <section
-                            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-                            aria-label="Módulos de contabilidad general"
-                        >
-                            {visibleAccountingModules.map((module, index) => (
-                                <button
-                                    key={module.title}
-                                    type="button"
-                                    onClick={module.action}
-                                    className="group flex min-h-20 items-center gap-3 rounded-2xl border border-[#e8e4e2] bg-white p-3 text-left shadow-[0_7px_18px_rgba(31,38,55,.05)] transition hover:-translate-y-0.5 hover:border-[#d9bfc2] hover:shadow-[0_12px_26px_rgba(91,0,7,.10)]"
-                                >
-                                    <span
-                                        className={`grid size-11 shrink-0 place-items-center rounded-xl ${moduleTones[module.tone]}`}
-                                    >
-                                        <module.icon size={21} />
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <strong className="block text-sm text-[#172033]">
-                                            {index + 1}. {module.title}
-                                        </strong>
-                                        <span className="mt-1 block text-[11px] leading-4 text-slate-500">
-                                            {module.subtitle}
-                                        </span>
-                                    </span>
-                                    <ChevronRight
-                                        size={17}
-                                        className="shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-[#640000]"
-                                    />
-                                </button>
-                            ))}
-                        </section>
                         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,.8fr)]">
-                            <article className="overflow-hidden rounded-2xl border border-[#e8e4e2] bg-white shadow-[0_8px_22px_rgba(31,38,55,.06)]">
+                            <article
+                                id="pendientes-contabilizacion"
+                                className="scroll-mt-20 overflow-hidden rounded-2xl border border-[#e8e4e2] bg-white shadow-[0_8px_22px_rgba(31,38,55,.06)]"
+                            >
                                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
                                     <div>
                                         <h2 className="text-sm font-bold text-[#172033]">
@@ -4539,7 +4823,10 @@ export default function CompanyAccounting(props: Props) {
                                     </table>
                                 </div>
                             </article>
-                            <article className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_8px_22px_rgba(31,38,55,.06)]">
+                            <article
+                                id="estado-contable"
+                                className="scroll-mt-20 rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_8px_22px_rgba(31,38,55,.06)]"
+                            >
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold text-[#172033]">
                                         Estado contable del período
@@ -4593,7 +4880,7 @@ export default function CompanyAccounting(props: Props) {
                                 </div>
                             </article>
                         </section>
-                        <section className="grid gap-4 xl:grid-cols-2">
+                        <section>
                             <article className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_8px_22px_rgba(31,38,55,.06)]">
                                 <h2 className="text-sm font-bold text-[#172033]">
                                     Conciliación de auxiliares
@@ -4650,44 +4937,6 @@ export default function CompanyAccounting(props: Props) {
                                                 </span>
                                             </button>
                                         ),
-                                    )}
-                                </div>
-                            </article>
-                            <article className="rounded-2xl border border-[#e8e4e2] bg-white p-4 shadow-[0_8px_22px_rgba(31,38,55,.06)]">
-                                <h2 className="text-sm font-bold text-[#172033]">
-                                    Actividad contable reciente
-                                </h2>
-                                <div className="mt-3 divide-y divide-slate-100">
-                                    {accountingDashboard.recent_activity.map(
-                                        (item) => (
-                                            <div
-                                                key={item.entry_id}
-                                                className="flex items-center justify-between gap-3 py-3 text-xs"
-                                            >
-                                                <span className="min-w-0">
-                                                    <strong className="block truncate text-[#172033]">
-                                                        {item.number} ·{' '}
-                                                        {item.description}
-                                                    </strong>
-                                                    <small className="text-slate-500">
-                                                        {shortDate(item.date)}
-                                                        {item.actor
-                                                            ? ` · ${item.actor}`
-                                                            : ''}
-                                                    </small>
-                                                </span>
-                                                <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600">
-                                                    {statuses[item.status]}
-                                                </span>
-                                            </div>
-                                        ),
-                                    )}
-                                    {accountingDashboard.recent_activity
-                                        .length === 0 && (
-                                        <p className="py-8 text-center text-xs text-slate-400">
-                                            No existen movimientos contables
-                                            para este período.
-                                        </p>
                                     )}
                                 </div>
                             </article>
