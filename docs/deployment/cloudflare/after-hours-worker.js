@@ -205,12 +205,22 @@ left();setInterval(left,30000);`}
 })()</script></body></html>`;
 }
 
+// The closed page is self-contained (inline style, inline script, logo as data URI): it gets the same protections as the app.
+const SECURITY_HEADERS = {
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
 function closed(info, mode) {
     const retry = Math.max(60, Math.round((info.nextOpening.getTime() - Date.now()) / 1000));
 
     return new Response(page(info, mode), {
         status: 503,
-        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': String(mode === 'down' ? 120 : retry) },
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': String(mode === 'down' ? 120 : retry), ...SECURITY_HEADERS },
     });
 }
 
