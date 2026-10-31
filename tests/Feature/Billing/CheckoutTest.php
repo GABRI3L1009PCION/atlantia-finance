@@ -284,3 +284,20 @@ test('billing details use the authenticated organization and verified account em
     $this->assertDatabaseHas('organization_billing_profiles', ['organization_id' => $other->id, 'name' => 'Comprador de prueba']);
     expect($organization->fresh()->tax_identifier)->toBeNull();
 });
+
+test('only the checkout page lets the payment provider frame other HTTPS sites, and it always loads as a full page', function () {
+    $user = User::factory()->create();
+    $organization = createPendingOrganizationFor($user);
+    $price = PlanPrice::query()->whereHas('plan', fn ($query) => $query->where('code', 'essential'))->where('billing_period', 'monthly')->firstOrFail();
+    $subscription = Subscription::query()->create(['organization_id' => $organization->id, 'status' => 'incomplete']);
+    $subscription->items()->create(['plan_price_id' => $price->id, 'item_type' => 'base_plan', 'quantity' => 1]);
+
+    $checkout = $this->actingAs($user)->get(route('billing.checkout.show'))->assertOk();
+    expect((string) $checkout->headers->get('Content-Security-Policy'))->toContain("frame-src 'self' https:");
+
+    expect((string) $this->get(route('billing.plans.index'))->headers->get('Content-Security-Policy'))->toContain("frame-src 'self';");
+
+    $this->get(route('billing.checkout.show'), ['X-Inertia' => 'true'])
+        ->assertStatus(409)
+        ->assertHeader('X-Inertia-Location', route('billing.checkout.show'));
+});

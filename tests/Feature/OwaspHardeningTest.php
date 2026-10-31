@@ -107,6 +107,8 @@ test('A05: responses carry a script-restricting CSP whose nonce matches the inli
         ->and($response->headers->get('X-Frame-Options'))->toBe('SAMEORIGIN')
         ->and($response->headers->has('X-Powered-By'))->toBeFalse();
 
+    expect($policy)->toContain("frame-src 'self';")->not->toContain('https:;');
+
     $api = $this->getJson('/api/v1/me');
     expect($api->headers->get('X-Content-Type-Options'))->toBe('nosniff')
         ->and((string) $api->headers->get('Content-Security-Policy'))->toContain("frame-ancestors 'self'");

@@ -22,6 +22,7 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use stdClass;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class CheckoutController extends Controller
 {
@@ -74,8 +75,12 @@ class CheckoutController extends Controller
         ])->header('Cache-Control', 'no-store, private');
     }
 
-    public function show(Request $request): Response|RedirectResponse
+    public function show(Request $request): Response|RedirectResponse|SymfonyResponse
     {
+        // The checkout iframe needs this page's own security policy, which only a full page load applies.
+        if ($request->header('X-Inertia')) {
+            return Inertia::location($request->fullUrl());
+        }
         /** @var Organization|null $organization */
         $organization = $request->user()->organizations()
             ->wherePivot('role', 'owner')

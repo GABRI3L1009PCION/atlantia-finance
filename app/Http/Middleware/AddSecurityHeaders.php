@@ -14,12 +14,16 @@ use Symfony\Component\HttpFoundation\Response;
  * referrer, no access to sensors, no plugins, and HTTPS only once the site is served over it.
  *
  * Scripts only run from this origin or with the per-request nonce that Vite and the layout put on their tags. Styles
- * keep 'unsafe-inline' because the UI components set inline style attributes. Frames must be HTTPS because the embedded
- * payment checkout can hand off to the card issuer. While the Vite dev server runs (public/hot) its origin is allowed so hot reload works.
+ * keep 'unsafe-inline' because the UI components set inline style attributes. Frames are limited to this origin, except on
+ * the payment page, which embeds the checkout and may hand off to any card issuer's HTTPS page (3-D Secure). While the Vite
+ * dev server runs (public/hot) its origin is allowed so hot reload works.
  */
 class AddSecurityHeaders
 {
     private const CHECKOUT_ORIGIN = 'https://app.recurrente.com';
+
+    /** The only page whose policy allows third-party frames; it is always loaded as a full page so its own policy applies. */
+    public const CHECKOUT_ROUTE = 'billing.checkout.show';
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -60,8 +64,8 @@ class AddSecurityHeaders
             'img-src' => ["'self'", 'data:', 'blob:'],
             'font-src' => ["'self'", 'data:', ...($devServer === null ? [] : [$devServer])],
             'connect-src' => ["'self'", ...($devServer === null ? [] : [$devServer, preg_replace('/^http/', 'ws', $devServer)])],
-            // Any HTTPS frame: the checkout iframe may move to the card issuer's 3-D Secure page.
-            'frame-src' => ["'self'", 'https:'],
+            // Only the payment page frames other sites: its checkout iframe may move to the card issuer's 3-D Secure page.
+            'frame-src' => ["'self'", ...($request->routeIs(self::CHECKOUT_ROUTE) ? ['https:'] : [])],
             'frame-ancestors' => ["'self'"],
             'base-uri' => ["'self'"],
             'object-src' => ["'none'"],
