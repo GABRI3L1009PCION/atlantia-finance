@@ -228,6 +228,8 @@ function closed(info, mode) {
  * Files nginx serves straight from disk (compiled assets, icons, robots.txt) never pass through the application, so they
  * arrive without its security headers. They are added here when missing, and the hashed build assets get a long cache.
  */
+const SINGLE_VALUE_HEADERS = ['Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options', 'Cross-Origin-Resource-Policy'];
+
 function hardened(response, url) {
     const headers = new Headers(response.headers);
     const defaults = {
@@ -239,6 +241,14 @@ function hardened(response, url) {
     for (const [name, value] of Object.entries(defaults)) {
         if (!headers.has(name)) {
             headers.set(name, value);
+        }
+    }
+    // When both nginx and the application set one of these, the two copies arrive joined by a comma
+    // ("max-age=31536000; includeSubDomains, max-age=31536000"), which browsers and scanners reject. Keep the first.
+    for (const name of SINGLE_VALUE_HEADERS) {
+        const value = headers.get(name);
+        if (value !== null && value.includes(',')) {
+            headers.set(name, value.split(',')[0].trim());
         }
     }
     if (url.pathname.startsWith('/build/assets/') && response.status === 200) {
