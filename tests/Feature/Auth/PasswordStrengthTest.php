@@ -1,7 +1,7 @@
 <?php
 
+use App\Http\Middleware\PreventRequestForgery;
 use Database\Seeders\PlanCatalogSeeder;
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 
 beforeEach(function () {
     $this->seed(PlanCatalogSeeder::class);

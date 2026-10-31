@@ -90,6 +90,8 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            // Requests send it as X-CSRF-TOKEN; it is refreshed on every visit because signing in rotates it.
+            'csrfToken' => fn (): string => csrf_token(),
             'auth' => [
                 'user' => $request->user(),
             ],

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import RecurrenteCheckout from 'recurrente-checkout';
+import { csrfToken } from '@/lib/browser-security';
 import { status as checkoutStatus } from '@/routes/billing/checkout';
 
 type Props = {
@@ -163,10 +164,6 @@ export default function EmbeddedCheckout({
         setStatus('creating');
         setError(null);
 
-        const csrfToken = document.querySelector<HTMLMetaElement>(
-            'meta[name="csrf-token"]',
-        )?.content;
-
         try {
             const response = await fetch('/billing/checkout', {
                 method: 'POST',
@@ -174,7 +171,7 @@ export default function EmbeddedCheckout({
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken ?? '',
+                    'X-CSRF-TOKEN': csrfToken(),
                 },
                 body: '{}',
             });

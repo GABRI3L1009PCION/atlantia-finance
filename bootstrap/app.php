@@ -12,6 +12,7 @@ use App\Http\Middleware\EnsurePlanFeature;
 use App\Http\Middleware\EnsurePlatformStaff;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\PreventRequestForgery;
 use App\Http\Middleware\RestrictClientPortalUsers;
 use App\Http\Middleware\RestrictSupervisingDirector;
 use App\Http\Middleware\SetTenantDatabaseContext;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->validateCsrfTokens(except: ['webhooks/recurrente']);
+        $middleware->web(replace: [Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class => PreventRequestForgery::class]);
 
         $middleware->alias([
             'subscription.active' => EnsureActiveSubscription::class,

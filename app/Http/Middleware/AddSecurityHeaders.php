@@ -13,8 +13,9 @@ use Symfony\Component\HttpFoundation\Response;
  * Browser-side protections on every web response: no MIME sniffing, no framing by other sites (clickjacking), a limited
  * referrer, no access to sensors, no plugins, and HTTPS only once the site is served over it.
  *
- * Scripts only run from this origin or with the per-request nonce that Vite and the layout put on their tags. Styles
- * keep 'unsafe-inline' because the UI components set inline style attributes. Frames are limited to this origin, except on
+ * Scripts and style sheets only load from this origin or with the per-request nonce that Vite, the layout and the
+ * front end put on their tags. Inline style attributes stay allowed (style-src-attr): the UI components size elements
+ * with them and they cannot run code. Frames are limited to this origin, except on
  * the payment page, which embeds the checkout and may hand off to any card issuer's HTTPS page (3-D Secure). While the Vite
  * dev server runs (public/hot) its origin is allowed so hot reload works.
  */
@@ -60,7 +61,8 @@ class AddSecurityHeaders
         $directives = [
             'default-src' => ["'self'"],
             'script-src' => ["'self'", "'nonce-{$nonce}'", ...($devServer === null ? [] : [$devServer])],
-            'style-src' => ["'self'", "'unsafe-inline'", ...($devServer === null ? [] : [$devServer])],
+            'style-src' => ["'self'", "'nonce-{$nonce}'", ...($devServer === null ? [] : [$devServer])],
+            'style-src-attr' => ["'unsafe-inline'"],
             'img-src' => ["'self'", 'data:', 'blob:'],
             'font-src' => ["'self'", 'data:', ...($devServer === null ? [] : [$devServer])],
             'connect-src' => ["'self'", ...($devServer === null ? [] : [$devServer, preg_replace('/^http/', 'ws', $devServer)])],

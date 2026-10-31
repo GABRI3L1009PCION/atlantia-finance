@@ -1,3 +1,5 @@
+import { csrfToken } from '@/lib/browser-security';
+
 export type OperationalRecord = {
     public_id: string;
     module: string;
@@ -52,16 +54,6 @@ type ShowResponse = {
     workflow: OperationalWorkflow;
 };
 
-function csrfToken(): string {
-    const cookie = document.cookie
-        .split('; ')
-        .find((item) => item.startsWith('XSRF-TOKEN='));
-
-    return cookie
-        ? decodeURIComponent(cookie.split('=').slice(1).join('='))
-        : '';
-}
-
 export function operationalFileUrl(
     company: string,
     module: string,
@@ -87,7 +79,7 @@ export async function uploadOperationalFile(
             credentials: 'same-origin',
             headers: {
                 Accept: 'application/json',
-                'X-XSRF-TOKEN': csrfToken(),
+                'X-CSRF-TOKEN': csrfToken(),
             },
         },
     );
@@ -126,7 +118,7 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
         headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': csrfToken(),
+            'X-CSRF-TOKEN': csrfToken(),
             ...init.headers,
         },
     });

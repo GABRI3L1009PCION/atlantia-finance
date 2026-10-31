@@ -224,13 +224,37 @@ function closed(info, mode) {
     });
 }
 
+/**
+ * Files nginx serves straight from disk (compiled assets, icons, robots.txt) never pass through the application, so they
+ * arrive without its security headers. They are added here when missing, and the hashed build assets get a long cache.
+ */
+function hardened(response, url) {
+    const headers = new Headers(response.headers);
+    const defaults = {
+        'X-Content-Type-Options': 'nosniff',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), usb=()',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    };
+    for (const [name, value] of Object.entries(defaults)) {
+        if (!headers.has(name)) {
+            headers.set(name, value);
+        }
+    }
+    if (url.pathname.startsWith('/build/assets/') && response.status === 200) {
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
         const info = schedule(env);
 
         if (PASS_THROUGH.some((pattern) => pattern.test(url.pathname))) {
-            return fetch(request);
+            return hardened(await fetch(request), url);
         }
 
         if (env.BYPASS_TOKEN && url.searchParams.get('bypass') === env.BYPASS_TOKEN) {
@@ -246,7 +270,7 @@ export default {
         try {
             const response = await fetch(request);
 
-            return ORIGIN_DOWN.has(response.status) ? closed(info, 'down') : response;
+            return ORIGIN_DOWN.has(response.status) ? closed(info, 'down') : hardened(response, url);
         } catch {
             return closed(info, 'down');
         }

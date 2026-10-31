@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Route;
+use Inertia\Testing\AssertableInertia as Assert;
 
 /** Inserts an open database session for the user, as if it were signed in on another device. */
 function owaspSession(User $user, string $id): void
@@ -107,7 +108,10 @@ test('A05: responses carry a script-restricting CSP whose nonce matches the inli
         ->and($response->headers->get('X-Frame-Options'))->toBe('SAMEORIGIN')
         ->and($response->headers->has('X-Powered-By'))->toBeFalse();
 
-    expect($policy)->toContain("frame-src 'self';")->not->toContain('https:;');
+    expect($policy)->toContain("frame-src 'self';")->not->toContain('https:;')
+        ->and($policy)->toContain("style-src 'self' 'nonce-{$match[1]}'")->toContain("style-src-attr 'unsafe-inline'")
+        ->and(preg_match("/style-src [^;]*'unsafe-inline'/", $policy))->toBe(0)
+        ->and($response->getContent())->toContain('<style nonce="'.$match[1].'"')->toContain('<meta property="csp-nonce" nonce="'.$match[1].'"');
 
     $api = $this->getJson('/api/v1/me');
     expect($api->headers->get('X-Content-Type-Options'))->toBe('nosniff')
@@ -188,3 +192,13 @@ test('behind the load balancer and Cloudflare the real client address and HTTPS 
 });
 
 afterEach(fn () => TrustProxies::flushState());
+
+test('A05: the CSRF token travels in the page, never in a cookie scripts can read', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->get(route('appearance.edit'))->assertOk();
+
+    $response->assertCookieMissing('XSRF-TOKEN')
+        ->assertInertia(fn (Assert $page) => $page->where('csrfToken', session()->token()));
+    expect($response->getContent())->toContain('<meta name="csrf-token" content="'.session()->token().'"');
+});

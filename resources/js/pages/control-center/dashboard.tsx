@@ -30,6 +30,7 @@ import {
     statusTone,
     useCan,
 } from '@/components/control-center/kit';
+import { csrfToken } from '@/lib/browser-security';
 
 type Service = {
     key: string;
@@ -228,18 +229,12 @@ function LuzmaAsk() {
         setAnswer(null);
 
         try {
-            const token = decodeURIComponent(
-                document.cookie
-                    .split('; ')
-                    .find((c) => c.startsWith('XSRF-TOKEN='))
-                    ?.split('=')[1] ?? '',
-            );
             const response = await fetch('/control-center/luzma/ask', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     Accept: 'application/json',
-                    'X-XSRF-TOKEN': token,
+                    'X-CSRF-TOKEN': csrfToken(),
                 },
                 body: JSON.stringify({ question: text }),
             });

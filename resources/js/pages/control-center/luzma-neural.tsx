@@ -9,6 +9,7 @@ import {
     ccGhost,
     ccInput,
 } from '@/components/control-center/kit';
+import { csrfToken } from '@/lib/browser-security';
 
 type Output = { name: string; probability: number };
 type Outcome = {
@@ -382,14 +383,6 @@ function Network({
     );
 }
 
-function csrf(): string {
-    const entry = document.cookie
-        .split('; ')
-        .find((item) => item.startsWith('XSRF-TOKEN='));
-
-    return entry ? decodeURIComponent(entry.split('=').slice(1).join('=')) : '';
-}
-
 export default function LuzmaNeural({
     info: initialInfo,
     recent,
@@ -478,7 +471,7 @@ export default function LuzmaNeural({
                     headers: {
                         'Content-Type': 'application/json',
                         Accept: 'application/json',
-                        'X-XSRF-TOKEN': csrf(),
+                        'X-CSRF-TOKEN': csrfToken(),
                     },
                     credentials: 'same-origin',
                     body: JSON.stringify({ text }),

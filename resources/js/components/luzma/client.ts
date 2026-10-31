@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import { useMemo } from 'react';
+import { csrfToken } from '@/lib/browser-security';
 
 export type LuzmaReference = {
     label: string;
@@ -92,12 +93,6 @@ export type LuzmaScreen = {
 
 export class LuzmaError extends Error {}
 
-function xsrfToken(): string {
-    const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]+)/);
-
-    return match ? decodeURIComponent(match[1]) : '';
-}
-
 /** Readable message of a failed Luzma response: the validation error, the server message or a generic one. */
 async function failure(response: Response): Promise<LuzmaError> {
     let message =
@@ -133,7 +128,7 @@ export async function luzmaRequest<T>(
             Accept: 'application/json',
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-XSRF-TOKEN': xsrfToken(),
+            'X-CSRF-TOKEN': csrfToken(),
         },
         body: body ? JSON.stringify(body) : undefined,
     });
@@ -164,7 +159,7 @@ export async function luzmaUpload<T>(
         headers: {
             Accept: 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-XSRF-TOKEN': xsrfToken(),
+            'X-CSRF-TOKEN': csrfToken(),
         },
         body,
     });

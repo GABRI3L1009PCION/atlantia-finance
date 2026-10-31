@@ -1,5 +1,6 @@
 import { AlertTriangle, FileScan, Loader2, UserPlus } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { csrfToken } from '@/lib/browser-security';
 
 export type InvoiceLine = {
     description: string;
@@ -30,16 +31,6 @@ const SOURCE: Record<ReadInvoice['source'], string> = {
     pdf: 'Texto del PDF: revisa los datos antes de guardar.',
     ocr: 'Lectura de imagen (OCR): revisa cada dato antes de guardar.',
 };
-
-function csrfToken(): string {
-    const cookie = document.cookie
-        .split('; ')
-        .find((item) => item.startsWith('XSRF-TOKEN='));
-
-    return cookie
-        ? decodeURIComponent(cookie.split('=').slice(1).join('='))
-        : '';
-}
 
 /**
  * "Llenar desde la factura": sends the supplier's XML, PDF or photo to the server, which reads it and answers the
@@ -75,7 +66,7 @@ export function InvoiceReader({
                 credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
-                    'X-XSRF-TOKEN': csrfToken(),
+                    'X-CSRF-TOKEN': csrfToken(),
                 },
             });
             const data = (await response.json()) as {
