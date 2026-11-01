@@ -42,6 +42,7 @@ use App\Http\Controllers\IntegrationsController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\LegalController;
+use App\Http\Controllers\ProjectDocumentationController;
 use App\Http\Controllers\LuzmaController;
 use App\Http\Controllers\NormativeLibraryController;
 use App\Http\Controllers\ObservationRedirectController;
@@ -91,6 +92,12 @@ Route::post('forgot-password', [PasswordHelpController::class, 'store'])->middle
 foreach (LegalDocumentService::DOCUMENTS as $legalSlug => $legalDocument) {
     Route::get($legalDocument['path'], [LegalController::class, 'show'])->defaults('slug', $legalSlug)->middleware('throttle:60,1')->name('legal.'.$legalSlug);
 }
+Route::prefix('documentacion')->name('project-docs.')->controller(ProjectDocumentationController::class)->group(function () {
+    Route::get('/', 'show')->middleware('throttle:60,1')->name('show');
+    Route::post('/', 'unlock')->middleware('throttle:10,1')->name('unlock');
+    Route::post('salir', 'lock')->middleware('throttle:20,1')->name('lock');
+    Route::get('archivo/{document}', 'file')->whereUuid('document')->middleware('throttle:60,1')->name('file');
+});
 Route::middleware('auth')->prefix('legal')->name('legal.')->group(function () {
     Route::get('aceptar', [LegalController::class, 'accept'])->name('accept');
     Route::post('aceptar', [LegalController::class, 'store'])->middleware('throttle:10,1')->name('store');
@@ -418,6 +425,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('settings/templates/{template}', 'updateTemplate')->name('settings.template');
             Route::get('legal', 'legal')->name('legal');
             Route::post('legal/{slug}', 'publishLegal')->whereIn('slug', array_keys(LegalDocumentService::DOCUMENTS))->middleware('throttle:10,1')->name('legal.publish');
+            Route::get('documentation', 'documentation')->name('documentation');
+            Route::post('documentation/password', 'updateDocumentationPassword')->middleware('throttle:10,1')->name('documentation.password');
+            Route::post('documentation/files', 'uploadDocumentation')->middleware('throttle:20,1')->name('documentation.upload');
+            Route::delete('documentation/files/{document}', 'deleteDocumentation')->whereUuid('document')->middleware('throttle:20,1')->name('documentation.delete');
         });
     });
 

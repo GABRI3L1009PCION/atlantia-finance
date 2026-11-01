@@ -8,16 +8,19 @@ use App\Services\Platform\GlobalConfigurationService;
 use App\Services\Platform\LegalDocumentService;
 use App\Services\Platform\NotificationTemplateService;
 use App\Services\Platform\PlatformLogReader;
+use App\Services\Platform\ProjectDocumentationService;
 use App\Support\PlatformIssuer;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Response;
 use stdClass;
 
-/** SaaS audit, system logs and global configuration (settings and templates). */
+/** SaaS audit, system logs and global configuration (settings, templates, legal documents and project documentation). */
 class ControlController extends ControlCenterController
 {
     public function audit(Request $request): Response
@@ -89,6 +92,43 @@ class ControlController extends ControlCenterController
         $version = $legal->publish($user, $slug, (string) $data['title'], (string) $data['body']);
 
         return back()->with('workspace_notice', 'Publicada la versión '.$version.'. Los dueños de firma deberán aceptarla en su siguiente ingreso.');
+    }
+
+    public function documentation(Request $request, ProjectDocumentationService $documentation): Response
+    {
+        $user = $this->staff($request, 'saas.settings.view');
+
+        return $this->render($request, 'documentation', ['documents' => $documentation->documents(), 'has_password' => $documentation->hasPassword(),
+            'max_upload_mb' => intdiv(ProjectDocumentationService::MAX_UPLOAD_KB, 1024), 'can_manage' => $this->authorization->can($user, 'saas.settings.manage')]);
+    }
+
+    public function updateDocumentationPassword(Request $request, ProjectDocumentationService $documentation): RedirectResponse
+    {
+        $user = $this->staff($request, 'saas.settings.manage');
+        $data = $request->validate(['access_password' => ['required', 'string', 'confirmed', 'max:200', Password::min(8)]]);
+        $documentation->setPassword($user, (string) $data['access_password']);
+
+        return back()->with('workspace_notice', 'Contraseña de la documentación guardada. Quien tenía acceso deberá ingresarla de nuevo.');
+    }
+
+    public function uploadDocumentation(Request $request, ProjectDocumentationService $documentation): RedirectResponse
+    {
+        $user = $this->staff($request, 'saas.settings.manage');
+        $data = $request->validate(['title' => 'required|string|max:160', 'description' => 'nullable|string|max:500',
+            'file' => 'required|file|mimes:pdf|mimetypes:application/pdf|max:'.ProjectDocumentationService::MAX_UPLOAD_KB]);
+        $file = $request->file('file');
+        abort_unless($file instanceof UploadedFile, 422);
+        $documentation->upload($user, $file, (string) $data['title'], $data['description'] ?? null);
+
+        return back()->with('workspace_notice', 'Documento publicado en /documentacion.');
+    }
+
+    public function deleteDocumentation(Request $request, string $document, ProjectDocumentationService $documentation): RedirectResponse
+    {
+        $user = $this->staff($request, 'saas.settings.manage');
+        $documentation->delete($user, $document);
+
+        return back()->with('workspace_notice', 'Documento eliminado.');
     }
 
     public function updateTemplate(Request $request, string $template, NotificationTemplateService $templates): RedirectResponse
