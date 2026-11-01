@@ -82,9 +82,9 @@ class ProjectDocumentationService
     /** @return list<array{id: string, title: string, description: string|null, file_name: string, size: int, uploaded_at: string}> */
     public function documents(): array
     {
-        return $this->tenancy->runAsSystem(fn (): array => DB::table('project_documents')->orderBy('position')->orderBy('id')->get()
+        return array_values($this->tenancy->runAsSystem(fn (): array => DB::table('project_documents')->orderBy('position')->orderBy('id')->get()
             ->map(fn (stdClass $row): array => ['id' => (string) $row->public_id, 'title' => (string) $row->title, 'description' => $row->description === null ? null : (string) $row->description,
-                'file_name' => (string) $row->file_name, 'size' => (int) $row->size, 'uploaded_at' => Carbon::parse($row->created_at)->toIso8601String()])->values()->all());
+                'file_name' => (string) $row->file_name, 'size' => (int) $row->size, 'uploaded_at' => Carbon::parse($row->created_at)->toIso8601String()])->all()));
     }
 
     public function upload(User $actor, UploadedFile $file, string $title, ?string $description): string
