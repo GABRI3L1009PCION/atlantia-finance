@@ -58,7 +58,9 @@ function sameSecret(given, expected) {
     if (typeof given !== 'string' || typeof expected !== 'string' || given.length !== expected.length) {
         return false;
     }
+
     let difference = 0;
+
     for (let index = 0; index < given.length; index++) {
         difference |= given.charCodeAt(index) ^ expected.charCodeAt(index);
     }
@@ -70,6 +72,7 @@ function bypassed(request, env) {
     if (!env.BYPASS_TOKEN) {
         return false;
     }
+
     const cookie = (request.headers.get('Cookie') || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('atlantia_bypass='));
 
     return cookie !== undefined && sameSecret(cookie.slice('atlantia_bypass='.length), env.BYPASS_TOKEN);
@@ -85,6 +88,7 @@ function tlsGuard(request, url) {
 
         return new Response(null, { status: 308, headers: { Location: url.toString(), 'Cache-Control': 'no-store' } });
     }
+
     if (LEGACY_TLS.has(request.cf?.tlsVersion)) {
         return new Response('Tu navegador usa una versión de TLS obsoleta. Actualízalo para conectarte de forma segura.', {
             status: 426,
@@ -102,6 +106,7 @@ function page(info, mode) {
  const down = mode === 'down';
  const title = down ? 'Nuestro servicio está <span class="hot">temporalmente no disponible</span>' : 'Nuestro horario de servicio <span class="hot">ha finalizado</span>';
  const lead = down ? 'LUZMA IA te acompaña. Vuelve a intentarlo en unos minutos.' : `LUZMA IA te espera ${info.tomorrow ? 'mañana' : 'hoy'} a las <strong class="hot">${label(info.opens)}</strong> para que continúes gestionando tus finanzas.`;
+
  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Atlantia Finance · LUZMA IA</title><link rel="icon" type="image/png" href="' + FAVICON + '"><style>' + CSS + '</style></head><body><div id="luzma-motion"><main class="stage"><canvas width="1280" height="720" role="img" aria-label="LUZMA IA ejecutiva con reloj holográfico en tiempo real, parpadeo y cabello animado"></canvas><header class="brand"><img class="logo" src="' + LOGO + '" alt="Atlantia Finance"></header><section class="copy"><h1>' + title + '</h1><p class="lead">' + lead + '</p><div class="card"><h2>◷ Horario de servicio</h2><div class="row"><span>☀ Apertura:</span><b>' + label(info.opens) + '</b></div><div class="row"><span>☾ Cierre:</span><b>' + label(info.closes) + '</b></div><div class="zone">Hora de Guatemala (UTC-6)</div></div><button class="retry" id="retry" type="button">↻ &nbsp; Volver a intentar</button><p class="note" id="countdown" data-opening="' + info.nextOpening.getTime() + '" data-mode="' + mode + '">' + (down ? 'Gracias por tu comprensión y confianza.' : 'Calculando próxima apertura…') + '</p></section></main></div><footer>© ' + new Date().getUTCFullYear() + ' Atlantia Finance · Todos los derechos reservados</footer><script>' + ANIMATION + '</script></body></html>';
 }
 
@@ -138,19 +143,23 @@ function hardened(response, url) {
         'Cross-Origin-Resource-Policy': 'same-origin',
         'Strict-Transport-Security': HSTS,
     };
+
     for (const [name, value] of Object.entries(defaults)) {
         if (!headers.has(name)) {
             headers.set(name, value);
         }
     }
+
     // When both nginx and the application set one of these, the two copies arrive joined by a comma
     // ("max-age=31536000; includeSubDomains, max-age=31536000"), which browsers and SSL Labs reject. Keep the first.
     for (const name of SINGLE_VALUE_HEADERS) {
         const value = headers.get(name);
+
         if (value !== null && value.includes(',')) {
             headers.set(name, value.split(',')[0].trim());
         }
     }
+
     if (url.pathname.startsWith('/build/assets/') && response.status === 200) {
         headers.set('Cache-Control', 'public, max-age=31536000, immutable');
     }
@@ -162,6 +171,7 @@ export default {
     async fetch(request, env) {
         const url = new URL(request.url);
         const insecure = tlsGuard(request, url);
+
         if (insecure) {
             return insecure;
         }
