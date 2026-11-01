@@ -10,6 +10,8 @@ Con este Worker puedes **apagar el servidor** fuera de horario: Cloudflare respo
 | Dentro de horario y el servidor responde | La aplicación, sin cambios |
 | Dentro de horario pero el servidor no responde (errores 521, 522, 523, 524…) | La misma página con el mensaje "nuestro servicio no está disponible", en lugar de la pantalla de error de Cloudflare |
 | `/up`, `/webhooks/*`, `/api/*`, `/calendar/*` | Siempre pasan al servidor |
+| Petición por `http://` | Redirección 308 a `https://` |
+| Cliente con TLS 1.0 o 1.1 | 426, debe actualizar el navegador |
 
 Mientras el servidor esté apagado, los pagos (webhooks de Recurrente) y la API no pueden responder. Recurrente reintenta los webhooks fallidos; los clientes de la API recibirán el error de Cloudflare.
 
@@ -21,7 +23,10 @@ Mientras el servidor esté apagado, los pagos (webhooks de Recurrente) y la API 
    - Route: `finance.atlantiasystems.com/*`
    - Zone: `atlantiasystems.com`
 4. Comprueba que el registro DNS de `finance.atlantiasystems.com` esté con la **nube naranja** (proxied). Sin eso el Worker no recibe el tráfico.
-5. En Cloudflare, en **SSL/TLS**, el modo debe seguir como lo tienes hoy; el Worker reenvía las peticiones con el mismo esquema.
+5. En Cloudflare, en **SSL/TLS**:
+   - **Overview**: modo **Full (strict)**, para que el tramo Cloudflare → servidor también vaya cifrado y con certificado válido.
+   - **Edge Certificates**: **Always Use HTTPS** activado, **Minimum TLS Version** en **TLS 1.2** y **TLS 1.3** activado.
+   El Worker aplica lo mismo por su cuenta: redirige `http://` a `https://` (308, conserva los POST de los webhooks), rechaza TLS 1.0/1.1 con un 426 y envía una sola cabecera HSTS.
 6. En el servidor de la aplicación deja `SERVICE_HOURS_ENABLED=false` en el `.env`. El Worker ya controla el horario; activar los dos a la vez no hace daño, pero es redundante.
 
 ## Variables opcionales
