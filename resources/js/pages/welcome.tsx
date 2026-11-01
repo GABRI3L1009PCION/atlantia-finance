@@ -488,6 +488,12 @@ export default function Welcome({ plans }: { plans: PublicPlan[] | null }) {
                                         Asistente de ayuda
                                     </button>
                                     <a
+                                        href="/documentacion"
+                                        className="transition hover:text-white"
+                                    >
+                                        Documentación
+                                    </a>
+                                    <a
                                         href="/terminos"
                                         className="transition hover:text-white"
                                     >
