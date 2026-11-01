@@ -80,7 +80,7 @@ test('repeated wrong passwords are blocked for a while', function () {
 test('only PDFs are accepted and deleting removes the file', function () {
     $owner = ccOwner();
     $this->actingAs($owner)->post('/control-center/documentation/files', ['title' => 'Script', 'file' => UploadedFile::fake()->create('script.php', 5, 'text/x-php')])
-        ->assertSessionHasErrors('file');
+        ->assertSessionHasErrors(['file' => 'Solo se aceptan archivos PDF.']);
 
     $id = publishProjectDocument();
     $path = (string) DB::table('project_documents')->where('public_id', $id)->value('file_path');
@@ -98,4 +98,15 @@ test('staff without settings.manage cannot change the documentation', function (
     $this->actingAs($analyst)->post('/control-center/documentation/password', ['access_password' => 'clave-terna-2026', 'access_password_confirmation' => 'clave-terna-2026'])->assertForbidden();
     $this->actingAs($analyst)->post('/control-center/documentation/files', ['title' => 'X', 'file' => UploadedFile::fake()->create('x.pdf', 5, 'application/pdf')])->assertForbidden();
     expect(DB::table('project_documents')->count())->toBe(0);
+});
+
+test('a full project report of 30 MB is accepted and anything above 50 MB is refused with a clear message', function () {
+    $owner = ccOwner();
+
+    $this->actingAs($owner)->post('/control-center/documentation/files', ['title' => 'Documentación final', 'file' => UploadedFile::fake()->create('final.pdf', 30 * 1024, 'application/pdf')])
+        ->assertSessionHasNoErrors();
+    $this->actingAs($owner)->post('/control-center/documentation/files', ['title' => 'Demasiado grande', 'file' => UploadedFile::fake()->create('grande.pdf', 50 * 1024 + 1, 'application/pdf')])
+        ->assertSessionHasErrors(['file' => 'El PDF supera el tamaño máximo de 50 MB.']);
+
+    expect(DB::table('project_documents')->pluck('title')->all())->toBe(['Documentación final']);
 });

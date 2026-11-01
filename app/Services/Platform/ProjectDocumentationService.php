@@ -29,8 +29,11 @@ class ProjectDocumentationService
 
     public const ACCESS_HOURS = 4;
 
-    /** Below upload_max_filesize (25M) of the production PHP configuration, so the limit is reported by the application. */
-    public const MAX_UPLOAD_KB = 24576;
+    /**
+     * 50 MB, for a full project report. Production PHP (upload_max_filesize 55M, post_max_size 60M) and nginx
+     * (client_max_body_size 60M) sit above it, so the application is the one that reports an oversized file.
+     */
+    public const MAX_UPLOAD_KB = 51200;
 
     private const DIRECTORY = 'project-documents';
 

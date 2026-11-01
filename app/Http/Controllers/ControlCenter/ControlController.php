@@ -114,8 +114,15 @@ class ControlController extends ControlCenterController
     public function uploadDocumentation(Request $request, ProjectDocumentationService $documentation): RedirectResponse
     {
         $user = $this->staff($request, 'saas.settings.manage');
+        $maxMb = intdiv(ProjectDocumentationService::MAX_UPLOAD_KB, 1024);
         $data = $request->validate(['title' => 'required|string|max:160', 'description' => 'nullable|string|max:500',
-            'file' => 'required|file|mimes:pdf|mimetypes:application/pdf|max:'.ProjectDocumentationService::MAX_UPLOAD_KB]);
+            'file' => 'required|file|mimes:pdf|mimetypes:application/pdf|max:'.ProjectDocumentationService::MAX_UPLOAD_KB], [
+                'file.required' => 'Elige el PDF que quieres publicar.',
+                'file.uploaded' => 'El servidor no recibió el PDF: probablemente supera el tamaño que acepta. El máximo es '.$maxMb.' MB.',
+                'file.max' => 'El PDF supera el tamaño máximo de '.$maxMb.' MB.',
+                'file.mimes' => 'Solo se aceptan archivos PDF.',
+                'file.mimetypes' => 'Solo se aceptan archivos PDF.',
+            ]);
         $file = $request->file('file');
         abort_unless($file instanceof UploadedFile, 422);
         $documentation->upload($user, $file, (string) $data['title'], $data['description'] ?? null);
