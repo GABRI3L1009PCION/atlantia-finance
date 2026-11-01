@@ -59,15 +59,15 @@ expose_php = Off
 display_errors = Off
 log_errors = On
 session.upload_progress.enabled = Off
-upload_max_filesize = 25M
-post_max_size = 30M
+upload_max_filesize = 55M
+post_max_size = 60M
 memory_limit = 512M
 max_execution_time = 60
 opcache.enable = 1
 opcache.validate_timestamps = 0
 ```
 
-`upload_max_filesize` cubre el archivo más grande que acepta la aplicación (20 MB). Con `opcache.validate_timestamps = 0`, reinicia PHP-FPM en cada despliegue.
+`upload_max_filesize` cubre el archivo más grande que acepta la aplicación (50 MB, los PDFs de la documentación del proyecto). nginx necesita `client_max_body_size 60M;` en el bloque `server` del sitio; si no, responde 413 antes de llegar a PHP. Con `opcache.validate_timestamps = 0`, reinicia PHP-FPM en cada despliegue.
 
 ## Red y seguridad
 
