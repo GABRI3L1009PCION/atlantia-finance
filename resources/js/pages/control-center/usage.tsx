@@ -24,6 +24,7 @@ type Metric = {
 };
 type Row = {
     organization_id: number;
+    organization_public_id: string | null;
     organization: string;
     status: string;
     plan: string | null;
@@ -148,7 +149,7 @@ export default function Usage({
                             <tr key={row.organization_id}>
                                 <td className="px-2 py-2">
                                     <Link
-                                        href={`/control-center/organizations/${row.organization_id}?tab=usage`}
+                                        href={`/control-center/organizations/${row.organization_public_id}?tab=usage`}
                                         className="font-semibold text-slate-900"
                                     >
                                         {row.organization}

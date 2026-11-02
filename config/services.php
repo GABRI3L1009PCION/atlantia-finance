@@ -40,6 +40,19 @@ return [
         'timeout' => (int) env('OCR_TIMEOUT', 90),
     ],
 
+    /*
+     | WhatsApp Business Cloud API (Meta) for the reminders offices send to their clients. Messages a business starts
+     | must use an approved template; this one receives the reminder text as its only body parameter.
+     */
+    'whatsapp' => [
+        'url' => env('WHATSAPP_API_URL', 'https://graph.facebook.com/v21.0'),
+        'token' => env('WHATSAPP_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'template' => env('WHATSAPP_REMINDER_TEMPLATE', 'recordatorio_vencimiento'),
+        'language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'es'),
+        'default_country_code' => env('WHATSAPP_DEFAULT_COUNTRY_CODE', '502'),
+    ],
+
     'recurrente' => [
         'url' => env('RECURRENTE_API_URL', 'https://app.recurrente.com/api'),
         'secret' => env('RECURRENTE_SECRET_KEY'),

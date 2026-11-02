@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
+use App\Services\FiscalConfigurationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use stdClass;
@@ -42,15 +43,9 @@ class WithholdingService
         'other' => ['Otro agente designado por la SAT', 1500],
     ];
 
-    /** A pequeño contribuyente's single 5 % tax is withheld in full by the agents that pay it (Decreto 4-2012). */
-    private const SMALL_TAXPAYER_RATE_BP = 500;
-
-    /** Régimen opcional simplificado: 5 % on the first Q30,000 of the invoice without VAT and 7 % on the excess (Decreto 10-2012). */
-    private const ISR_SIMPLIFIED = ['limit_cents' => 3000000, 'low_bp' => 500, 'high_bp' => 700];
-
     public const ISR_REGIMES = ['simplified' => 'Sujeto a retención definitiva (opcional simplificado)', 'utilities' => 'Sujeto a pagos trimestrales (sobre utilidades)', 'exempt' => 'Exento o no afecto'];
 
-    public function __construct(private AccountingService $accounting, private AccountingAutomationService $automation) {}
+    public function __construct(private AccountingService $accounting, private AccountingAutomationService $automation, private FiscalConfigurationService $fiscal) {}
 
     /**
      * @param  list<array{kind: string, base: string, rate: string, certificate_number?: string|null}>  $items
@@ -148,11 +143,14 @@ class WithholdingService
             return [];
         }
         $suggestions = [];
+        $this->fiscal->ensureDefaults($companyId);
+        $date = (string) ($document->document_date ?? now()->toDateString());
         $small = (int) ($document->small_taxpayer_cents ?? 0);
         $vat = (int) ($document->vat_cents ?? 0);
         if ($settings['vat_agent'] !== null && $small > 0) {
-            $suggestions[] = ['kind' => 'iva', 'base_cents' => $small, 'rate_bp' => self::SMALL_TAXPAYER_RATE_BP, 'amount_cents' => (int) round($small * self::SMALL_TAXPAYER_RATE_BP / 10000),
-                'reason' => 'Pequeño contribuyente: se le retiene el 5 % del total de la factura.'];
+            $rate = (int) $this->fiscal->activeRule($companyId, 'IVA_PEQUENO', $date)->rate_basis_points;
+            $suggestions[] = ['kind' => 'iva', 'base_cents' => $small, 'rate_bp' => $rate, 'amount_cents' => (int) round($small * $rate / 10000),
+                'reason' => 'Pequeño contribuyente: se le retiene el '.$this->percent($rate).' % del total de la factura.'];
         } elseif ($settings['vat_agent'] !== null && $vat > 0) {
             $rate = (int) ($settings['vat_rate_bp'] ?? self::VAT_AGENTS[$settings['vat_agent']][1]);
             $suggestions[] = ['kind' => 'iva', 'base_cents' => $vat, 'rate_bp' => $rate, 'amount_cents' => (int) round($vat * $rate / 10000),
@@ -161,9 +159,12 @@ class WithholdingService
         $regime = $document->purchase_supplier_id === null ? null : DB::table('purchase_suppliers')->where('id', $document->purchase_supplier_id)->value('isr_regime');
         if ($settings['isr_agent'] && $regime === 'simplified' && $small === 0) {
             $base = $total - $vat;
-            $amount = (int) round(min($base, self::ISR_SIMPLIFIED['limit_cents']) * self::ISR_SIMPLIFIED['low_bp'] / 10000 + max(0, $base - self::ISR_SIMPLIFIED['limit_cents']) * self::ISR_SIMPLIFIED['high_bp'] / 10000);
+            $low = $this->fiscal->activeRule($companyId, 'ISR_SIMPLIFICADO_BASE', $date);
+            $high = (int) $this->fiscal->activeRule($companyId, 'ISR_SIMPLIFICADO_EXCESO', $date)->rate_basis_points;
+            $limit = (int) $low->threshold_cents;
+            $amount = (int) round(min($base, $limit) * (int) $low->rate_basis_points / 10000 + max(0, $base - $limit) * $high / 10000);
             $suggestions[] = ['kind' => 'isr', 'base_cents' => $base, 'rate_bp' => (int) round($amount * 10000 / max(1, $base)), 'amount_cents' => $amount,
-                'reason' => 'Proveedor sujeto a retención definitiva: 5 % hasta Q30,000 sin IVA y 7 % sobre el excedente.'];
+                'reason' => 'Proveedor sujeto a retención definitiva: '.$this->percent((int) $low->rate_basis_points).' % hasta Q'.number_format($limit / 100).' sin IVA y '.$this->percent($high).' % sobre el excedente.'];
         }
 
         return $suggestions;
@@ -313,5 +314,11 @@ class WithholdingService
     private function decimal(int $cents): string
     {
         return number_format($cents / 100, 2, '.', '');
+    }
+
+    /** A rate in basis points as a percentage without needless decimals: 500 → "5", 1250 → "12.5". */
+    private function percent(int $basisPoints): string
+    {
+        return rtrim(rtrim(number_format($basisPoints / 100, 2, '.', ''), '0'), '.');
     }
 }

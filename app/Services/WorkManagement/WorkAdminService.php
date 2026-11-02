@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\WorkManagement;
 
 use App\Models\Organization;
+use App\Services\ClientPortal\ClientReminderService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -149,6 +150,7 @@ class WorkAdminService
 
         return [
             'info' => (array) $office,
+            'client_reminders' => app(ClientReminderService::class)->overview($office),
             'companies' => DB::table('companies')
                 ->where('office_id', $officeId)
                 ->orderBy('name')

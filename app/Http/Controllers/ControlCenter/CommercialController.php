@@ -163,11 +163,11 @@ class CommercialController extends ControlCenterController
         ]);
     }
 
-    /** @return list<array{id: int, name: string}> client organizations (never the platform's own) a subscription or credit can be created for */
+    /** @return list<array{id: int, public_id: string, name: string}> client organizations (never the platform's own) a subscription or credit can be created for */
     private function clientOrganizations(): array
     {
         return array_values(DB::table('organizations')->where('id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')
-            ->get(['id', 'name'])->map(fn (stdClass $o): array => ['id' => (int) $o->id, 'name' => (string) $o->name])->all());
+            ->get(['id', 'public_id', 'name'])->map(fn (stdClass $o): array => ['id' => (int) $o->id, 'public_id' => (string) $o->public_id, 'name' => (string) $o->name])->all());
     }
 
     public function invoiceAction(Request $request, int $invoice, string $action, SaaSBillingService $billing): RedirectResponse

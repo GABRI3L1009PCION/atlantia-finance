@@ -26,8 +26,8 @@ test('owner manages tenant scoped Guatemala fiscal settings with immutable vigen
             ->component('accounting/fiscal-settings')
             ->where('profile.country_code', 'GT')
             ->where('profile.base_currency', 'GTQ')
-            // IVA (2), ISR (3), ISO and the ISR withholding of the factura especial.
-            ->has('taxes', 7)
+            // IVA (2), ISR (3), ISO, the ISR withholding of the factura especial and the timbres fiscales.
+            ->has('taxes', 8)
             ->where('taxes.0.code', 'IVA_GENERAL')
             ->where('taxes.0.current.rate_basis_points', 1200)
             ->where('canManage', true)

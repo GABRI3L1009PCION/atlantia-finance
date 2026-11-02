@@ -37,6 +37,7 @@ type Status = {
 };
 type Usage = {
     organization_id: number;
+    organization_public_id: string | null;
     tenant: string;
     requests: number;
     successful: number;
@@ -310,7 +311,7 @@ export default function Luzma({
                                 <tr key={row.organization_id}>
                                     <td className="px-2 py-2">
                                         <Link
-                                            href={`/control-center/organizations/${row.organization_id}?tab=usage`}
+                                            href={`/control-center/organizations/${row.organization_public_id}?tab=usage`}
                                             className="text-slate-900"
                                         >
                                             {row.tenant}

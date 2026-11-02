@@ -70,7 +70,7 @@ class OrganizationController extends ControlCenterController
             'discount_percent' => isset($data['discount_percent']) ? (float) $data['discount_percent'] : null, 'owner_name' => (string) $data['owner_name'], 'owner_email' => (string) $data['owner_email'],
             'office_name' => (string) $data['office_name'], 'office_city' => $data['office_city'] ?? null, 'beta_program' => (bool) ($data['beta_program'] ?? false), 'billing_email' => $data['billing_email'] ?? null]);
 
-        return to_route('controlCenter.organizations.show', $result['organization_id'])->with('workspace_notice', 'Organización creada. Se envió la invitación al dueño para activar su cuenta.');
+        return to_route('controlCenter.organizations.show', (string) DB::table('organizations')->where('id', $result['organization_id'])->value('public_id'))->with('workspace_notice', 'Organización creada. Se envió la invitación al dueño para activar su cuenta.');
     }
 
     public function update(Request $request, int $organization, OrganizationManagementService $organizations): RedirectResponse

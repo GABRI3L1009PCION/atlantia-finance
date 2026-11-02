@@ -3,6 +3,7 @@
 use App\Jobs\LuzmaMaintenanceJob;
 use App\Models\Organization;
 use App\Services\Accounting\BudgetService;
+use App\Services\ClientPortal\ClientReminderService;
 use App\Services\Fel\SatPendingAlertService;
 use App\Services\Fiscal\BanguatExchangeRateService;
 use App\Services\Integrations\WebhookDeliveryService;
@@ -268,6 +269,20 @@ Artisan::command('budgets:alerts', function (BudgetService $budgets) {
 })->purpose('Avisa una vez al mes de los presupuestos aprobados cuyas cuentas se desvían del umbral');
 
 Schedule::command('budgets:alerts')->dailyAt('09:10')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
+
+Artisan::command('clients:remind', function (TenantDatabaseContext $tenancy, ClientReminderService $reminders) {
+    $sent = $tenancy->runAsSystem(function () use ($reminders): int {
+        $total = 0;
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            $total += $reminders->sweep($organization);
+        }
+
+        return $total;
+    });
+    $this->info("Recordatorios a clientes enviados: {$sent}.");
+})->purpose('Recuerda a los clientes de cada oficina sus facturas, documentos e impuestos por vencer, por panel, correo y WhatsApp');
+
+Schedule::command('clients:remind')->dailyAt('08:25')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
 
 // In the morning in Guatemala, when the customer reads e-mail at the office.
 Schedule::command('collections:auto-remind')->dailyAt('08:40')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();

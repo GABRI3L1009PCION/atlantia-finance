@@ -31,6 +31,7 @@ type Usage = {
 type Detail = {
     organization: Record<string, unknown> & {
         id: number;
+        public_id: string;
         name: string;
         code: string | null;
         organization_status: string;
@@ -245,7 +246,7 @@ export default function OrganizationDetail({
     const [resending, setResending] = useState(false);
     const o = detail.organization;
     const s = detail.subscription;
-    const base = `/control-center/organizations/${o.id}`;
+    const base = `/control-center/organizations/${o.public_id}`;
     const override = useForm({
         feature_code: features[0]?.code ?? '',
         value: true,

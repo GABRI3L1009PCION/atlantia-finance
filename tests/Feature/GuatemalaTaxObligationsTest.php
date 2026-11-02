@@ -213,6 +213,22 @@ test('documents taxed with timbres fiscales pay 3 % with their entry, and voidin
     $this->get(route('accounting.otherTaxes', [$f['uuid'], 'year' => 2026]))->assertInertia(fn (Assert $page) => $page->where('stamps.total_cents', 0));
 });
 
+test('the timbres fiscales rate comes from the fiscal parameters, so a new version changes the next documents', function () {
+    $f = gtFixture();
+    $this->travelTo(Carbon::parse('2026-09-20 10:00'));
+    DB::table('accounting_periods')->insert(['company_id' => $f['companyId'], 'name' => 'Septiembre 2026', 'starts_on' => '2026-09-01', 'ends_on' => '2026-09-30']);
+    $fiscal = app(FiscalConfigurationService::class);
+    $taxId = (int) DB::table('fiscal_taxes')->where('company_id', $f['companyId'])->where('code', OtherTaxesService::STAMP_TAX_CODE)->value('id');
+    expect($fiscal->activeRule($f['companyId'], OtherTaxesService::STAMP_TAX_CODE, '2026-09-01')->rate_basis_points)->toBe(300);
+
+    $fiscal->addVersion($f['companyId'], $taxId, $f['owner']->id, ['rate_basis_points' => 400, 'valid_from' => '2026-09-05', 'legal_reference' => 'Reforma de prueba']);
+    $this->get(route('accounting.otherTaxes', [$f['uuid'], 'year' => 2026]))->assertInertia(fn (Assert $page) => $page->where('stampRate', 400));
+    $this->post(route('accounting.stampTaxStore', $f['uuid']), ['document_date' => '2026-09-10', 'description' => 'Contrato de servicios', 'counterparty' => null, 'taxable' => '10000'])
+        ->assertSessionHasNoErrors();
+    $document = DB::table('stamp_tax_documents')->first();
+    expect((int) $document->rate_bp)->toBe(400)->and((int) $document->tax_cents)->toBe(40000);
+});
+
 test('the quarterly ISO is credited against the quarterly ISR of the same year until it runs out', function () {
     $f = gtFixture();
     $this->travelTo(Carbon::parse('2027-01-15 10:00'));

@@ -70,7 +70,7 @@ class OrganizationManagementService
             'renewal_date' => $row->current_period_ends_at === null ? null : Carbon::parse($row->current_period_ends_at)->toDateString(),
             'billing_status' => DB::table('saas_invoices')->where('organization_id', $row->id)->where('status', 'past_due')->exists() ? 'past_due' : 'ok',
             'last_activity' => $this->lastActivity((int) $row->id), 'beta_program' => (bool) $row->beta_program, 'created_at' => Carbon::parse($row->created_at)->toIso8601String(),
-            'destination' => '/control-center/organizations/'.$row->id];
+            'destination' => '/control-center/organizations/'.$row->public_id];
     }
 
     public function find(int $organizationId): stdClass

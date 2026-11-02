@@ -31,6 +31,7 @@ type Feature = {
 type Override = {
     id: number;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string;
     feature: string;
     value: boolean;
@@ -331,7 +332,7 @@ export default function Features({
                             <tr key={o.id}>
                                 <td className="px-2 py-2">
                                     <Link
-                                        href={`/control-center/organizations/${o.organization_id}?tab=features`}
+                                        href={`/control-center/organizations/${o.organization_public_id}?tab=features`}
                                         className="text-slate-900"
                                     >
                                         {o.organization}

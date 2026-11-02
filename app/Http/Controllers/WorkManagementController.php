@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Office;
 use App\Models\Organization;
 use App\Services\AccountingService;
+use App\Services\ClientPortal\ClientReminderService;
 use App\Services\ReportExportService;
 use App\Services\WorkManagement\AuditOverviewService;
 use App\Services\WorkManagement\ClosingsOverviewService;
@@ -502,6 +503,43 @@ class WorkManagementController extends Controller
         });
 
         return back()->with('workspace_notice', 'Oficina actualizada.');
+    }
+
+    /** Saves when and how the office reminds its clients of their deadlines (fee invoices, documents, taxes). */
+    public function updateClientReminders(Request $request, int $office, ClientReminderService $reminders): RedirectResponse
+    {
+        $organization = $this->context->organization($request->user());
+        abort_unless($this->authorization->can($organization, $request->user(), 'office.manage'), 403);
+        $existing = Office::where('organization_id', $organization->id)->where('id', $office)->whereNull('deleted_at')->firstOrFail();
+        $this->officeScope->authorize($organization, $request->user(), 'office.manage', (int) $existing->id);
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+            'days_before' => 'required|array|min:1|max:5',
+            'days_before.*' => 'required|integer|between:0,60',
+            'channels' => 'required|array',
+            'channels.in_app' => 'required|boolean',
+            'channels.email' => 'required|boolean',
+            'channels.whatsapp' => 'required|boolean',
+            'kinds' => 'required|array',
+            'kinds.fee_invoices' => 'required|boolean',
+            'kinds.document_requests' => 'required|boolean',
+            'kinds.tax_obligations' => 'required|boolean',
+        ], [
+            'days_before.required' => 'Indica al menos un día de aviso.',
+            'days_before.*.between' => 'Los días de aviso van de 0 (el mismo día) a 60.',
+        ]);
+        if ($data['enabled'] && ! in_array(true, array_map('boolval', $data['channels']), true)) {
+            throw ValidationException::withMessages(['channels' => 'Elige al menos un canal para enviar los recordatorios.']);
+        }
+
+        DB::transaction(function () use ($organization, $request, $existing, $data, $reminders): void {
+            $reminders->save($organization->id, (int) $existing->id, $data);
+            $this->accounting->audit($organization, $request->user(), 'office.client_reminders.updated', 'offices', $existing->id, [
+                'enabled' => (bool) $data['enabled'], 'days_before' => array_map('intval', $data['days_before']),
+            ]);
+        });
+
+        return back()->with('workspace_notice', 'Recordatorios a clientes guardados.');
     }
 
     public function updateUserMembership(Request $request, int $user): RedirectResponse

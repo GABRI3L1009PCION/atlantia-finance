@@ -30,6 +30,7 @@ type Office = {
     status: string;
     primary: boolean;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string;
     organization_code: string | null;
     organization_tax_id: string | null;
@@ -272,7 +273,7 @@ export default function Offices({
                                     </tr>
                                 )}
                                 {shown.map((office) => {
-                                    const organizationUrl = `/control-center/organizations/${office.organization_id}`;
+                                    const organizationUrl = `/control-center/organizations/${office.organization_public_id}`;
 
                                     return (
                                         <tr

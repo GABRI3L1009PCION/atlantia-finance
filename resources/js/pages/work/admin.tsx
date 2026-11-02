@@ -858,6 +858,231 @@ function OfficesScreen({ admin }: { admin: Props['admin'] }) {
     );
 }
 
+type ClientReminders = {
+    settings: {
+        enabled: boolean;
+        days_before: number[];
+        channels: { in_app: boolean; email: boolean; whatsapp: boolean };
+        kinds: {
+            fee_invoices: boolean;
+            document_requests: boolean;
+            tax_obligations: boolean;
+        };
+    };
+    whatsapp_available: boolean;
+    recent: {
+        company: string;
+        channel: string;
+        recipient: string;
+        status: string;
+        error: string | null;
+        due_on: string;
+        days_before: number;
+        sent_at: string;
+    }[];
+};
+
+const reminderChannels = {
+    in_app: 'Notificación en su panel',
+    email: 'Correo electrónico',
+    whatsapp: 'WhatsApp',
+} as const;
+
+const reminderKinds = {
+    fee_invoices: 'Facturas de honorarios de la oficina',
+    document_requests: 'Documentos e información solicitados',
+    tax_obligations: 'Vencimientos de impuestos de sus empresas',
+} as const;
+
+const reminderStatus: Record<string, string> = {
+    sent: 'Enviado',
+    failed: 'Falló',
+    skipped: 'Omitido',
+};
+
+function ClientRemindersForm({
+    officeId,
+    overview,
+}: {
+    officeId: number;
+    overview: ClientReminders;
+}) {
+    const form = useForm({
+        enabled: overview.settings.enabled,
+        days_text: overview.settings.days_before.join(', '),
+        channels: overview.settings.channels,
+        kinds: overview.settings.kinds,
+    });
+    const errors = form.errors as Record<string, string | undefined>;
+    const messages = Object.values(errors).filter(Boolean);
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        form.transform((data) => ({
+            enabled: data.enabled,
+            days_before: data.days_text
+                .split(/[\s,;]+/)
+                .filter((value) => value !== '')
+                .map((value) => Number(value)),
+            channels: data.channels,
+            kinds: data.kinds,
+        }));
+        form.patch(`/office/offices/${officeId}/client-reminders`, {
+            preserveScroll: true,
+        });
+    }
+
+    return (
+        <form onSubmit={submit} className={`${panel} space-y-4 p-5`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                    <CalendarCheck2 className="mt-0.5 size-5 text-[#640000]" />
+                    <div>
+                        <h2 className="text-lg font-black">
+                            Recordatorios a clientes
+                        </h2>
+                        <p className="text-sm text-slate-600">
+                            Cada mañana el sistema avisa por sí solo a los
+                            clientes de esta oficina lo que vence pronto. Cada
+                            aviso llega una sola vez por fecha y canal.
+                        </p>
+                    </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                    <input
+                        type="checkbox"
+                        className="size-4 accent-[#640000]"
+                        checked={form.data.enabled}
+                        onChange={(event) =>
+                            form.setData('enabled', event.target.checked)
+                        }
+                    />
+                    {form.data.enabled ? 'Activados' : 'Desactivados'}
+                </label>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+                <label className="space-y-1 text-sm">
+                    <span className="font-bold">
+                        Días antes del vencimiento
+                    </span>
+                    <input
+                        className={`${input} w-full`}
+                        value={form.data.days_text}
+                        placeholder="5, 1"
+                        onChange={(event) =>
+                            form.setData('days_text', event.target.value)
+                        }
+                    />
+                    <span className="block text-xs text-slate-500">
+                        Separados por comas, hasta cinco. 0 es el mismo día.
+                    </span>
+                </label>
+                <fieldset className="space-y-1.5 text-sm">
+                    <legend className="mb-1 font-bold">Canales</legend>
+                    {(
+                        Object.keys(reminderChannels) as Array<
+                            keyof typeof reminderChannels
+                        >
+                    ).map((channel) => (
+                        <label
+                            key={channel}
+                            className="flex items-center gap-2"
+                        >
+                            <input
+                                type="checkbox"
+                                className="size-4 accent-[#640000]"
+                                checked={form.data.channels[channel]}
+                                onChange={(event) =>
+                                    form.setData('channels', {
+                                        ...form.data.channels,
+                                        [channel]: event.target.checked,
+                                    })
+                                }
+                            />
+                            {reminderChannels[channel]}
+                        </label>
+                    ))}
+                    {form.data.channels.whatsapp &&
+                        !overview.whatsapp_available && (
+                            <p className="text-xs text-amber-700">
+                                WhatsApp aún no está conectado en la plataforma:
+                                mientras tanto se enviarán solo los otros
+                                canales. El número es el teléfono de cada
+                                empresa.
+                            </p>
+                        )}
+                </fieldset>
+                <fieldset className="space-y-1.5 text-sm">
+                    <legend className="mb-1 font-bold">Qué recordar</legend>
+                    {(
+                        Object.keys(reminderKinds) as Array<
+                            keyof typeof reminderKinds
+                        >
+                    ).map((kind) => (
+                        <label key={kind} className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                className="size-4 accent-[#640000]"
+                                checked={form.data.kinds[kind]}
+                                onChange={(event) =>
+                                    form.setData('kinds', {
+                                        ...form.data.kinds,
+                                        [kind]: event.target.checked,
+                                    })
+                                }
+                            />
+                            {reminderKinds[kind]}
+                        </label>
+                    ))}
+                </fieldset>
+            </div>
+            {messages.length > 0 && (
+                <p className="text-sm text-[#b91c1c]">{messages.join(' ')}</p>
+            )}
+            <button className={button} disabled={form.processing}>
+                Guardar recordatorios
+            </button>
+            {overview.recent.length > 0 && (
+                <div className="overflow-x-auto border-t border-slate-100 pt-4">
+                    <p className="mb-2 text-sm font-bold">Últimos enviados</p>
+                    <table className="min-w-full text-sm">
+                        <thead className="text-left text-xs text-slate-500 uppercase">
+                            <tr>
+                                <th className="py-2 pr-4">Empresa</th>
+                                <th className="py-2 pr-4">Canal</th>
+                                <th className="py-2 pr-4">Vence</th>
+                                <th className="py-2 pr-4">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {overview.recent.map((row, index) => (
+                                <tr key={index}>
+                                    <td className="py-2 pr-4">{row.company}</td>
+                                    <td className="py-2 pr-4">
+                                        {reminderChannels[
+                                            row.channel as keyof typeof reminderChannels
+                                        ] ?? row.channel}
+                                    </td>
+                                    <td className="py-2 pr-4">
+                                        {row.due_on} ({row.days_before} d antes)
+                                    </td>
+                                    <td
+                                        className="py-2 pr-4"
+                                        title={row.error ?? undefined}
+                                    >
+                                        {reminderStatus[row.status] ??
+                                            row.status}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </form>
+    );
+}
+
 function OfficeDetailScreen({ admin }: { admin: Props['admin'] }) {
     const office = admin.office?.info;
 
@@ -868,6 +1093,12 @@ function OfficeDetailScreen({ admin }: { admin: Props['admin'] }) {
     return (
         <div className="space-y-5">
             <OfficeForm office={office} />
+            {admin.office?.client_reminders && (
+                <ClientRemindersForm
+                    officeId={Number(office.id)}
+                    overview={admin.office.client_reminders as ClientReminders}
+                />
+            )}
             <section className="grid gap-5 xl:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]">
                 <div className={`${panel} overflow-hidden`}>
                     <TableHeader title="Empresas de la oficina" />

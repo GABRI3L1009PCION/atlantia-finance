@@ -21,6 +21,7 @@ import {
 type AccessRequest = {
     id: number;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string;
     ticket: string | null;
     requested_by: string;
@@ -297,7 +298,7 @@ export default function SupportAccess({
                                 <tr key={request.id}>
                                     <td className="px-2 py-2">
                                         <Link
-                                            href={`/control-center/organizations/${request.organization_id}?tab=support`}
+                                            href={`/control-center/organizations/${request.organization_public_id}?tab=support`}
                                             className="text-slate-900"
                                         >
                                             {request.organization}

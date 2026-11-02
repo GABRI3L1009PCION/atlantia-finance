@@ -50,8 +50,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
@@ -111,6 +113,25 @@ class AppServiceProvider extends ServiceProvider
         $this->app->make(TenantDatabaseContext::class)->runAsSystem(fn () => IntegrationManagementService::applyStoredSecrets());
         $this->configureApiRateLimit();
         $this->configurePlatformMonitoring();
+        $this->configureRouteBindings();
+    }
+
+    /**
+     * Organizations travel in Control Center URLs by their random public id (UUID), never by their sequential id, so a
+     * URL reveals nothing about how many clients there are and cannot be walked by trying /6, /7... The UUID is turned
+     * back into the internal id here; any other value is left as it is for routes that still declare a numeric id.
+     */
+    protected function configureRouteBindings(): void
+    {
+        Route::bind('organization', function (string $value): int|string {
+            if (! Str::isUuid($value)) {
+                return $value;
+            }
+            $id = $this->app->make(TenantDatabaseContext::class)->runAsSystem(fn (): mixed => DB::table('organizations')->where('public_id', $value)->value('id'));
+            abort_if($id === null, 404);
+
+            return (int) $id;
+        });
     }
 
     /**

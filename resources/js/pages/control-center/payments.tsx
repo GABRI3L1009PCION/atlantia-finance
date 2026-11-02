@@ -15,6 +15,7 @@ import {
 type Payment = {
     id: number;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string;
     invoice: string | null;
     provider: string;
@@ -35,6 +36,7 @@ type Payment = {
 type FelRequest = {
     payment_id: number;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string;
     amount: number;
     currency: string;
@@ -186,7 +188,7 @@ export default function Payments({
                             <tr key={payment.id}>
                                 <td className="px-2 py-2">
                                     <Link
-                                        href={`/control-center/organizations/${payment.organization_id}?tab=billing`}
+                                        href={`/control-center/organizations/${payment.organization_public_id}?tab=billing`}
                                         className="text-slate-900"
                                     >
                                         {payment.organization}
@@ -255,7 +257,7 @@ export default function Payments({
                                 </td>
                                 <td className="px-2 py-2">
                                     <Link
-                                        href={`/control-center/organizations/${request.organization_id}`}
+                                        href={`/control-center/organizations/${request.organization_public_id}`}
                                     >
                                         {request.organization}
                                     </Link>

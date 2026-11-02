@@ -342,14 +342,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::controller(CC\OrganizationController::class)->group(function () {
             Route::get('organizations', 'index')->name('organizations');
             Route::post('organizations', 'store')->middleware('throttle:20,1')->name('organizations.store');
-            Route::get('organizations/{organization}', 'show')->whereNumber('organization')->name('organizations.show');
-            Route::put('organizations/{organization}', 'update')->whereNumber('organization')->name('organizations.update');
-            Route::post('organizations/{organization}/status/{action}', 'status')->whereNumber('organization')->whereIn('action', ['suspend', 'reactivate', 'archive'])->middleware('throttle:20,1')->name('organizations.status');
-            Route::post('organizations/{organization}/invitation/resend', 'resendInvitation')->whereNumber('organization')->middleware('throttle:10,1')->name('organizations.invitation.resend');
-            Route::delete('organizations/{organization}', 'destroy')->whereNumber('organization')->middleware('throttle:10,1')->name('organizations.destroy');
-            Route::post('organizations/{organization}/overrides', 'storeOverride')->whereNumber('organization')->name('organizations.overrides');
+            Route::get('organizations/{organization}', 'show')->whereUuid('organization')->name('organizations.show');
+            Route::put('organizations/{organization}', 'update')->whereUuid('organization')->name('organizations.update');
+            Route::post('organizations/{organization}/status/{action}', 'status')->whereUuid('organization')->whereIn('action', ['suspend', 'reactivate', 'archive'])->middleware('throttle:20,1')->name('organizations.status');
+            Route::post('organizations/{organization}/invitation/resend', 'resendInvitation')->whereUuid('organization')->middleware('throttle:10,1')->name('organizations.invitation.resend');
+            Route::delete('organizations/{organization}', 'destroy')->whereUuid('organization')->middleware('throttle:10,1')->name('organizations.destroy');
+            Route::post('organizations/{organization}/overrides', 'storeOverride')->whereUuid('organization')->name('organizations.overrides');
             Route::post('overrides/{override}/revoke', 'revokeOverride')->whereNumber('override')->name('overrides.revoke');
-            Route::post('organizations/{organization}/credits', 'storeCredit')->whereNumber('organization')->name('organizations.credits');
+            Route::post('organizations/{organization}/credits', 'storeCredit')->whereUuid('organization')->name('organizations.credits');
             Route::get('offices', 'offices')->name('offices');
             Route::get('saas-users', 'staffIndex')->name('saasUsers');
             Route::get('roles', 'staffRoles')->name('roles');
@@ -367,10 +367,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('subscriptions', 'subscriptions')->name('subscriptions');
             Route::get('subscriptions/{subscription}/preview', 'preview')->whereNumber('subscription')->name('subscriptions.preview');
             Route::post('subscriptions/{subscription}/{action}', 'subscriptionAction')->whereNumber('subscription')->whereIn('action', ['change', 'cancel', 'pause', 'resume', 'extend-trial', 'discount'])->name('subscriptions.action');
-            Route::post('organizations/{organization}/subscriptions', 'createSubscription')->whereNumber('organization')->name('organizations.subscriptions');
+            Route::post('organizations/{organization}/subscriptions', 'createSubscription')->whereUuid('organization')->name('organizations.subscriptions');
             Route::get('billing', 'billing')->name('billing');
             Route::post('billing/invoices/{invoice}/{action}', 'invoiceAction')->whereNumber('invoice')->whereIn('action', ['manual-payment', 'payment-link', 'void', 'refund'])->middleware('throttle:30,1')->name('invoices.action');
-            Route::post('organizations/{organization}/charges', 'chargeInvoice')->whereNumber('organization')->name('organizations.charges');
+            Route::post('organizations/{organization}/charges', 'chargeInvoice')->whereUuid('organization')->name('organizations.charges');
             Route::get('payments', 'payments')->name('payments');
         });
 
@@ -957,6 +957,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/offices', [WorkManagementController::class, 'offices'])->name('office.offices.index');
         Route::post('office/offices', [WorkManagementController::class, 'storeOffice'])->middleware('throttle:20,1')->name('office.offices.store');
         Route::get('office/offices/{office}', [WorkManagementController::class, 'officeDetail'])->whereNumber('office')->name('office.offices.show');
+        Route::patch('office/offices/{office}/client-reminders', [WorkManagementController::class, 'updateClientReminders'])->whereNumber('office')->middleware('throttle:20,1')->name('office.offices.clientReminders');
         Route::patch('office/offices/{office}', [WorkManagementController::class, 'updateOffice'])->whereNumber('office')->middleware('throttle:20,1')->name('office.offices.update');
         Route::get('office/users-roles', [WorkManagementController::class, 'usersRoles'])->name('office.usersRoles');
         Route::get('office/roles', [WorkManagementController::class, 'rolesPermissions'])->name('office.roles.index');
