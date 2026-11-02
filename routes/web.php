@@ -957,6 +957,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('office/offices', [WorkManagementController::class, 'offices'])->name('office.offices.index');
         Route::post('office/offices', [WorkManagementController::class, 'storeOffice'])->middleware('throttle:20,1')->name('office.offices.store');
         Route::get('office/offices/{office}', [WorkManagementController::class, 'officeDetail'])->whereNumber('office')->name('office.offices.show');
+        Route::patch('office/offices/{office}/client-reminders', [WorkManagementController::class, 'updateClientReminders'])->whereNumber('office')->middleware('throttle:20,1')->name('office.offices.clientReminders');
         Route::patch('office/offices/{office}', [WorkManagementController::class, 'updateOffice'])->whereNumber('office')->middleware('throttle:20,1')->name('office.offices.update');
         Route::get('office/users-roles', [WorkManagementController::class, 'usersRoles'])->name('office.usersRoles');
         Route::get('office/roles', [WorkManagementController::class, 'rolesPermissions'])->name('office.roles.index');

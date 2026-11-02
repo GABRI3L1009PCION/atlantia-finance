@@ -200,6 +200,8 @@ class WorkNotificationService
             'published_reports' => '/client-open/report/'.$relatedId,
             'client_conversations' => '/client-open/conversation/'.$relatedId,
             'company_data_change_requests' => '/client-open/change/'.$relatedId,
+            'crm_invoices' => '/client/account',
+            'client_obligations' => '/client/obligations',
             'audit_evidence_requests' => '/work/audit-requests/open/evidence/'.$relatedId,
             'audit_findings' => '/work/audit-requests/open/finding/'.$relatedId,
             default => '/work/dashboard',
