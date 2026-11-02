@@ -16,6 +16,7 @@ use App\Services\WorkManagement\ExecutiveIndicatorsService;
 use App\Services\WorkManagement\ExecutiveReportsService;
 use App\Services\WorkManagement\FirmRevenueService;
 use App\Services\WorkManagement\GrowthOverviewService;
+use App\Services\WorkManagement\MonthlyCycleService;
 use App\Services\WorkManagement\OfficeAdminService;
 use App\Services\WorkManagement\OfficeDirectoryService;
 use App\Services\WorkManagement\OfficeInvitationService;
@@ -503,6 +504,33 @@ class WorkManagementController extends Controller
         });
 
         return back()->with('workspace_notice', 'Oficina actualizada.');
+    }
+
+    /** Saves the office's monthly cycle: the day the month opens, the recurring client requests and the close package. */
+    public function updateMonthlyCycle(Request $request, int $office, MonthlyCycleService $cycle): RedirectResponse
+    {
+        $organization = $this->context->organization($request->user());
+        abort_unless($this->authorization->can($organization, $request->user(), 'office.manage'), 403);
+        $existing = Office::where('organization_id', $organization->id)->where('id', $office)->whereNull('deleted_at')->firstOrFail();
+        $this->officeScope->authorize($organization, $request->user(), 'office.manage', (int) $existing->id);
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+            'open_day' => 'required|integer|between:1,28',
+            'recurring_requests' => 'present|array|max:10',
+            'recurring_requests.*.title' => 'required|string|max:150',
+            'recurring_requests.*.type' => ['required', Rule::in(array_keys(MonthlyCycleService::REQUEST_TYPES))],
+            'recurring_requests.*.due_day' => 'required|integer|between:1,28',
+            'close_package' => 'required|boolean',
+        ], ['open_day.between' => 'El día de apertura va del 1 al 28.', 'recurring_requests.*.title.required' => 'Cada solicitud necesita un título.']);
+
+        DB::transaction(function () use ($organization, $request, $existing, $data, $cycle): void {
+            $cycle->save($organization->id, (int) $existing->id, $data);
+            $this->accounting->audit($organization, $request->user(), 'office.monthly_cycle.updated', 'offices', $existing->id, [
+                'enabled' => (bool) $data['enabled'], 'open_day' => (int) $data['open_day'], 'requests' => count($data['recurring_requests']),
+            ]);
+        });
+
+        return back()->with('workspace_notice', 'Ciclo mensual guardado.');
     }
 
     /** Saves when and how the office reminds its clients of their deadlines (fee invoices, documents, taxes). */
