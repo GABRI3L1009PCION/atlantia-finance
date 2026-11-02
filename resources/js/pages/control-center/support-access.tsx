@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { KeyRound } from 'lucide-react';
+import { KeyRound, Clock, CircleCheck, Ban } from 'lucide-react';
 import { useMemo } from 'react';
 import {
     CCPage,
@@ -9,11 +9,13 @@ import {
     SensitiveAction,
     Table,
     ccButton,
+    ccDanger,
     ccGhost,
     ccInput,
     ccTextarea,
     date,
     statusTone,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type AccessRequest = {
@@ -92,10 +94,47 @@ export default function SupportAccess({
                 title="Accesos de soporte"
                 subtitle="Por defecto el personal SaaS no ve datos financieros de los clientes. Para diagnosticar se solicita un acceso con motivo, alcance y duración; otra persona lo aprueba, vence solo y todo lo consultado queda auditado."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Solicitudes',
+                            value: requests.length,
+                            icon: KeyRound,
+                        },
+                        {
+                            label: 'Por aprobar',
+                            value: requests.filter(
+                                (r) => r.status === 'requested',
+                            ).length,
+                            icon: Clock,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Accesos activos',
+                            value: requests.filter((r) => r.status === 'active')
+                                .length,
+                            icon: CircleCheck,
+                            tone: '#15803d',
+                        },
+                        {
+                            label: 'Cerradas',
+                            value: requests.filter((r) =>
+                                [
+                                    'expired',
+                                    'revoked',
+                                    'rejected',
+                                    'completed',
+                                ].includes(r.status),
+                            ).length,
+                            icon: Ban,
+                            tone: '#64748b',
+                        },
+                    ]}
+                />
                 {can.request && (
                     <Panel
                         title="Solicitar acceso"
-                        icon={<KeyRound className="size-4 text-[#e8b04b]" />}
+                        icon={<KeyRound className="size-4 text-[#a16207]" />}
                     >
                         <form
                             className="grid gap-3 md:grid-cols-3"
@@ -168,7 +207,7 @@ export default function SupportAccess({
                                         ([key, label]) => (
                                             <label
                                                 key={key}
-                                                className="flex items-start gap-2 text-xs text-slate-300"
+                                                className="flex items-start gap-2 text-xs text-slate-700"
                                             >
                                                 <input
                                                     type="checkbox"
@@ -218,7 +257,7 @@ export default function SupportAccess({
                                 />
                             </Field>
                             {Object.values(form.errors).length > 0 && (
-                                <p className="text-xs text-[#f87171] md:col-span-3">
+                                <p className="text-xs text-[#dc2626] md:col-span-3">
                                     {Object.values(form.errors).join(' ')}
                                 </p>
                             )}
@@ -259,7 +298,7 @@ export default function SupportAccess({
                                     <td className="px-2 py-2">
                                         <Link
                                             href={`/control-center/organizations/${request.organization_id}?tab=support`}
-                                            className="text-white"
+                                            className="text-slate-900"
                                         >
                                             {request.organization}
                                         </Link>
@@ -275,7 +314,7 @@ export default function SupportAccess({
                                             {date(request.created_at, true)}
                                         </span>
                                     </td>
-                                    <td className="max-w-xs px-2 py-2 text-slate-400">
+                                    <td className="max-w-xs px-2 py-2 text-slate-500">
                                         {request.reason}
                                         {request.decision_note && (
                                             <span className="block text-[10px] text-slate-500">
@@ -354,7 +393,7 @@ export default function SupportAccess({
                                                 (own || can.approve) && (
                                                     <button
                                                         type="button"
-                                                        className={`${ccGhost} border-[#ef4444]/40 text-[#fca5a5]`}
+                                                        className={ccDanger}
                                                         onClick={() => {
                                                             const reason =
                                                                 window.prompt(

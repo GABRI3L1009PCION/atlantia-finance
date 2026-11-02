@@ -108,16 +108,19 @@ export default function Security({
                             overview.sensitive_changes_7d,
                         ],
                     ].map(([label, value]) => (
-                        <div key={String(label)} className={`${panel} p-4`}>
-                            <p className="text-xs text-slate-400">{label}</p>
-                            <p className="mt-1 text-2xl font-black text-white">
+                        <div
+                            key={String(label)}
+                            className={`${panel} border-l-4 border-l-[#7a0010] p-4`}
+                        >
+                            <p className="text-sm text-slate-700">{label}</p>
+                            <p className="mt-1 font-serif text-2xl font-bold text-slate-900">
                                 {value}
                             </p>
                         </div>
                     ))}
                 </div>
                 {overview.staff_without_2fa.length > 0 && (
-                    <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 p-3 text-sm text-[#fecaca]">
+                    <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 p-3 text-sm text-[#991b1b]">
                         <ShieldAlert className="mr-1 inline size-4" /> Personal
                         SaaS sin 2FA:{' '}
                         {overview.staff_without_2fa
@@ -132,7 +135,7 @@ export default function Security({
                 {overview.pending_support_access > 0 && (
                     <Link
                         href="/control-center/support-access"
-                        className="block rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3 text-sm text-[#fde68a]"
+                        className="block rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3 text-sm text-[#92400e]"
                     >
                         {overview.pending_support_access} solicitud(es) de
                         acceso de soporte esperan aprobación →
@@ -156,10 +159,10 @@ export default function Security({
                                     <td className="px-2 py-1.5 whitespace-nowrap">
                                         {date(event.at, true)}
                                     </td>
-                                    <td className="px-2 py-1.5 font-mono text-white">
+                                    <td className="px-2 py-1.5 font-mono text-slate-900">
                                         {event.title}
                                     </td>
-                                    <td className="px-2 py-1.5 text-slate-400">
+                                    <td className="px-2 py-1.5 text-slate-500">
                                         {event.detail}
                                     </td>
                                     <td className="px-2 py-1.5">
@@ -189,7 +192,7 @@ export default function Security({
                         >
                             {overview.suspicious_ips.map((ip) => (
                                 <tr key={ip.ip}>
-                                    <td className="px-2 py-1.5 font-mono text-white">
+                                    <td className="px-2 py-1.5 font-mono text-slate-900">
                                         {ip.ip}
                                     </td>
                                     <td className="px-2 py-1.5">
@@ -204,7 +207,7 @@ export default function Security({
                                 </tr>
                             ))}
                         </Table>
-                        <h3 className="mt-4 mb-2 text-xs font-bold text-slate-400">
+                        <h3 className="mt-4 mb-2 text-xs font-bold text-slate-500">
                             Últimos intentos fallidos
                         </h3>
                         <Table
@@ -249,7 +252,7 @@ export default function Security({
                         {sessions.map((session) => (
                             <tr key={session.id}>
                                 <td className="px-2 py-1.5">
-                                    <span className="text-white">
+                                    <span className="text-slate-900">
                                         {session.user}
                                     </span>
                                     <span className="block text-[10px] text-slate-500">

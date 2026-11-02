@@ -8,19 +8,19 @@ import {
     BrainCircuit,
     Bot,
     Building2,
-    ChevronRight,
+    ChevronDown,
     CircleHelp,
     CreditCard,
-    FileClock,
     FileText,
     Flag,
     Gauge,
-    Globe2,
     Home,
     KeyRound,
     Layers,
+    LockKeyhole,
     LifeBuoy,
     LogOut,
+    Menu,
     Plug,
     ReceiptText,
     Scale,
@@ -38,7 +38,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { ago, usePlatform } from '@/components/control-center/kit';
+import { usePlatform } from '@/components/control-center/kit';
 import { FeedbackModals } from '@/components/feedback-modals';
 
 type Item = {
@@ -76,6 +76,12 @@ const groups: Group[] = [
                 title: 'Usuarios SaaS',
                 href: '/control-center/saas-users',
                 icon: UserCog,
+                permission: 'saas.users.view',
+            },
+            {
+                title: 'Roles y permisos',
+                href: '/control-center/roles',
+                icon: LockKeyhole,
                 permission: 'saas.users.view',
             },
         ],
@@ -265,6 +271,90 @@ const groups: Group[] = [
     },
 ];
 
+function isActive(item: Item, path: string): boolean {
+    return item.href === '/control-center'
+        ? path === item.href
+        : path === item.href || path.startsWith(item.href + '/');
+}
+
+/**
+ * One section of the menu, folded like the firms' sidebar (NavMain): the section holding the current page opens by
+ * itself, a click on the heading opens or closes it, and moving to another section opens that one and closes the
+ * one left behind. A closed section still shows the sum of its badges so pending work is not hidden.
+ */
+function NavGroup({
+    group,
+    path,
+    badges,
+}: {
+    group: Group;
+    path: string;
+    badges: Record<string, number>;
+}) {
+    const hasActive = group.items.some((item) => isActive(item, path));
+    const [choice, setChoice] = useState<{
+        forActive: boolean;
+        open: boolean;
+    } | null>(null);
+    const open =
+        choice !== null && choice.forActive === hasActive
+            ? choice.open
+            : hasActive;
+    const pending = group.items.reduce(
+        (sum, item) => sum + (item.badge ? (badges[item.badge] ?? 0) : 0),
+        0,
+    );
+
+    return (
+        <div className="border-b border-white/10 pb-1.5 last:border-b-0">
+            <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setChoice({ forActive: hasActive, open: !open })}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 pt-2.5 pb-1 text-[12px] font-bold tracking-[0.06em] text-[#e8b04b] uppercase transition hover:text-[#f5cf7a]"
+            >
+                <span className="flex-1 truncate text-left">{group.label}</span>
+                {!open && pending > 0 && (
+                    <span className="rounded-full bg-[#c8102e] px-1.5 text-[10px] font-bold tracking-normal text-white">
+                        {pending}
+                    </span>
+                )}
+                <ChevronDown
+                    className={`size-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`}
+                />
+            </button>
+            {open && (
+                <div className="mt-0.5 space-y-0.5">
+                    {group.items.map((item) => {
+                        const active = isActive(item, path);
+                        const badge = item.badge
+                            ? (badges[item.badge] ?? 0)
+                            : 0;
+
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[14px] transition ${active ? 'bg-[#8b0f1a] font-semibold text-white shadow-[0_8px_20px_-12px_rgba(139,15,26,.9)]' : 'text-white/90 hover:bg-white/[0.07] hover:text-white'}`}
+                            >
+                                <item.icon className="size-[18px] shrink-0" />
+                                <span className="flex-1 truncate">
+                                    {item.title}
+                                </span>
+                                {badge > 0 && (
+                                    <span className="rounded-full bg-[#c8102e] px-1.5 text-[10px] font-bold text-white">
+                                        {badge}
+                                    </span>
+                                )}
+                            </Link>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function SupportBanner() {
     const platform = usePlatform();
     const [now, setNow] = useState(() => Date.now());
@@ -317,6 +407,8 @@ export default function ControlCenterLayout({
     ).auth.user;
     const path = page.url.split('?')[0];
     const [search, setSearch] = useState('');
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [mobileOpen, setMobileOpen] = useState(false);
     const visible = groups
         .map((group) => ({
             ...group,
@@ -333,67 +425,83 @@ export default function ControlCenterLayout({
         (platform.badges.support_access ?? 0) +
         (platform.badges.failed_jobs > 0 ? 1 : 0);
 
+    const initials =
+        user.name
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase())
+            .join('') || 'A';
+    const sidebar = (
+        <>
+            <Link
+                href="/control-center"
+                className="flex flex-col items-center gap-2 px-5 pt-5"
+            >
+                <img
+                    src="/images/atlantia-finance-logo.png"
+                    alt="Atlantia Finance"
+                    className="mx-auto h-14 w-auto max-w-full object-contain"
+                />
+            </Link>
+            <div className="mx-4 mt-3 border-t border-[#e8b04b]/70" />
+            <p className="px-5 pt-3 pb-2 text-center text-[13px] leading-tight font-bold tracking-[0.04em] text-[#e8b04b] uppercase">
+                Panel del Superadministrador
+            </p>
+            <nav className="flex-1 px-3 pb-6">
+                {visible.map((group) => (
+                    <NavGroup
+                        key={group.label}
+                        group={group}
+                        path={path}
+                        badges={platform.badges}
+                    />
+                ))}
+            </nav>
+        </>
+    );
+
     return (
-        <div className="cc-root min-h-screen bg-[#07090d] text-slate-200">
+        <div className="cc-root min-h-screen bg-[#f6f3f1] text-slate-800">
             <SupportBanner />
             <div className="flex">
-                <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col overflow-y-auto border-r border-white/[0.06] bg-[#0a0c11] lg:flex">
-                    <Link
-                        href="/control-center"
-                        className="flex flex-col items-center gap-1.5 px-5 pt-4 pb-3"
-                    >
-                        <img
-                            src="/images/atlantia-finance-logo.png"
-                            alt="Atlantia Finance"
-                            className="mx-auto h-16 w-auto max-w-full object-contain"
-                        />
-                        <span className="text-center text-[11px] font-bold tracking-[0.12em] text-[#e8b04b] uppercase">
-                            Panel del Super Administrador
-                        </span>
-                    </Link>
-                    <nav className="flex-1 space-y-4 px-3 pb-6">
-                        {visible.map((group) => (
-                            <div key={group.label}>
-                                <p className="mb-1 px-2 text-[10px] font-bold tracking-[0.14em] text-slate-500 uppercase">
-                                    {group.label}
-                                </p>
-                                {group.items.map((item) => {
-                                    const active =
-                                        item.href === '/control-center'
-                                            ? path === item.href
-                                            : path === item.href ||
-                                              path.startsWith(item.href + '/');
-                                    const badge = item.badge
-                                        ? (platform.badges[item.badge] ?? 0)
-                                        : 0;
-
-                                    return (
-                                        <Link
-                                            key={item.href}
-                                            href={item.href}
-                                            className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition ${active ? 'bg-gradient-to-r from-[#c8102e]/90 to-[#7a0a1b]/80 font-semibold text-white shadow-[0_8px_22px_-12px_rgba(200,16,46,.9)]' : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'}`}
-                                        >
-                                            <item.icon className="size-4 shrink-0" />
-                                            <span className="flex-1 truncate">
-                                                {item.title}
-                                            </span>
-                                            {badge > 0 && (
-                                                <span className="rounded-full bg-[#c8102e] px-1.5 text-[10px] font-bold text-white">
-                                                    {badge}
-                                                </span>
-                                            )}
-                                            {active && (
-                                                <ChevronRight className="size-3.5" />
-                                            )}
-                                        </Link>
-                                    );
-                                })}
-                            </div>
-                        ))}
-                    </nav>
+                <aside
+                    className={`sticky top-0 hidden h-screen w-[250px] shrink-0 [scrollbar-width:thin] flex-col overflow-y-auto bg-[#0a0a0b] ${sidebarOpen ? 'lg:flex' : ''}`}
+                >
+                    {sidebar}
                 </aside>
-                <div className="min-w-0 flex-1">
-                    <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/[0.06] bg-[#07090d]/85 px-4 py-3 backdrop-blur">
+                {mobileOpen && (
+                    <div className="fixed inset-0 z-40 lg:hidden">
+                        <button
+                            type="button"
+                            aria-label="Cerrar menú"
+                            className="absolute inset-0 bg-black/50"
+                            onClick={() => setMobileOpen(false)}
+                        />
+                        <aside className="relative flex h-full w-[260px] flex-col overflow-y-auto bg-[#0a0a0b]">
+                            {sidebar}
+                        </aside>
+                    </div>
+                )}
+                <div className="flex min-w-0 flex-1 flex-col">
+                    <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 bg-[#6b0000] px-4 text-white shadow-[0_6px_18px_-12px_rgba(60,0,0,.8)]">
+                        <button
+                            type="button"
+                            aria-label="Mostrar u ocultar el menú"
+                            onClick={() => {
+                                if (
+                                    window.matchMedia('(min-width: 1024px)')
+                                        .matches
+                                ) {
+                                    setSidebarOpen((open) => !open);
+                                } else {
+                                    setMobileOpen(true);
+                                }
+                            }}
+                            className="grid size-9 shrink-0 place-items-center rounded-lg hover:bg-white/10"
+                        >
+                            <Menu className="size-6" />
+                        </button>
                         <form
                             className="relative max-w-md flex-1"
                             onSubmit={(event) => {
@@ -403,63 +511,53 @@ export default function ControlCenterLayout({
                                 });
                             }}
                         >
-                            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
+                            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/70" />
                             <input
                                 value={search}
                                 onChange={(event) =>
                                     setSearch(event.target.value)
                                 }
                                 placeholder="Buscar organización, código o NIT…"
-                                className="h-10 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] pr-3 pl-9 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-[#c8102e]/50"
+                                className="h-9 w-full rounded-lg border border-white/30 bg-white/10 pr-3 pl-9 text-sm text-white outline-none placeholder:text-white/70 focus:border-white/60 focus:bg-white/15"
                             />
                         </form>
-                        <span className="hidden items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-slate-300 md:flex">
-                            <Globe2 className="size-4" /> Toda la plataforma
-                        </span>
-                        <span className="hidden items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-slate-300 xl:flex">
-                            <FileClock className="size-4" />{' '}
-                            {new Intl.DateTimeFormat('es-GT', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric',
-                            }).format(new Date())}
-                        </span>
-                        <div className="ml-auto flex items-center gap-2">
+                        <div className="ml-auto flex items-center gap-1.5">
                             <Link
                                 href="/control-center"
-                                className="relative grid size-9 place-items-center rounded-xl text-slate-300 hover:bg-white/[0.05]"
+                                className="relative grid size-9 place-items-center rounded-lg hover:bg-white/10"
                                 aria-label="Alertas"
                             >
                                 <Bell className="size-5" />
-                                {alerts > 0 && (
-                                    <span className="absolute -top-0.5 -right-0.5 rounded-full bg-[#c8102e] px-1.5 text-[10px] font-bold text-white">
+                                {alerts > 0 ? (
+                                    <span className="absolute -top-0.5 -right-0.5 rounded-full bg-[#e8b04b] px-1.5 text-[10px] font-bold text-[#3b0000]">
                                         {alerts}
                                     </span>
-                                )}
+                                ) : null}
                             </Link>
                             <a
                                 href="mailto:soporte@atlantia.systems"
-                                className="grid size-9 place-items-center rounded-xl text-slate-300 hover:bg-white/[0.05]"
+                                className="grid size-9 place-items-center rounded-lg hover:bg-white/10"
                                 aria-label="Ayuda"
                             >
                                 <CircleHelp className="size-5" />
                             </a>
-                            <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] py-1 pr-2 pl-1">
-                                <span className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-[#c8102e] to-[#5c0612] text-xs font-black text-white">
-                                    {user.name.slice(0, 1).toUpperCase()}
+                            <span className="mx-2 hidden h-8 w-px bg-white/30 sm:block" />
+                            <div className="flex items-center gap-2.5">
+                                <span className="grid size-9 place-items-center rounded-full bg-[#e8b04b] text-xs font-black text-[#3b0000]">
+                                    {initials}
                                 </span>
                                 <span className="hidden leading-tight md:block">
-                                    <span className="block text-xs font-bold text-white">
+                                    <span className="block text-sm font-bold">
+                                        {user.name}
+                                    </span>
+                                    <span className="block text-[11px] text-white/75">
                                         {platform.role_label ??
                                             'Superadministrador'}
-                                    </span>
-                                    <span className="block text-[10px] text-slate-400">
-                                        {user.name}
                                     </span>
                                 </span>
                                 <Link
                                     href="/settings/security"
-                                    className="ml-1 grid size-7 place-items-center rounded-lg text-slate-400 hover:text-white"
+                                    className="ml-1 grid size-8 place-items-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
                                     aria-label="Seguridad de mi cuenta"
                                 >
                                     <Users className="size-4" />
@@ -468,7 +566,7 @@ export default function ControlCenterLayout({
                                     href="/logout"
                                     method="post"
                                     as="button"
-                                    className="grid size-7 place-items-center rounded-lg text-slate-400 hover:text-white"
+                                    className="grid size-8 place-items-center rounded-lg text-white/80 hover:bg-white/10 hover:text-white"
                                     aria-label="Cerrar sesión"
                                 >
                                     <LogOut className="size-4" />
@@ -476,14 +574,10 @@ export default function ControlCenterLayout({
                             </div>
                         </div>
                     </header>
-                    <main className="mx-auto max-w-[1700px] p-4 lg:p-6">
+                    <main className="mx-auto w-full max-w-[1700px] flex-1 p-4 lg:p-5">
                         {children}
                     </main>
                     <FeedbackModals />
-                    <footer className="px-6 pb-6 text-[11px] text-slate-600">
-                        Atlantia Control Center · actualizado{' '}
-                        {ago(new Date().toISOString())}
-                    </footer>
                 </div>
             </div>
         </div>

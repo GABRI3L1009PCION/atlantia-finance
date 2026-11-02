@@ -352,6 +352,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('organizations/{organization}/credits', 'storeCredit')->whereNumber('organization')->name('organizations.credits');
             Route::get('offices', 'offices')->name('offices');
             Route::get('saas-users', 'staffIndex')->name('saasUsers');
+            Route::get('roles', 'staffRoles')->name('roles');
             Route::post('saas-users', 'staffStore')->middleware('throttle:10,1')->name('saasUsers.store');
             Route::post('saas-users/{staff}/{action}', 'staffAction')->whereNumber('staff')->whereIn('action', ['role', 'activate', 'deactivate', 'require-2fa', 'relax-2fa', 'revoke-sessions'])->middleware('throttle:20,1')->name('saasUsers.action');
         });

@@ -1,5 +1,11 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { RefreshCw } from 'lucide-react';
+import {
+    RefreshCw,
+    Server,
+    CircleCheck,
+    AlertTriangle,
+    XCircle,
+} from 'lucide-react';
 import {
     CCPage,
     Panel,
@@ -10,6 +16,7 @@ import {
     ccButton,
     date,
     healthTone,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Service = {
@@ -90,6 +97,38 @@ export default function Services({
                     </button>
                 }
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Servicios',
+                            value: services.length,
+                            icon: Server,
+                        },
+                        {
+                            label: 'Operativos',
+                            value: services.filter(
+                                (s) => s.status === 'healthy',
+                            ).length,
+                            icon: CircleCheck,
+                            tone: '#15803d',
+                        },
+                        {
+                            label: 'Degradados',
+                            value: services.filter(
+                                (s) => s.status === 'degraded',
+                            ).length,
+                            icon: AlertTriangle,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Caídos',
+                            value: services.filter((s) => s.status === 'down')
+                                .length,
+                            icon: XCircle,
+                            tone: '#b91c1c',
+                        },
+                    ]}
+                />
                 <Panel>
                     <Table
                         headers={[
@@ -109,19 +148,19 @@ export default function Services({
                                 key={service.key}
                                 className={
                                     selected === service.key
-                                        ? 'bg-white/[0.03]'
+                                        ? 'bg-slate-50'
                                         : ''
                                 }
                             >
                                 <td className="px-2 py-2">
                                     <Link
                                         href={`/control-center/services?service=${service.key}`}
-                                        className="font-semibold text-white"
+                                        className="font-semibold text-slate-900"
                                     >
                                         {service.name}
                                     </Link>
                                     {service.critical && (
-                                        <span className="ml-1 text-[10px] text-[#e8b04b]">
+                                        <span className="ml-1 text-[10px] text-[#a16207]">
                                             crítico
                                         </span>
                                     )}
@@ -144,7 +183,7 @@ export default function Services({
                                 <td className="px-2 py-2 whitespace-nowrap">
                                     {ago(service.last_check)}
                                 </td>
-                                <td className="max-w-md px-2 py-2 text-slate-400">
+                                <td className="max-w-md px-2 py-2 text-slate-500">
                                     {service.latest_error ?? '—'}
                                 </td>
                                 <td className="px-2 py-2 text-[11px]">
@@ -167,7 +206,7 @@ export default function Services({
                     </Table>
                 </Panel>
                 <Panel title="Alertas al celular">
-                    <p className="mb-2 text-xs text-slate-400">
+                    <p className="mb-2 text-xs text-slate-500">
                         {alertChannels.length === 0
                             ? 'Sin canales configurados: las alertas solo quedan aquí. Configura Telegram, ntfy o correo en el .env (MONITORING_*) y prueba con php artisan monitoring:test.'
                             : `Se envían por ${alertChannels.join(', ')} cuando un servicio falla dos chequeos seguidos, cada hora mientras siga caído, al recuperarse y cuando el disco pasa del 85 %.`}
@@ -192,7 +231,7 @@ export default function Services({
                                     </Pill>
                                 </td>
                                 <td className="px-2 py-1.5">{alert.message}</td>
-                                <td className="px-2 py-1.5 text-slate-400">
+                                <td className="px-2 py-1.5 text-slate-500">
                                     {Object.entries(alert.channels)
                                         .map(
                                             ([channel, delivered]) =>
@@ -226,7 +265,7 @@ export default function Services({
                                     <td className="px-2 py-1.5">
                                         {row.latency_ms ?? '—'} ms
                                     </td>
-                                    <td className="px-2 py-1.5 text-slate-400">
+                                    <td className="px-2 py-1.5 text-slate-500">
                                         {row.detail}
                                     </td>
                                 </tr>

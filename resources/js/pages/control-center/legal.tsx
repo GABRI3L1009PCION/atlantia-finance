@@ -41,7 +41,7 @@ function DocumentEditor({
         <Panel
             title={document.label}
             action={
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-500">
                     {document.version === null
                         ? 'Sin publicar'
                         : `Versión ${document.version} · ${document.accepted} aceptaciones`}
@@ -82,7 +82,7 @@ function DocumentEditor({
                         : '.'}
                 </p>
                 {Object.values(form.errors).length > 0 && (
-                    <p className="text-xs text-[#f87171]">
+                    <p className="text-xs text-[#dc2626]">
                         {Object.values(form.errors).join(' ')}
                     </p>
                 )}
@@ -96,7 +96,7 @@ function DocumentEditor({
                         href={document.path}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-slate-400 underline"
+                        className="text-xs text-slate-500 underline"
                     >
                         Ver página pública
                     </a>

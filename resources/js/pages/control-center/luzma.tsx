@@ -84,22 +84,22 @@ function LuzmaSwitchCard({
 
     return (
         <div
-            className={`rounded-xl border p-4 ${status.enabled ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/40 bg-red-500/10'}`}
+            className={`rounded-xl border p-4 ${status.enabled ? 'border-[#15803d]/30 bg-[#15803d]/5' : 'border-red-500/40 bg-red-500/10'}`}
         >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                     <span
-                        className={`grid size-10 place-items-center rounded-full ${status.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}
+                        className={`grid size-10 place-items-center rounded-full ${status.enabled ? 'bg-[#15803d]/15 text-[#15803d]' : 'bg-red-500/20 text-red-700'}`}
                     >
                         <Power className="size-5" />
                     </span>
                     <div>
-                        <p className="font-black text-white">
+                        <p className="font-black text-slate-900">
                             Luzma está{' '}
                             {status.enabled ? 'encendida' : 'apagada'} para
                             todas las firmas
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-slate-500">
                             {status.enabled
                                 ? 'Solo este interruptor la apaga. Si el modelo falla, sigue respondiendo en modo básico y el sistema la reinicia sola.'
                                 : status.disabled_message}
@@ -110,7 +110,7 @@ function LuzmaSwitchCard({
                     <button
                         type="button"
                         onClick={() => setOpen(true)}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold text-white ${status.enabled ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold text-white ${status.enabled ? 'bg-red-600 hover:bg-red-700' : 'bg-[#15803d] hover:bg-[#166534]'}`}
                     >
                         {status.enabled ? 'Apagar Luzma' : 'Encender Luzma'}
                     </button>
@@ -174,7 +174,7 @@ export default function Luzma({
                         <Link
                             key={key}
                             href={href}
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${section === key ? 'bg-[#8b5cf6] text-white' : 'border border-white/10 text-slate-300'}`}
+                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${section === key ? 'bg-[#8b5cf6] text-white' : 'border border-slate-200 text-slate-700'}`}
                         >
                             {label}
                         </Link>
@@ -187,7 +187,7 @@ export default function Luzma({
                     <div className="grid gap-3 xl:grid-cols-3">
                         <Panel
                             title="Estado"
-                            icon={<Bot className="size-4 text-[#c4b5fd]" />}
+                            icon={<Bot className="size-4 text-[#6d28d9]" />}
                         >
                             <dl className="grid gap-2 text-xs">
                                 {[
@@ -248,14 +248,14 @@ export default function Luzma({
                                         <dt className="text-slate-500">
                                             {label}
                                         </dt>
-                                        <dd className="text-right text-slate-200">
+                                        <dd className="text-right text-slate-800">
                                             {value}
                                         </dd>
                                     </div>
                                 ))}
                             </dl>
                             {status.detail && (
-                                <p className="mt-2 text-xs text-[#fbbf24]">
+                                <p className="mt-2 text-xs text-[#b45309]">
                                     {status.detail}
                                 </p>
                             )}
@@ -276,12 +276,12 @@ export default function Luzma({
                             ].map(([label, value]) => (
                                 <div
                                     key={String(label)}
-                                    className={`${panel} p-4`}
+                                    className={`${panel} border-l-4 border-l-[#7a0010] p-4`}
                                 >
-                                    <p className="text-xs text-slate-400">
+                                    <p className="text-sm text-slate-700">
                                         {label}
                                     </p>
-                                    <p className="mt-1 text-2xl font-black text-white">
+                                    <p className="mt-1 font-serif text-2xl font-bold text-slate-900">
                                         {value}
                                     </p>
                                 </div>
@@ -311,7 +311,7 @@ export default function Luzma({
                                     <td className="px-2 py-2">
                                         <Link
                                             href={`/control-center/organizations/${row.organization_id}?tab=usage`}
-                                            className="text-white"
+                                            className="text-slate-900"
                                         >
                                             {row.tenant}
                                         </Link>
@@ -322,7 +322,7 @@ export default function Luzma({
                                     <td className="px-2 py-2">
                                         {row.successful}
                                     </td>
-                                    <td className="px-2 py-2 text-[#f87171]">
+                                    <td className="px-2 py-2 text-[#dc2626]">
                                         {row.failed}
                                     </td>
                                     <td className="px-2 py-2">
@@ -369,7 +369,7 @@ export default function Luzma({
                             {tools.map((tool) => (
                                 <tr key={tool.key}>
                                     <td className="max-w-md px-2 py-2">
-                                        <span className="font-mono text-white">
+                                        <span className="font-mono text-slate-900">
                                             {tool.key}
                                         </span>
                                         <span className="block text-[11px] text-slate-500">
@@ -404,7 +404,7 @@ export default function Luzma({
                                     <td className="px-2 py-2">
                                         {can_manage && (
                                             <select
-                                                className="h-8 rounded-lg border border-white/10 bg-[#0b0e14] px-2 text-xs text-slate-200"
+                                                className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-800"
                                                 value={tool.status}
                                                 onChange={(e) => {
                                                     const reason =

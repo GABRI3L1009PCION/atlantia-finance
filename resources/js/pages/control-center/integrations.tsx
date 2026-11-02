@@ -94,9 +94,12 @@ export default function Integrations({
                             tenant_integrations.api_errors_24h,
                         ],
                     ].map(([label, value]) => (
-                        <div key={String(label)} className={`${panel} p-4`}>
-                            <p className="text-xs text-slate-400">{label}</p>
-                            <p className="mt-1 text-2xl font-black text-white">
+                        <div
+                            key={String(label)}
+                            className={`${panel} border-l-4 border-l-[#7a0010] p-4`}
+                        >
+                            <p className="text-sm text-slate-700">{label}</p>
+                            <p className="mt-1 font-serif text-2xl font-bold text-slate-900">
                                 {value}
                             </p>
                         </div>
@@ -131,7 +134,7 @@ export default function Integrations({
                                             <dt className="text-slate-500">
                                                 {key}
                                             </dt>
-                                            <dd className="truncate font-mono text-slate-300">
+                                            <dd className="truncate font-mono text-slate-700">
                                                 {value}
                                             </dd>
                                         </div>
@@ -142,7 +145,7 @@ export default function Integrations({
                                         <dt className="text-slate-500">
                                             Secreto
                                         </dt>
-                                        <dd className="font-mono text-slate-300">
+                                        <dd className="font-mono text-slate-700">
                                             {integration.secret_hint ??
                                                 'No configurado'}{' '}
                                             {integration.secret_source && (
@@ -179,7 +182,7 @@ export default function Integrations({
                                 </div>
                             </dl>
                             {integration.detail && (
-                                <p className="mt-2 text-xs text-[#fbbf24]">
+                                <p className="mt-2 text-xs text-[#b45309]">
                                     {integration.detail}
                                 </p>
                             )}

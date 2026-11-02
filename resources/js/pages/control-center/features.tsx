@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import { Boxes, FlaskConical, Layers, KeyRound } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import {
     CCPage,
@@ -10,6 +11,7 @@ import {
     ccInput,
     date,
     statusTone,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Feature = {
@@ -118,7 +120,7 @@ function FeatureEditor({
             />
             {(['requires', 'conflicts_with'] as const).map((field) => (
                 <div key={field} className="md:col-span-2">
-                    <p className="mb-1 text-[11px] font-bold text-slate-400">
+                    <p className="mb-1 text-[11px] font-bold text-slate-500">
                         {field === 'requires' ? 'Requiere' : 'En conflicto con'}
                     </p>
                     <div className="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
@@ -129,7 +131,7 @@ function FeatureEditor({
                                     key={f.key}
                                     type="button"
                                     onClick={() => toggle(field, f.key)}
-                                    className={`rounded-full px-2 py-0.5 text-[10px] ${data[field].includes(f.key) ? 'bg-[#c8102e] text-white' : 'border border-white/10 text-slate-400'}`}
+                                    className={`rounded-full px-2 py-0.5 text-[10px] ${data[field].includes(f.key) ? 'bg-[#c8102e] text-white' : 'border border-slate-200 text-slate-500'}`}
                                 >
                                     {f.key}
                                 </button>
@@ -179,6 +181,37 @@ export default function Features({
                 title="Módulos y funciones"
                 subtitle="Catálogo global de funciones (entitlements), su etapa de lanzamiento y sus dependencias. La aplicación consulta el entitlement efectivo de cada organización; nunca el nombre del plan."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Funciones',
+                            value: features.length,
+                            icon: Boxes,
+                        },
+                        {
+                            label: 'En beta',
+                            value: features.filter(
+                                (f) => f.release_stage === 'beta',
+                            ).length,
+                            icon: FlaskConical,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Módulos',
+                            value: new Set(
+                                features.map((f) => f.module).filter(Boolean),
+                            ).size,
+                            icon: Layers,
+                            tone: '#64748b',
+                        },
+                        {
+                            label: 'Excepciones activas',
+                            value: overrides.length,
+                            icon: KeyRound,
+                            tone: '#b91c1c',
+                        },
+                    ]}
+                />
                 <Panel title={`${features.length} funciones`}>
                     <Table
                         headers={[
@@ -196,7 +229,7 @@ export default function Features({
                         {features.map((feature) => (
                             <Fragment key={feature.key}>
                                 <tr>
-                                    <td className="px-2 py-2 font-mono text-white">
+                                    <td className="px-2 py-2 font-mono text-slate-900">
                                         {feature.key}
                                     </td>
                                     <td className="px-2 py-2">
@@ -217,7 +250,7 @@ export default function Features({
                                     <td className="px-2 py-2 font-mono text-[10px]">
                                         {feature.requires.join(', ') || '—'}
                                         {feature.conflicts_with.length > 0 && (
-                                            <span className="block text-[#f87171]">
+                                            <span className="block text-[#dc2626]">
                                                 ✕{' '}
                                                 {feature.conflicts_with.join(
                                                     ', ',
@@ -266,7 +299,7 @@ export default function Features({
                                     <tr>
                                         <td
                                             colSpan={9}
-                                            className="bg-black/20 p-3"
+                                            className="bg-slate-100 p-3"
                                         >
                                             <FeatureEditor
                                                 feature={feature}
@@ -299,7 +332,7 @@ export default function Features({
                                 <td className="px-2 py-2">
                                     <Link
                                         href={`/control-center/organizations/${o.organization_id}?tab=features`}
-                                        className="text-white"
+                                        className="text-slate-900"
                                     >
                                         {o.organization}
                                     </Link>

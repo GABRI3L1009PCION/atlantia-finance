@@ -10,6 +10,7 @@ use App\Services\Platform\Billing\BillingMetricsService;
 use App\Services\Platform\Billing\SaaSBillingService;
 use App\Services\Platform\Billing\SubscriptionService;
 use App\Services\Platform\PlanService;
+use App\Support\PlatformIssuer;
 use App\Support\PlatformStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -104,6 +105,7 @@ class CommercialController extends ControlCenterController
             'filters' => $filters, 'statuses' => PlatformStatus::SUBSCRIPTION_LABELS,
             'prices' => DB::table('plan_prices')->join('plans', 'plans.id', '=', 'plan_prices.plan_id')->where('plans.is_active', true)->where('plan_prices.is_active', true)->orderBy('plans.display_order')
                 ->get(['plan_prices.id', 'plans.name', 'plan_prices.billing_period', 'plan_prices.amount'])->map(fn (stdClass $p): array => ['id' => (int) $p->id, 'label' => $p->name.' · '.($p->billing_period === 'annual' ? 'anual' : 'mensual').' · Q'.number_format((float) $p->amount, 2)])->all(),
+            'organizations' => $this->clientOrganizations(),
             'can_manage' => $this->authorization->can($user, 'saas.subscriptions.manage'),
         ]);
     }
@@ -156,8 +158,16 @@ class CommercialController extends ControlCenterController
             'summary' => $this->safe(fn () => [...$metrics->mrr(), ...$metrics->receivables()]),
             'credits' => DB::table('saas_credits')->join('organizations', 'organizations.id', '=', 'saas_credits.organization_id')->where('remaining', '>', 0)->orderByDesc('saas_credits.id')->limit(100)
                 ->get(['saas_credits.*', 'organizations.name as organization'])->all(),
+            'organizations' => $this->clientOrganizations(),
             'can_manage' => $this->authorization->can($user, 'saas.billing.manage'), 'can_pay' => $this->authorization->can($user, 'saas.payments.manage'),
         ]);
+    }
+
+    /** @return list<array{id: int, name: string}> client organizations (never the platform's own) a subscription or credit can be created for */
+    private function clientOrganizations(): array
+    {
+        return DB::table('organizations')->where('id', '<>', PlatformIssuer::organizationId())->whereNull('deleted_at')->orderBy('name')
+            ->get(['id', 'name'])->map(fn (stdClass $o): array => ['id' => (int) $o->id, 'name' => (string) $o->name])->values()->all();
     }
 
     public function invoiceAction(Request $request, int $invoice, string $action, SaaSBillingService $billing): RedirectResponse

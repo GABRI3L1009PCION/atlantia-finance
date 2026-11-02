@@ -501,3 +501,74 @@ test('the link of a deleted firm shows a clear page, while the firm created agai
         ->assertInertia(fn (Assert $page) => $page->component('error')->where('status', 410)->where('detail', fn (string $detail) => str_contains($detail, 'reemplazado o cancelado')));
     $this->get($urls[1])->assertOk()->assertInertia(fn (Assert $page) => $page->component('auth/accept-invitation')->where('asOwner', true));
 });
+
+test('the organizations list carries every field the edit form sends back, so editing from the list keeps them', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Contadores del Sur', 'legal_name' => 'Contadores del Sur, S.A.', 'tax_identifier' => '7654321-0',
+        'timezone' => 'America/Guatemala', 'beta_program' => true, 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+        'owner_name' => 'Marta Cliente', 'owner_email' => 'marta@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $id = (int) DB::table('organizations')->where('name', 'Contadores del Sur')->value('id');
+
+    $this->get('/control-center/organizations')->assertInertia(fn (Assert $page) => $page->where('organizations', fn ($rows) => collect($rows)->contains(fn ($row) => $row['id'] === $id
+        && $row['legal_name'] === 'Contadores del Sur, S.A.' && $row['timezone'] === 'America/Guatemala' && $row['beta_program'] === true && $row['tax_id'] === '7654321-0')));
+
+    $this->put('/control-center/organizations/'.$id, ['name' => 'Contadores del Sur Guatemala', 'legal_name' => 'Contadores del Sur, S.A.', 'tax_identifier' => '7654321-0',
+        'timezone' => 'America/Guatemala', 'beta_program' => true])->assertSessionHasNoErrors();
+
+    expect(DB::table('organizations')->where('id', $id)->first())
+        ->name->toBe('Contadores del Sur Guatemala')->legal_name->toBe('Contadores del Sur, S.A.')->timezone->toBe('America/Guatemala')->beta_program->toBeTrue();
+});
+
+test('the offices list names the organization by code and NIT next to each office', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Contadores de Izabal', 'tax_identifier' => '1112223-4', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
+        'owner_name' => 'Pedro Cliente', 'owner_email' => 'pedro@cliente.test', 'office_name' => 'Puerto Barrios', 'office_city' => 'Puerto Barrios'])->assertSessionHasNoErrors();
+    $organization = DB::table('organizations')->where('name', 'Contadores de Izabal')->first();
+
+    $this->get('/control-center/offices')->assertInertia(fn (Assert $page) => $page->component('control-center/offices')
+        ->where('offices', fn ($rows) => collect($rows)->contains(fn ($row) => $row['organization_id'] === (int) $organization->id && $row['name'] === 'Puerto Barrios'
+            && $row['city'] === 'Puerto Barrios' && $row['primary'] === true && $row['organization_tax_id'] === '1112223-4' && $row['organization_code'] === $organization->code)));
+});
+
+test('roles and permissions have their own screen that counts the staff holding each role', function () {
+    $owner = ccOwner();
+    ccStaff('saas_support');
+
+    $this->actingAs($owner)->get('/control-center/roles')->assertOk()->assertInertia(fn (Assert $page) => $page->component('control-center/roles')
+        ->where('roles', fn ($roles) => collect($roles)->firstWhere('key', 'saas_owner')['members'] === 1
+            && collect($roles)->firstWhere('key', 'saas_support')['members'] === 1
+            && collect($roles)->firstWhere('key', 'saas_analyst')['members'] === 0
+            && in_array('saas.tickets.manage', collect($roles)->firstWhere('key', 'saas_support')['permissions'], true))
+        ->has('permission_labels'));
+
+    $this->actingAs(ccStaff('saas_billing'))->get('/control-center/roles')->assertForbidden();
+});
+
+test('the subscriptions screen lists the client organizations a new subscription can be created for', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Firma Nueva', 'plan_price_id' => ccPrice('essential'), 'trial' => true,
+        'owner_name' => 'Lucía Cliente', 'owner_email' => 'lucia@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $id = (int) DB::table('organizations')->where('name', 'Firma Nueva')->value('id');
+
+    $this->get('/control-center/subscriptions')->assertInertia(fn (Assert $page) => $page->component('control-center/subscriptions')
+        ->where('organizations', fn ($rows) => collect($rows)->contains(fn ($row) => $row['id'] === $id && $row['name'] === 'Firma Nueva')
+            && ! collect($rows)->contains(fn ($row) => $row['id'] === App\Support\PlatformIssuer::organizationId())));
+
+    // The firm already has a trial, so a second current subscription is refused: its plan is changed instead.
+    $this->post('/control-center/organizations/'.$id.'/subscriptions', ['plan_price_id' => ccPrice('professional'), 'trial' => false, 'discount_percent' => 10])->assertSessionHasErrors('subscription');
+    expect(DB::table('subscriptions')->where('organization_id', $id)->count())->toBe(1);
+});
+
+test('a credit can be granted to a client organization chosen from the billing screen', function () {
+    $owner = ccOwner();
+    $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Firma con Crédito', 'plan_price_id' => ccPrice('essential'), 'trial' => true,
+        'owner_name' => 'Rita Cliente', 'owner_email' => 'rita@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
+    $id = (int) DB::table('organizations')->where('name', 'Firma con Crédito')->value('id');
+
+    $this->get('/control-center/billing')->assertInertia(fn (Assert $page) => $page->component('control-center/billing')
+        ->where('organizations', fn ($rows) => collect($rows)->contains(fn ($row) => $row['id'] === $id)));
+
+    $this->post('/control-center/organizations/'.$id.'/credits', ['amount' => 150, 'reason' => 'Compensación por incidente'])->assertSessionHasNoErrors();
+    $this->get('/control-center/billing')->assertInertia(fn (Assert $page) => $page
+        ->where('credits', fn ($credits) => collect($credits)->contains(fn ($credit) => (int) $credit['organization_id'] === $id && (float) $credit['remaining'] === 150.0)));
+});
