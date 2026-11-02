@@ -1,4 +1,5 @@
 import { Head, router } from '@inertiajs/react';
+import { BookOpenCheck, ShieldAlert, Users, Building2 } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import {
     CCPage,
@@ -9,6 +10,7 @@ import {
     ccGhost,
     ccInput,
     date,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type AuditEvent = {
@@ -55,6 +57,39 @@ export default function Audit({
                 title="Auditoría SaaS"
                 subtitle="Registro inmutable de cada acción del personal SaaS: quién, qué, cuándo, antes, después, motivo, IP y correlación. No se puede editar ni borrar."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Eventos',
+                            value: events.length,
+                            icon: BookOpenCheck,
+                        },
+                        {
+                            label: 'Sensibles',
+                            value: events.filter((e) => e.sensitive).length,
+                            icon: ShieldAlert,
+                            tone: '#b91c1c',
+                        },
+                        {
+                            label: 'Personas',
+                            value: new Set(
+                                events.map((e) => e.actor).filter(Boolean),
+                            ).size,
+                            icon: Users,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Organizaciones',
+                            value: new Set(
+                                events
+                                    .map((e) => e.organization)
+                                    .filter(Boolean),
+                            ).size,
+                            icon: Building2,
+                            tone: '#64748b',
+                        },
+                    ]}
+                />
                 <Panel>
                     <form
                         className="mb-3 flex flex-wrap items-end gap-2"
@@ -115,7 +150,7 @@ export default function Audit({
                                 setDraft({ ...draft, to: e.target.value })
                             }
                         />
-                        <label className="flex items-center gap-2 text-xs text-slate-300">
+                        <label className="flex items-center gap-2 text-xs text-slate-700">
                             <input
                                 type="checkbox"
                                 checked={Boolean(draft.sensitive)}
@@ -150,7 +185,7 @@ export default function Audit({
                                     <td className="px-2 py-1.5 whitespace-nowrap">
                                         {date(event.at, true)}
                                     </td>
-                                    <td className="px-2 py-1.5 font-mono text-white">
+                                    <td className="px-2 py-1.5 font-mono text-slate-900">
                                         {event.action}
                                         {event.sensitive && (
                                             <Pill tone="red" dot={false}>
@@ -172,7 +207,7 @@ export default function Audit({
                                     <td className="px-2 py-1.5">
                                         {event.organization ?? '—'}
                                     </td>
-                                    <td className="max-w-xs px-2 py-1.5 text-slate-400">
+                                    <td className="max-w-xs px-2 py-1.5 text-slate-500">
                                         {event.reason ?? '—'}
                                     </td>
                                     <td className="px-2 py-1.5">
@@ -197,14 +232,14 @@ export default function Audit({
                                     <tr>
                                         <td
                                             colSpan={7}
-                                            className="bg-black/20 p-3"
+                                            className="bg-slate-100 p-3"
                                         >
                                             <div className="grid gap-3 md:grid-cols-2">
                                                 <div>
-                                                    <p className="mb-1 text-[11px] font-bold text-slate-400">
+                                                    <p className="mb-1 text-[11px] font-bold text-slate-500">
                                                         Antes
                                                     </p>
-                                                    <pre className="max-h-60 overflow-auto rounded bg-black/40 p-2 text-[11px] text-slate-300">
+                                                    <pre className="max-h-60 overflow-auto rounded bg-slate-100 p-2 text-[11px] text-slate-700">
                                                         {JSON.stringify(
                                                             event.before,
                                                             null,
@@ -213,10 +248,10 @@ export default function Audit({
                                                     </pre>
                                                 </div>
                                                 <div>
-                                                    <p className="mb-1 text-[11px] font-bold text-slate-400">
+                                                    <p className="mb-1 text-[11px] font-bold text-slate-500">
                                                         Después
                                                     </p>
-                                                    <pre className="max-h-60 overflow-auto rounded bg-black/40 p-2 text-[11px] text-slate-300">
+                                                    <pre className="max-h-60 overflow-auto rounded bg-slate-100 p-2 text-[11px] text-slate-700">
                                                         {JSON.stringify(
                                                             event.after,
                                                             null,

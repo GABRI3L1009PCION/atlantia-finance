@@ -1,4 +1,5 @@
 import { Head, router } from '@inertiajs/react';
+import { TerminalSquare, XCircle, AlertTriangle, Layers } from 'lucide-react';
 import { useState } from 'react';
 import {
     CCPage,
@@ -9,6 +10,7 @@ import {
     ccButton,
     ccInput,
     date,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Entry = {
@@ -78,6 +80,37 @@ export default function Logs({
                 title="Logs"
                 subtitle={`Entorno: ${environment}. Los mensajes se sanean antes de mostrarse: contraseñas, tokens, secretos y números de tarjeta aparecen enmascarados.`}
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Entradas',
+                            value: entries.length,
+                            icon: TerminalSquare,
+                        },
+                        {
+                            label: 'Errores',
+                            value: entries.filter((e) =>
+                                ['error', 'critical'].includes(e.severity),
+                            ).length,
+                            icon: XCircle,
+                            tone: '#b91c1c',
+                        },
+                        {
+                            label: 'Advertencias',
+                            value: entries.filter(
+                                (e) => e.severity === 'warning',
+                            ).length,
+                            icon: AlertTriangle,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Fuentes',
+                            value: new Set(entries.map((e) => e.source)).size,
+                            icon: Layers,
+                            tone: '#64748b',
+                        },
+                    ]}
+                />
                 <Panel>
                     <form
                         className="mb-3 flex flex-wrap items-end gap-2"
@@ -198,7 +231,7 @@ export default function Logs({
                                     </Pill>
                                 </td>
                                 <td className="max-w-xl px-2 py-1.5">
-                                    <span className="text-slate-200">
+                                    <span className="text-slate-800">
                                         {entry.message}
                                     </span>
                                     {entry.context && (
@@ -221,7 +254,7 @@ export default function Logs({
                                         <span className="inline-flex items-center gap-1 font-mono text-[10px]">
                                             <button
                                                 type="button"
-                                                className="text-[#93c5fd] hover:underline"
+                                                className="text-[#1d4ed8] hover:underline"
                                                 onClick={() =>
                                                     apply({
                                                         correlation_id:

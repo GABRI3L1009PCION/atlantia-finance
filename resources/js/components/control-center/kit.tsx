@@ -1,5 +1,13 @@
-import { useForm, usePage } from '@inertiajs/react';
-import { Check, Copy, Loader2, ShieldAlert, X } from 'lucide-react';
+import { Link, useForm, usePage } from '@inertiajs/react';
+import {
+    Check,
+    Copy,
+    Loader2,
+    MoreHorizontal,
+    ShieldAlert,
+    X,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -38,23 +46,28 @@ export function useCan(): (permission: string) => boolean {
 }
 
 export const panel =
-    'rounded-2xl border border-white/[0.07] bg-[#11141b]/95 shadow-[0_18px_40px_-28px_rgba(0,0,0,.9)]';
+    'rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_-22px_rgba(15,23,42,.35)]';
 export const ccInput =
-    'h-10 w-full rounded-lg border border-white/10 bg-[#0b0e14] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-[#c8102e]/60 focus:ring-2 focus:ring-[#c8102e]/20';
+    'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#c8102e]/60 focus:ring-2 focus:ring-[#c8102e]/20';
 export const ccTextarea =
-    'min-h-24 w-full rounded-lg border border-white/10 bg-[#0b0e14] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-[#c8102e]/60 focus:ring-2 focus:ring-[#c8102e]/20';
+    'min-h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-[#c8102e]/60 focus:ring-2 focus:ring-[#c8102e]/20';
 export const ccButton =
-    'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b from-[#c8102e] to-[#8f0b20] px-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-10px_rgba(200,16,46,.8)] transition hover:brightness-110 disabled:opacity-50';
+    'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#7a0010] px-3.5 text-xs font-bold text-white shadow-[0_8px_20px_-12px_rgba(122,0,16,.9)] transition hover:bg-[#8f0b20] disabled:opacity-50';
 export const ccGhost =
-    'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs font-semibold text-slate-200 transition hover:border-[#c8102e]/50 hover:text-white disabled:opacity-40';
+    'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#7a0010]/40 bg-white px-3 text-xs font-semibold text-[#7a0010] transition hover:bg-[#7a0010]/5 disabled:opacity-40';
+/** A ghost button for actions that cannot be undone: same shape, red text and border. */
+export const ccDanger = ccGhost
+    .replace('border-[#7a0010]/40', 'border-[#ef4444]/50')
+    .replace('text-[#7a0010]', 'text-[#b91c1c]')
+    .replace('hover:bg-[#7a0010]/5', 'hover:bg-[#ef4444]/5');
 
 const tones: Record<string, string> = {
-    green: 'bg-[#22c55e]/10 text-[#4ade80] ring-[#22c55e]/25',
-    amber: 'bg-[#f59e0b]/10 text-[#fbbf24] ring-[#f59e0b]/25',
-    red: 'bg-[#ef4444]/10 text-[#f87171] ring-[#ef4444]/30',
-    blue: 'bg-[#3b82f6]/10 text-[#93c5fd] ring-[#3b82f6]/25',
-    violet: 'bg-[#8b5cf6]/10 text-[#c4b5fd] ring-[#8b5cf6]/25',
-    slate: 'bg-white/5 text-slate-300 ring-white/10',
+    green: 'bg-[#22c55e]/10 text-[#16a34a] ring-[#22c55e]/25',
+    amber: 'bg-[#f59e0b]/10 text-[#b45309] ring-[#f59e0b]/25',
+    red: 'bg-[#ef4444]/10 text-[#dc2626] ring-[#ef4444]/30',
+    blue: 'bg-[#3b82f6]/10 text-[#1d4ed8] ring-[#3b82f6]/25',
+    violet: 'bg-[#8b5cf6]/10 text-[#6d28d9] ring-[#8b5cf6]/25',
+    slate: 'bg-slate-50 text-slate-700 ring-slate-200',
 };
 
 export function Pill({
@@ -156,13 +169,13 @@ export function CCPage({
 }) {
     return (
         <div className="space-y-4">
-            <header className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h1 className="font-serif text-3xl font-bold tracking-tight text-white">
+            <header className="flex flex-wrap items-center justify-between gap-4">
+                <div className="border-l-4 border-[#e0a526] pl-5">
+                    <h1 className="font-serif text-4xl font-bold text-slate-900">
                         {title}
                     </h1>
                     {subtitle && (
-                        <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                        <p className="mt-1 max-w-3xl text-sm text-slate-600">
                             {subtitle}
                         </p>
                     )}
@@ -194,23 +207,23 @@ export function Notice() {
     return (
         <>
             {notice && (
-                <div className="flex items-center gap-2 rounded-xl border border-[#22c55e]/25 bg-[#22c55e]/10 px-3 py-2 text-sm text-[#86efac]">
+                <div className="flex items-center gap-2 rounded-xl border border-[#22c55e]/25 bg-[#22c55e]/10 px-3 py-2 text-sm text-[#15803d]">
                     <Check className="size-4" />
                     {notice}
                 </div>
             )}
             {errors.length > 0 && (
-                <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 px-3 py-2 text-sm text-[#fca5a5]">
+                <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 px-3 py-2 text-sm text-[#b91c1c]">
                     {errors.map((error) => (
                         <p key={error}>{error}</p>
                     ))}
                 </div>
             )}
             {reveal && (
-                <div className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3 text-sm text-[#fde68a]">
+                <div className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3 text-sm text-[#92400e]">
                     <p className="font-bold">{reveal.title}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <code className="rounded-md bg-black/40 px-2 py-1 font-mono text-xs break-all text-white">
+                        <code className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs break-all text-slate-900">
                             {reveal.value}
                         </code>
                         <CopyButton value={reveal.value} />
@@ -261,7 +274,7 @@ export function Panel({
         <section className={`${panel} min-w-0 p-4 ${className}`}>
             {(title || action) && (
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="flex items-center gap-2 text-[15px] font-bold text-white">
+                    <h2 className="flex items-center gap-2 font-serif text-lg font-bold text-slate-900 [&_svg]:text-[#7a0010]">
                         {icon}
                         {title}
                     </h2>
@@ -283,21 +296,21 @@ export function Table({
     empty?: string | false;
 }) {
     return (
-        <div className="overflow-x-auto">
-            <table className="min-w-full text-xs text-slate-300">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-[13px] text-slate-800 [&_tbody_td]:px-3 [&_tbody_td]:py-2.5 [&_tbody_tr:hover]:bg-slate-50">
                 <thead>
-                    <tr className="border-b border-white/[0.06] text-left text-[11px] tracking-wide text-slate-500 uppercase">
+                    <tr className="bg-[#7a0010] text-left text-[12.5px] text-white">
                         {headers.map((header, index) => (
                             <th
                                 key={index}
-                                className="px-2 py-2 font-semibold whitespace-nowrap"
+                                className="px-3 py-3 font-semibold whitespace-nowrap"
                             >
                                 {header}
                             </th>
                         ))}
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.04]">
+                <tbody className="divide-y divide-slate-100">
                     {children}
                     {empty && (
                         <tr>
@@ -390,7 +403,7 @@ export function Progress({
         tone ?? (value >= 95 ? '#ef4444' : value >= 80 ? '#f59e0b' : '#c8102e');
 
     return (
-        <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
             <div
                 className="h-full rounded-full"
                 style={{
@@ -523,18 +536,13 @@ export function SensitiveAction({
         <>
             <button
                 type="button"
-                className={
-                    buttonClassName ??
-                    (danger
-                        ? `${ccGhost} border-[#ef4444]/40 text-[#fca5a5]`
-                        : ccGhost)
-                }
+                className={buttonClassName ?? (danger ? ccDanger : ccGhost)}
                 onClick={() => setOpen(true)}
             >
                 {label}
             </button>
             {open && (
-                <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm">
                     <form
                         className={`${panel} w-full max-w-md space-y-3 p-5`}
                         onSubmit={(event) => {
@@ -560,14 +568,14 @@ export function SensitiveAction({
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex items-start gap-2">
                                 <ShieldAlert
-                                    className={`mt-0.5 size-5 ${danger ? 'text-[#f87171]' : 'text-[#fbbf24]'}`}
+                                    className={`mt-0.5 size-5 ${danger ? 'text-[#dc2626]' : 'text-[#b45309]'}`}
                                 />
                                 <div>
-                                    <p className="font-bold text-white">
+                                    <p className="font-bold text-slate-900">
                                         {title}
                                     </p>
                                     {description && (
-                                        <div className="mt-1 text-xs text-slate-400">
+                                        <div className="mt-1 text-xs text-slate-500">
                                             {description}
                                         </div>
                                     )}
@@ -577,14 +585,14 @@ export function SensitiveAction({
                                 type="button"
                                 aria-label="Cerrar"
                                 onClick={() => setOpen(false)}
-                                className="text-slate-500 hover:text-white"
+                                className="text-slate-500 hover:text-slate-900"
                             >
                                 <X className="size-4" />
                             </button>
                         </div>
                         {children}
                         {requireReason && (
-                            <label className="grid gap-1 text-xs font-semibold text-slate-300">
+                            <label className="grid gap-1 text-xs font-semibold text-slate-700">
                                 Motivo (queda en la auditoría)
                                 <textarea
                                     className={ccTextarea}
@@ -600,7 +608,7 @@ export function SensitiveAction({
                                 />
                             </label>
                         )}
-                        <label className="grid gap-1 text-xs font-semibold text-slate-300">
+                        <label className="grid gap-1 text-xs font-semibold text-slate-700">
                             Tu contraseña
                             <input
                                 type="password"
@@ -614,7 +622,7 @@ export function SensitiveAction({
                             />
                         </label>
                         {platform.two_factor && (
-                            <label className="grid gap-1 text-xs font-semibold text-slate-300">
+                            <label className="grid gap-1 text-xs font-semibold text-slate-700">
                                 Código de autenticación (2FA)
                                 <input
                                     inputMode="numeric"
@@ -629,7 +637,7 @@ export function SensitiveAction({
                             </label>
                         )}
                         {Object.values(form.errors).length > 0 && (
-                            <div className="rounded-lg bg-[#ef4444]/10 p-2 text-xs text-[#fca5a5]">
+                            <div className="rounded-lg bg-[#ef4444]/10 p-2 text-xs text-[#b91c1c]">
                                 {Object.values(form.errors).map((error) => (
                                     <p key={error}>{error}</p>
                                 ))}
@@ -672,7 +680,7 @@ export function Field({
 }) {
     return (
         <label
-            className={`grid gap-1 text-xs font-semibold text-slate-300 ${wide ? 'md:col-span-2' : ''}`}
+            className={`grid gap-1 text-xs font-semibold text-slate-700 ${wide ? 'md:col-span-2' : ''}`}
         >
             {label}
             {children}
@@ -686,7 +694,7 @@ export function Kpi({
     icon,
     hint,
     chart,
-    tone = '#c8102e',
+    tone = '#7a0010',
 }: {
     label: string;
     value: ReactNode;
@@ -697,30 +705,135 @@ export function Kpi({
 }) {
     return (
         <div className={`${panel} relative overflow-hidden p-4`}>
-            <div
-                className="absolute -top-10 -right-10 size-28 rounded-full opacity-20 blur-2xl"
-                style={{ background: tone }}
-            />
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-3">
                 <span
-                    className="grid size-11 shrink-0 place-items-center rounded-xl"
-                    style={{ background: `${tone}22`, color: tone }}
+                    className="grid size-12 shrink-0 place-items-center rounded-xl text-white [&_svg]:size-6"
+                    style={{ background: tone }}
                 >
                     {icon}
                 </span>
                 <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-slate-300">
-                        {label}
-                    </p>
-                    <p className="mt-1 text-[26px] leading-none font-black text-white">
+                    <p className="font-serif text-2xl leading-tight font-bold text-slate-900">
                         {value}
                     </p>
+                    <p className="text-sm text-slate-700">{label}</p>
                 </div>
             </div>
             <div className="mt-3 flex items-end justify-between gap-2">
-                <span className="text-[11px] text-slate-400">{hint}</span>
+                <span className="text-[11px] text-slate-500">{hint}</span>
                 {chart}
             </div>
         </div>
+    );
+}
+
+/**
+ * The "…" menu of a table row. It floats over the page (fixed position under its button) so a table's horizontal
+ * scroll container cannot clip it; a click anywhere else closes it.
+ */
+export function RowMenu({
+    links,
+}: {
+    links: { label: string; href: string }[];
+}) {
+    const [position, setPosition] = useState<{
+        top: number;
+        right: number;
+    } | null>(null);
+
+    return (
+        <>
+            <button
+                type="button"
+                aria-label="Más opciones"
+                aria-expanded={position !== null}
+                onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setPosition(
+                        position
+                            ? null
+                            : {
+                                  top: rect.bottom + 4,
+                                  right: window.innerWidth - rect.right,
+                              },
+                    );
+                }}
+                className="grid size-8 place-items-center rounded-lg border border-slate-300 text-slate-700 hover:border-[#7a0010]/50"
+            >
+                <MoreHorizontal className="size-4" />
+            </button>
+            {position && (
+                <>
+                    <button
+                        type="button"
+                        aria-label="Cerrar menú"
+                        className="fixed inset-0 z-40 cursor-default"
+                        onClick={() => setPosition(null)}
+                    />
+                    <div
+                        className="fixed z-50 w-44 rounded-xl border border-slate-200 bg-white py-1 text-left shadow-lg"
+                        style={{ top: position.top, right: position.right }}
+                    >
+                        {links.map((link) => (
+                            <Link
+                                key={link.href}
+                                href={link.href}
+                                className="block px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-[#7a0010]"
+                            >
+                                {link.label}
+                            </Link>
+                        ))}
+                    </div>
+                </>
+            )}
+        </>
+    );
+}
+
+const kpiColumns: Record<number, string> = {
+    2: 'xl:grid-cols-2',
+    3: 'xl:grid-cols-3',
+    4: 'xl:grid-cols-4',
+    5: 'xl:grid-cols-5',
+    6: 'xl:grid-cols-6',
+};
+
+/** The row of figures that opens every list screen: a solid icon tile, the figure and what it counts. */
+export function KpiRow({
+    items,
+}: {
+    items: {
+        label: string;
+        value: ReactNode;
+        icon: LucideIcon;
+        tone?: string;
+    }[];
+}) {
+    return (
+        <section
+            className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${kpiColumns[items.length] ?? 'xl:grid-cols-4'}`}
+        >
+            {items.map((item) => (
+                <div
+                    key={item.label}
+                    className={`${panel} flex items-center gap-3 p-4`}
+                >
+                    <span
+                        className="grid size-12 shrink-0 place-items-center rounded-xl text-white"
+                        style={{ background: item.tone ?? '#7a0010' }}
+                    >
+                        <item.icon className="size-6" />
+                    </span>
+                    <span className="min-w-0">
+                        <span className="block font-serif text-2xl leading-tight font-bold text-slate-900">
+                            {item.value}
+                        </span>
+                        <span className="block text-sm text-slate-700">
+                            {item.label}
+                        </span>
+                    </span>
+                </div>
+            ))}
+        </section>
     );
 }

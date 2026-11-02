@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import { Building2, CircleCheck, Gauge, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import {
     CCPage,
@@ -9,6 +10,7 @@ import {
     bytes,
     ccInput,
     statusTone,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Metric = {
@@ -58,6 +60,40 @@ export default function Usage({
                 title="Límites y consumo"
                 subtitle="Consumo real de cada organización contra los límites de su versión de plan. Superar un límite marca OVER_LIMIT y bloquea solo la nueva acción relacionada; nunca se borra información ni se frenan cierres o asientos."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Organizaciones',
+                            value: rows.length,
+                            icon: Building2,
+                        },
+                        {
+                            label: 'Sin alertas',
+                            value: rows.filter(
+                                (r) =>
+                                    r.worst === 'ok' || r.worst === 'unlimited',
+                            ).length,
+                            icon: CircleCheck,
+                            tone: '#15803d',
+                        },
+                        {
+                            label: 'Cerca del límite',
+                            value: rows.filter((r) =>
+                                ['warning', 'high'].includes(r.worst),
+                            ).length,
+                            icon: Gauge,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'En el límite o excedidas',
+                            value: rows.filter((r) =>
+                                ['at_limit', 'over_limit'].includes(r.worst),
+                            ).length,
+                            icon: AlertTriangle,
+                            tone: '#b91c1c',
+                        },
+                    ]}
+                />
                 <Panel>
                     <form
                         className="mb-3 flex flex-wrap gap-2"
@@ -113,7 +149,7 @@ export default function Usage({
                                 <td className="px-2 py-2">
                                     <Link
                                         href={`/control-center/organizations/${row.organization_id}?tab=usage`}
-                                        className="font-semibold text-white"
+                                        className="font-semibold text-slate-900"
                                     >
                                         {row.organization}
                                     </Link>
@@ -132,7 +168,7 @@ export default function Usage({
                                             {m ? (
                                                 <>
                                                     <span
-                                                        className={`text-[11px] ${['over_limit', 'at_limit', 'high'].includes(m.status) ? 'font-bold text-[#f87171]' : ''}`}
+                                                        className={`text-[11px] ${['over_limit', 'at_limit', 'high'].includes(m.status) ? 'font-bold text-[#dc2626]' : ''}`}
                                                     >
                                                         {metric ===
                                                         'storage_bytes'

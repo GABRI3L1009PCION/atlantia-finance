@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { Siren } from 'lucide-react';
+import { Siren, Activity, AlertTriangle, CircleCheck } from 'lucide-react';
 import {
     CCPage,
     Field,
@@ -11,6 +11,7 @@ import {
     ccInput,
     ccTextarea,
     date,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Incident = {
@@ -95,7 +96,7 @@ function CreateIncident({
     return (
         <Panel
             title="Registrar incidente"
-            icon={<Siren className="size-4 text-[#f87171]" />}
+            icon={<Siren className="size-4 text-[#dc2626]" />}
         >
             <form
                 className="grid gap-3 md:grid-cols-3"
@@ -187,7 +188,7 @@ function CreateIncident({
                                               ],
                                     )
                                 }
-                                className={`rounded-full px-2.5 py-1 text-[11px] ${form.data.affected_services.includes(key) ? 'bg-[#c8102e] text-white' : 'border border-white/10 text-slate-300'}`}
+                                className={`rounded-full px-2.5 py-1 text-[11px] ${form.data.affected_services.includes(key) ? 'bg-[#c8102e] text-white' : 'border border-slate-200 text-slate-700'}`}
                             >
                                 {label}
                             </button>
@@ -229,7 +230,7 @@ function CreateIncident({
                     />
                 </Field>
                 {Object.values(form.errors).length > 0 && (
-                    <p className="text-xs text-[#f87171] md:col-span-3">
+                    <p className="text-xs text-[#dc2626] md:col-span-3">
                         {Object.values(form.errors).join(' ')}
                     </p>
                 )}
@@ -278,7 +279,7 @@ function IncidentDetail({
                 </Pill>
             }
         >
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
                 {incident.severity_label} ·{' '}
                 {audienceLabels[incident.audience] ?? incident.audience} ·{' '}
                 {incident.organizations.length} organización(es) · inicio{' '}
@@ -287,26 +288,26 @@ function IncidentDetail({
                     <> · resuelto {date(incident.resolved_at, true)}</>
                 )}
             </p>
-            <p className="mt-2 text-sm whitespace-pre-wrap text-slate-300">
+            <p className="mt-2 text-sm whitespace-pre-wrap text-slate-700">
                 {incident.description}
             </p>
-            <ol className="mt-4 space-y-2 border-l border-white/10 pl-4">
+            <ol className="mt-4 space-y-2 border-l border-slate-200 pl-4">
                 {incident.updates.map((update, index) => (
                     <li key={index} className="text-sm">
-                        <p className="text-[11px] text-slate-400">
+                        <p className="text-[11px] text-slate-500">
                             <Pill tone={statusToneMap[update.status]}>
                                 {update.status_label}
                             </Pill>{' '}
                             {update.author ?? 'Sistema'} · {ago(update.at)} ·{' '}
                             {update.published ? (
-                                <span className="text-[#86efac]">
+                                <span className="text-[#15803d]">
                                     publicado a clientes
                                 </span>
                             ) : (
                                 'interno'
                             )}
                         </p>
-                        <p className="mt-1 whitespace-pre-wrap text-slate-200">
+                        <p className="mt-1 whitespace-pre-wrap text-slate-800">
                             {update.message}
                         </p>
                     </li>
@@ -339,7 +340,7 @@ function IncidentDetail({
                                     </option>
                                 ))}
                         </select>
-                        <label className="flex items-center gap-2 text-xs text-slate-300">
+                        <label className="flex items-center gap-2 text-xs text-slate-700">
                             <input
                                 type="checkbox"
                                 checked={form.data.publish}
@@ -361,7 +362,7 @@ function IncidentDetail({
                         required
                     />
                     {form.errors.status && (
-                        <p className="text-xs text-[#f87171]">
+                        <p className="text-xs text-[#dc2626]">
                             {form.errors.status}
                         </p>
                     )}
@@ -382,7 +383,7 @@ function IncidentDetail({
                             );
                         }}
                     >
-                        <p className="text-xs font-bold text-slate-400">
+                        <p className="text-xs font-bold text-slate-500">
                             Postmortem
                         </p>
                         <textarea
@@ -395,7 +396,7 @@ function IncidentDetail({
                             }
                         />
                         {postmortem.errors.postmortem && (
-                            <p className="text-xs text-[#f87171]">
+                            <p className="text-xs text-[#dc2626]">
                                 {postmortem.errors.postmortem}
                             </p>
                         )}
@@ -437,6 +438,42 @@ export default function Incidents({
                 title="Incidentes"
                 subtitle="Fallas de la plataforma que afectan a varios clientes. Las actualizaciones publicadas aparecen como aviso dentro de la aplicación de cada organización afectada."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Incidentes',
+                            value: incidents.length,
+                            icon: Siren,
+                        },
+                        {
+                            label: 'Activos',
+                            value: incidents.filter(
+                                (i) =>
+                                    !['resolved', 'postmortem'].includes(
+                                        i.status,
+                                    ),
+                            ).length,
+                            icon: Activity,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Críticos',
+                            value: incidents.filter(
+                                (i) => i.severity === 'critical',
+                            ).length,
+                            icon: AlertTriangle,
+                            tone: '#b91c1c',
+                        },
+                        {
+                            label: 'Resueltos',
+                            value: incidents.filter((i) =>
+                                ['resolved', 'postmortem'].includes(i.status),
+                            ).length,
+                            icon: CircleCheck,
+                            tone: '#15803d',
+                        },
+                    ]}
+                />
                 {can_manage && (
                     <CreateIncident
                         services={services}
@@ -466,7 +503,7 @@ export default function Incidents({
                                     key={incident.id}
                                     className={
                                         selected?.id === incident.id
-                                            ? 'bg-white/[0.04]'
+                                            ? 'bg-slate-50'
                                             : ''
                                     }
                                 >
@@ -474,11 +511,11 @@ export default function Incidents({
                                         <Link
                                             href={`/control-center/incidents?incident=${incident.id}`}
                                             preserveScroll
-                                            className="font-semibold text-white"
+                                            className="font-semibold text-slate-900"
                                         >
                                             {incident.code}
                                         </Link>
-                                        <span className="block max-w-[220px] truncate text-[11px] text-slate-400">
+                                        <span className="block max-w-[220px] truncate text-[11px] text-slate-500">
                                             {incident.title}
                                         </span>
                                     </td>

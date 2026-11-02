@@ -60,7 +60,8 @@ class OrganizationManagementService
         $usage = $this->usage->measure((int) $row->id);
         $limits = $this->entitlements->resolve((int) $row->id)['limits'];
 
-        return ['id' => (int) $row->id, 'public_id' => (string) $row->public_id, 'code' => $row->code, 'name' => (string) $row->name, 'tax_id' => $row->tax_identifier,
+        return ['id' => (int) $row->id, 'public_id' => (string) $row->public_id, 'code' => $row->code, 'name' => (string) $row->name, 'legal_name' => $row->legal_name, 'tax_id' => $row->tax_identifier,
+            'timezone' => $row->timezone,
             'plan' => $row->plan_name, 'plan_version' => $row->plan_version === null ? null : (int) $row->plan_version,
             'subscription_status' => $row->subscription_status, 'subscription_label' => PlatformStatus::SUBSCRIPTION_LABELS[$row->subscription_status ?? ''] ?? 'Sin suscripción',
             'organization_status' => (string) $row->status, 'organization_label' => PlatformStatus::ORGANIZATION_LABELS[$row->status] ?? $row->status,

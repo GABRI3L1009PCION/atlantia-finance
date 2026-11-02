@@ -57,9 +57,9 @@ function SettingRow({
     const payload = { key: setting.key, value };
 
     return (
-        <div className="grid items-center gap-2 border-b border-white/[0.04] py-2 sm:grid-cols-[1fr_260px_auto]">
+        <div className="grid items-center gap-2 border-b border-slate-200 py-2 sm:grid-cols-[1fr_260px_auto]">
             <div>
-                <p className="text-sm text-slate-200">
+                <p className="text-sm text-slate-800">
                     {setting.label}{' '}
                     {setting.sensitive && (
                         <Pill tone="red" dot={false}>
@@ -72,7 +72,7 @@ function SettingRow({
                 </p>
             </div>
             {setting.type === 'bool' ? (
-                <label className="flex items-center gap-2 text-xs text-slate-300">
+                <label className="flex items-center gap-2 text-xs text-slate-700">
                     <input
                         type="checkbox"
                         disabled={!canManage}
@@ -155,7 +155,7 @@ function TemplateEditor({
         <Panel
             title={template.label}
             action={
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-500">
                     {template.version === 0
                         ? 'Predeterminada'
                         : `Versión ${template.version}`}
@@ -186,7 +186,7 @@ function TemplateEditor({
                     onChange={(e) => form.setData('body', e.target.value)}
                 />
                 {Object.values(form.errors).length > 0 && (
-                    <p className="text-xs text-[#f87171]">
+                    <p className="text-xs text-[#dc2626]">
                         {Object.values(form.errors).join(' ')}
                     </p>
                 )}
@@ -246,10 +246,10 @@ export default function Settings({
                         );
                     })}
                 </div>
-                <h2 className="pt-2 text-lg font-bold text-white">
+                <h2 className="pt-2 text-lg font-bold text-slate-900">
                     Plantillas de notificación
                 </h2>
-                <p className="-mt-2 text-xs text-slate-400">
+                <p className="-mt-2 text-xs text-slate-500">
                     {
                         'Usa variables como {{name}}, {{organization}} o {{amount}}. Guardar crea una versión nueva y conserva la anterior.'
                     }

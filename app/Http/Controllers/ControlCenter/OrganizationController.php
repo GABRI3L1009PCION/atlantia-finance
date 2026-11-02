@@ -147,9 +147,10 @@ class OrganizationController extends ControlCenterController
             'offices' => DB::table('offices')->join('organizations', 'organizations.id', '=', 'offices.organization_id')->where('organizations.id', '<>', PlatformIssuer::organizationId())->whereNull('offices.deleted_at')
                 ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($inner) => $inner->where('offices.name', 'ilike', '%'.$search.'%')->orWhere('organizations.name', 'ilike', '%'.$search.'%')))
                 ->when($filters['organization_id'] ?? null, fn ($q, $id) => $q->where('offices.organization_id', $id))->orderBy('organizations.name')->orderBy('offices.name')->limit(500)
-                ->get(['offices.id', 'offices.code', 'offices.name', 'offices.city', 'offices.status', 'offices.is_primary', 'offices.created_at', 'organizations.id as organization_id', 'organizations.name as organization'])
+                ->get(['offices.id', 'offices.code', 'offices.name', 'offices.city', 'offices.status', 'offices.is_primary', 'offices.created_at', 'organizations.id as organization_id', 'organizations.name as organization', 'organizations.code as organization_code', 'organizations.tax_identifier as organization_tax_id'])
                 ->map(fn (stdClass $office): array => ['id' => (int) $office->id, 'code' => (string) $office->code, 'name' => (string) $office->name, 'city' => $office->city, 'status' => (string) $office->status,
                     'primary' => (bool) $office->is_primary, 'organization_id' => (int) $office->organization_id, 'organization' => (string) $office->organization,
+                    'organization_code' => $office->organization_code, 'organization_tax_id' => $office->organization_tax_id,
                     'users' => DB::table('office_user')->where('office_id', $office->id)->where('status', 'active')->count(), 'companies' => DB::table('companies')->where('office_id', $office->id)->count(),
                     'created_at' => Carbon::parse($office->created_at)->toIso8601String()])->all(),
         ]);
@@ -161,12 +162,30 @@ class OrganizationController extends ControlCenterController
 
         return $this->render($request, 'saas-users', [
             'users' => $users->list(),
-            'roles' => array_map(fn (string $key, array $role): array => ['key' => $key, 'label' => $role['label'], 'description' => $role['description'],
-                'permissions' => $role['permissions'] === ['*'] ? array_keys(PlatformAuthorization::PERMISSIONS) : $role['permissions']], array_keys(PlatformAuthorization::ROLES), PlatformAuthorization::ROLES),
+            'roles' => $this->rolesForScreen(),
             'permission_labels' => PlatformAuthorization::PERMISSIONS,
             'can_manage' => $this->authorization->can($user, 'saas.users.manage'),
             'current_user_id' => $user->id,
         ]);
+    }
+
+    /** The SaaS roles with their permissions and how many staff members hold each one. */
+    public function staffRoles(Request $request, SaaSUserService $users): Response
+    {
+        $this->staff($request, 'saas.users.view');
+        $members = array_count_values(array_map(fn (array $staff): string => (string) $staff['role'], $users->list()));
+
+        return $this->render($request, 'roles', [
+            'roles' => array_map(fn (array $role): array => [...$role, 'members' => $members[$role['key']] ?? 0], $this->rolesForScreen()),
+            'permission_labels' => PlatformAuthorization::PERMISSIONS,
+        ]);
+    }
+
+    /** @return list<array{key: string, label: string, description: string, permissions: list<string>}> */
+    private function rolesForScreen(): array
+    {
+        return array_map(fn (string $key, array $role): array => ['key' => $key, 'label' => $role['label'], 'description' => $role['description'],
+            'permissions' => $role['permissions'] === ['*'] ? array_keys(PlatformAuthorization::PERMISSIONS) : $role['permissions']], array_keys(PlatformAuthorization::ROLES), PlatformAuthorization::ROLES);
     }
 
     public function staffStore(Request $request, SaaSUserService $users): RedirectResponse

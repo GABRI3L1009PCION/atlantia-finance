@@ -1,7 +1,12 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Eye, Timer } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { CCPage, Panel, Table, ccGhost } from '@/components/control-center/kit';
+import {
+    CCPage,
+    Panel,
+    Table,
+    ccDanger,
+} from '@/components/control-center/kit';
 
 type Session = {
     id: number;
@@ -89,7 +94,7 @@ export default function SupportViewer({
                 actions={
                     <button
                         type="button"
-                        className={`${ccGhost} border-[#ef4444]/40 text-[#fca5a5]`}
+                        className={ccDanger}
                         onClick={() => {
                             const reason = window.prompt(
                                 'Motivo para terminar el acceso',
@@ -108,7 +113,7 @@ export default function SupportViewer({
                     </button>
                 }
             >
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-4 py-3 text-sm text-[#fde68a]">
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-4 py-3 text-sm text-[#92400e]">
                     <Eye className="size-4" /> <strong>MODO SOPORTE</strong> ·{' '}
                     {session.reason}
                     {session.ticket && <> · Ticket {session.ticket}</>}
@@ -122,7 +127,7 @@ export default function SupportViewer({
                         <Link
                             key={key}
                             href={`/control-center/support-access/${session.id}/view/${key}`}
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${scope === key ? 'bg-[#c8102e] text-white' : 'border border-white/10 text-slate-300'}`}
+                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${scope === key ? 'bg-[#c8102e] text-white' : 'border border-slate-200 text-slate-700'}`}
                             title={scope_labels[key]}
                         >
                             {scope_labels[key]?.split(':')[0] ?? key}
@@ -162,7 +167,7 @@ export default function SupportViewer({
                                 </Table>
                             )
                         ) : (
-                            <p className="text-2xl font-black text-white">
+                            <p className="text-2xl font-black text-slate-900">
                                 {cell(value)}
                             </p>
                         )}

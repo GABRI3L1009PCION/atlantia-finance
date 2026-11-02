@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import { Wallet, CircleCheck, Clock, AlertTriangle } from 'lucide-react';
 import {
     CCPage,
     Panel,
@@ -8,6 +9,7 @@ import {
     date,
     money,
     statusTone,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Payment = {
@@ -59,6 +61,24 @@ type Event = {
     error_message: string | null;
 };
 
+const PAYMENT_STATUS: Record<string, string> = {
+    succeeded: 'Exitoso',
+    pending: 'Pendiente',
+    processing: 'Procesando',
+    failed: 'Fallido',
+    refunded: 'Reembolsado',
+    canceled: 'Cancelado',
+    cancelled: 'Cancelado',
+};
+
+const EVENT_STATUS: Record<string, string> = {
+    processed: 'Procesado',
+    pending: 'Pendiente',
+    received: 'Recibido',
+    failed: 'Fallido',
+    ignored: 'Ignorado',
+};
+
 export default function Payments({
     payments,
     webhook_events,
@@ -77,6 +97,38 @@ export default function Payments({
                 title="Pagos"
                 subtitle="Cobros de suscripciones: proveedor, referencia, intentos y resultado. Los webhooks del proveedor se procesan una sola vez (idempotencia por id de evento)."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Pagos',
+                            value: payments.length,
+                            icon: Wallet,
+                        },
+                        {
+                            label: 'Exitosos',
+                            value: payments.filter(
+                                (p) => p.status === 'succeeded',
+                            ).length,
+                            icon: CircleCheck,
+                            tone: '#15803d',
+                        },
+                        {
+                            label: 'Pendientes',
+                            value: payments.filter(
+                                (p) => p.status === 'pending',
+                            ).length,
+                            icon: Clock,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Fallidos',
+                            value: payments.filter((p) => p.status === 'failed')
+                                .length,
+                            icon: AlertTriangle,
+                            tone: '#b91c1c',
+                        },
+                    ]}
+                />
                 <Panel>
                     <div className="mb-3 flex gap-2">
                         <select
@@ -135,7 +187,7 @@ export default function Payments({
                                 <td className="px-2 py-2">
                                     <Link
                                         href={`/control-center/organizations/${payment.organization_id}?tab=billing`}
-                                        className="text-white"
+                                        className="text-slate-900"
                                     >
                                         {payment.organization}
                                     </Link>
@@ -154,7 +206,8 @@ export default function Payments({
                                 </td>
                                 <td className="px-2 py-2">
                                     <Pill tone={statusTone[payment.status]}>
-                                        {payment.status}
+                                        {PAYMENT_STATUS[payment.status] ??
+                                            payment.status}
                                     </Pill>
                                     {payment.attempts
                                         .filter((a) => a.failure_message)
@@ -162,7 +215,7 @@ export default function Payments({
                                         .map((a, i) => (
                                             <span
                                                 key={i}
-                                                className="block text-[10px] text-[#f87171]"
+                                                className="block text-[10px] text-[#dc2626]"
                                             >
                                                 {a.failure_message}
                                             </span>
@@ -222,7 +275,7 @@ export default function Payments({
                                             request.status}
                                     </Pill>
                                 </td>
-                                <td className="px-2 py-2 text-[#f87171]">
+                                <td className="px-2 py-2 text-[#dc2626]">
                                     {request.error_code
                                         ? (FEL_ERROR[request.error_code] ??
                                           request.error_code)
@@ -235,7 +288,7 @@ export default function Payments({
                                     {request.document_url ? (
                                         <a
                                             href={request.document_url}
-                                            className="font-semibold text-[#fca5a5] underline"
+                                            className="font-semibold text-[#b91c1c] underline"
                                         >
                                             Emitir en la SAT
                                         </a>
@@ -281,7 +334,8 @@ export default function Payments({
                                                   : 'amber'
                                         }
                                     >
-                                        {event.status}
+                                        {EVENT_STATUS[event.status] ??
+                                            event.status}
                                     </Pill>
                                 </td>
                                 <td className="px-2 py-2">
@@ -290,7 +344,7 @@ export default function Payments({
                                 <td className="px-2 py-2">
                                     {date(event.processed_at, true)}
                                 </td>
-                                <td className="px-2 py-2 text-[#f87171]">
+                                <td className="px-2 py-2 text-[#dc2626]">
                                     {event.error_message ?? ''}
                                 </td>
                             </tr>

@@ -322,63 +322,66 @@ function Network({
 
     const positions = SIZES.map((count) => ys(count));
 
+    // The network glows, so it keeps a dark screen even on the light Control Center.
     return (
-        <div className="relative">
-            <canvas
-                ref={canvasRef}
-                className="block h-auto w-full"
-                style={{ aspectRatio: `${WIDTH} / ${HEIGHT}` }}
-                role="img"
-                aria-label="Red neuronal de Luzma con sus capas encendidas"
-            />
-            <svg
-                viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-                className="pointer-events-none absolute inset-0 h-full w-full"
-                aria-hidden="true"
-            >
-                {inputs.slice(0, INPUT_SLOTS).map((term, i) => (
-                    <text
-                        key={term}
-                        x={COLUMN_X[0] - 12}
-                        y={positions[0][i] + 3}
-                        textAnchor="end"
-                        fontSize="9"
-                        fill="#94a3b8"
-                    >
-                        {term.length > 14 ? `${term.slice(0, 13)}…` : term}
-                    </text>
-                ))}
-                {outputs.map((o, i) => (
-                    <text
-                        key={o.name}
-                        x={COLUMN_X[3] - 14}
-                        y={positions[3][i] + 3}
-                        textAnchor="end"
-                        fontSize="9"
-                        fill={i === 0 ? '#fde68a' : '#94a3b8'}
-                    >
-                        {o.name.replace('get_', '').replace('_summary', '')}{' '}
-                        {Math.round(o.probability * 100)}%
-                    </text>
-                ))}
-                {[
-                    'Entrada',
-                    `Oculta 1 (${hidden[0].toLocaleString('es-GT')})`,
-                    `Oculta 2 (${hidden[1].toLocaleString('es-GT')})`,
-                    'Salida',
-                ].map((label, l) => (
-                    <text
-                        key={label}
-                        x={COLUMN_X[l]}
-                        y={12}
-                        textAnchor="middle"
-                        fontSize="10"
-                        fill="#cbd5e1"
-                    >
-                        {label}
-                    </text>
-                ))}
-            </svg>
+        <div className="rounded-xl bg-[#0b0e14] p-3">
+            <div className="relative">
+                <canvas
+                    ref={canvasRef}
+                    className="block h-auto w-full"
+                    style={{ aspectRatio: `${WIDTH} / ${HEIGHT}` }}
+                    role="img"
+                    aria-label="Red neuronal de Luzma con sus capas encendidas"
+                />
+                <svg
+                    viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    aria-hidden="true"
+                >
+                    {inputs.slice(0, INPUT_SLOTS).map((term, i) => (
+                        <text
+                            key={term}
+                            x={COLUMN_X[0] - 12}
+                            y={positions[0][i] + 3}
+                            textAnchor="end"
+                            fontSize="9"
+                            fill="#94a3b8"
+                        >
+                            {term.length > 14 ? `${term.slice(0, 13)}…` : term}
+                        </text>
+                    ))}
+                    {outputs.map((o, i) => (
+                        <text
+                            key={o.name}
+                            x={COLUMN_X[3] - 14}
+                            y={positions[3][i] + 3}
+                            textAnchor="end"
+                            fontSize="9"
+                            fill={i === 0 ? '#fde68a' : '#94a3b8'}
+                        >
+                            {o.name.replace('get_', '').replace('_summary', '')}{' '}
+                            {Math.round(o.probability * 100)}%
+                        </text>
+                    ))}
+                    {[
+                        'Entrada',
+                        `Oculta 1 (${hidden[0].toLocaleString('es-GT')})`,
+                        `Oculta 2 (${hidden[1].toLocaleString('es-GT')})`,
+                        'Salida',
+                    ].map((label, l) => (
+                        <text
+                            key={label}
+                            x={COLUMN_X[l]}
+                            y={12}
+                            textAnchor="middle"
+                            fontSize="10"
+                            fill="#cbd5e1"
+                        >
+                            {label}
+                        </text>
+                    ))}
+                </svg>
+            </div>
         </div>
     );
 }
@@ -512,7 +515,7 @@ export default function LuzmaNeural({
             >
                 {!info.ready && (
                     <Panel title="Sin red entrenada">
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-slate-500">
                             {info.available === false
                                 ? 'El servicio de Luzma no responde. Enciéndelo y vuelve a cargar.'
                                 : 'La red aún no está entrenada. Entrénala desde aquí.'}
@@ -524,7 +527,7 @@ export default function LuzmaNeural({
                     <Panel
                         title="Red en vivo"
                         icon={
-                            <BrainCircuit className="size-4 text-[#22d3ee]" />
+                            <BrainCircuit className="size-4 text-[#0e7490]" />
                         }
                         action={
                             <button
@@ -541,7 +544,7 @@ export default function LuzmaNeural({
                             </button>
                         }
                     >
-                        <div className="rounded-xl bg-[#080b11] p-2">
+                        <div className="rounded-xl bg-slate-50 p-2">
                             <Network
                                 outcome={shown}
                                 inputs={inputs}
@@ -551,7 +554,7 @@ export default function LuzmaNeural({
                             />
                         </div>
 
-                        <p className="mt-2 text-xs text-slate-400">
+                        <p className="mt-2 text-xs text-slate-500">
                             Las neuronas de entrada son las palabras que la red
                             reconoce en la pregunta (la red completa conoce
                             miles; aquí se dibujan 12 espacios, y los vacíos son
@@ -559,9 +562,9 @@ export default function LuzmaNeural({
                             brillan según qué tanto aportan a la decisión.
                         </p>
                         {shown && (
-                            <p className="mt-1 text-xs text-slate-300">
+                            <p className="mt-1 text-xs text-slate-700">
                                 Decisión:{' '}
-                                <b className="text-amber-300">{shown.winner}</b>{' '}
+                                <b className="text-amber-700">{shown.winner}</b>{' '}
                                 con {Math.round(shown.confidence * 100)} %.
                             </p>
                         )}
@@ -588,11 +591,11 @@ export default function LuzmaNeural({
                             </button>
                         </div>
                         {error && (
-                            <p className="mt-2 text-xs text-red-300">{error}</p>
+                            <p className="mt-2 text-xs text-red-700">{error}</p>
                         )}
                         {test?.influence && test.influence.length > 0 && (
                             <div className="mt-4">
-                                <p className="mb-2 text-xs font-bold text-slate-300">
+                                <p className="mb-2 text-xs font-bold text-slate-700">
                                     Qué palabras decidieron
                                 </p>
                                 {test.influence.map((item) => (
@@ -600,10 +603,10 @@ export default function LuzmaNeural({
                                         key={item.term}
                                         className="mb-1 flex items-center gap-2 text-xs"
                                     >
-                                        <span className="w-32 truncate text-slate-300">
+                                        <span className="w-32 truncate text-slate-700">
                                             {item.term.replace('_', ' + ')}
                                         </span>
-                                        <span className="h-2 flex-1 rounded bg-white/5">
+                                        <span className="h-2 flex-1 rounded bg-slate-50">
                                             <span
                                                 className="block h-2 rounded bg-cyan-400"
                                                 style={{
@@ -611,7 +614,7 @@ export default function LuzmaNeural({
                                                 }}
                                             />
                                         </span>
-                                        <span className="w-10 text-right text-slate-400">
+                                        <span className="w-10 text-right text-slate-500">
                                             {Math.round(item.weight * 100)}%
                                         </span>
                                     </div>
@@ -629,7 +632,7 @@ export default function LuzmaNeural({
                     <div className="space-y-4">
                         <Panel title="La red">
                             {network ? (
-                                <dl className="space-y-1.5 text-xs text-slate-300">
+                                <dl className="space-y-1.5 text-xs text-slate-700">
                                     <div className="flex justify-between">
                                         <dt>Capas</dt>
                                         <dd>{network.layers.join(' → ')}</dd>
@@ -689,12 +692,12 @@ export default function LuzmaNeural({
                         <Panel
                             title="Entrenamiento"
                             icon={
-                                <RefreshCw className="size-4 text-[#c4b5fd]" />
+                                <RefreshCw className="size-4 text-[#6d28d9]" />
                             }
                         >
                             {training?.running && (
                                 <div className="mb-3">
-                                    <div className="h-2 rounded bg-white/5">
+                                    <div className="h-2 rounded bg-slate-50">
                                         <div
                                             className="h-2 rounded bg-violet-400 transition-all"
                                             style={{
@@ -702,7 +705,7 @@ export default function LuzmaNeural({
                                             }}
                                         />
                                     </div>
-                                    <p className="mt-1 text-xs text-slate-400">
+                                    <p className="mt-1 text-xs text-slate-500">
                                         Época {training.epoch} de{' '}
                                         {training.epochs} · pérdida{' '}
                                         {training.loss ?? '…'}
@@ -710,13 +713,13 @@ export default function LuzmaNeural({
                                 </div>
                             )}
                             {!training?.running && training?.message && (
-                                <p className="mb-3 text-xs text-emerald-300">
+                                <p className="mb-3 text-xs text-[#15803d]">
                                     {training.message}
                                 </p>
                             )}
                             {can_manage ? (
                                 <div className="space-y-2">
-                                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                                    <label className="flex items-center gap-2 text-xs text-slate-700">
                                         <input
                                             type="checkbox"
                                             checked={feedback}
@@ -729,7 +732,7 @@ export default function LuzmaNeural({
                                         Aprender de las respuestas marcadas como
                                         útiles
                                     </label>
-                                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                                    <label className="flex items-center gap-2 text-xs text-slate-700">
                                         Épocas
                                         <input
                                             type="number"
@@ -785,7 +788,7 @@ export default function LuzmaNeural({
                         </p>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-xs text-slate-300">
+                            <table className="w-full text-xs text-slate-700">
                                 <thead>
                                     <tr className="text-left text-slate-500">
                                         <th className="py-1.5 pr-3">Hora</th>
@@ -804,7 +807,7 @@ export default function LuzmaNeural({
                                                 setTest(null);
                                                 setLive(false);
                                             }}
-                                            className="cursor-pointer border-t border-white/5 hover:bg-white/[0.03]"
+                                            className="cursor-pointer border-t border-slate-200 hover:bg-slate-50"
                                         >
                                             <td className="py-1.5 pr-3">
                                                 {item.at}
@@ -822,7 +825,7 @@ export default function LuzmaNeural({
                                                         : 'Prueba'}
                                                 </Pill>
                                             </td>
-                                            <td className="pr-3 font-semibold text-slate-100">
+                                            <td className="pr-3 font-semibold text-slate-800">
                                                 {item.winner}
                                             </td>
                                             <td className="pr-3">

@@ -102,16 +102,19 @@ export default function Jobs({
                                 : `${queue.failed_rate}%`,
                         ],
                     ].map(([label, value]) => (
-                        <div key={String(label)} className={`${panel} p-4`}>
-                            <p className="text-xs text-slate-400">{label}</p>
-                            <p className="mt-1 text-2xl font-black text-white">
+                        <div
+                            key={String(label)}
+                            className={`${panel} border-l-4 border-l-[#7a0010] p-4`}
+                        >
+                            <p className="text-sm text-slate-700">{label}</p>
+                            <p className="mt-1 font-serif text-2xl font-bold text-slate-900">
                                 {value}
                             </p>
                         </div>
                     ))}
                 </div>
                 {!queue.workers_active && queue.pending > 0 && (
-                    <div className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3 text-sm text-[#fde68a]">
+                    <div className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3 text-sm text-[#92400e]">
                         Hay trabajos en cola pero ningún worker los está
                         procesando. Inicia «php artisan queue:work».
                     </div>
@@ -134,10 +137,10 @@ export default function Jobs({
                     >
                         {failed_groups.map((group) => (
                             <tr key={group.signature}>
-                                <td className="px-2 py-2 font-mono text-white">
+                                <td className="px-2 py-2 font-mono text-slate-900">
                                     {group.job}
                                 </td>
-                                <td className="max-w-md px-2 py-2 text-[#fca5a5]">
+                                <td className="max-w-md px-2 py-2 text-[#b91c1c]">
                                     {group.cause}
                                 </td>
                                 <td className="px-2 py-2 font-bold">
@@ -152,7 +155,7 @@ export default function Jobs({
                                         {ago(group.last)}
                                     </span>
                                 </td>
-                                <td className="max-w-xs px-2 py-2 text-[11px] text-slate-400">
+                                <td className="max-w-xs px-2 py-2 text-[11px] text-slate-500">
                                     {group.policy}
                                 </td>
                                 <td className="px-2 py-2">
@@ -194,7 +197,7 @@ export default function Jobs({
                         {scheduler.map((task) => (
                             <tr key={task.task}>
                                 <td className="px-2 py-2">
-                                    <span className="text-white">
+                                    <span className="text-slate-900">
                                         {task.label}
                                     </span>
                                     <span className="block font-mono text-[10px] text-slate-500">
@@ -228,7 +231,7 @@ export default function Jobs({
                                             : task.status}
                                     </Pill>
                                 </td>
-                                <td className="max-w-xs px-2 py-2 text-[11px] text-[#fca5a5]">
+                                <td className="max-w-xs px-2 py-2 text-[11px] text-[#b91c1c]">
                                     {task.last_error ?? ''}
                                 </td>
                             </tr>
@@ -286,7 +289,7 @@ export default function Jobs({
                     >
                         {runs.map((run) => (
                             <tr key={run.id}>
-                                <td className="px-2 py-1.5 font-mono text-white">
+                                <td className="px-2 py-1.5 font-mono text-slate-900">
                                     {run.job}
                                 </td>
                                 <td className="px-2 py-1.5">
@@ -310,7 +313,7 @@ export default function Jobs({
                                     {date(run.created, true)}
                                 </td>
                                 <td
-                                    className="max-w-xs truncate px-2 py-1.5 text-[11px] text-[#fca5a5]"
+                                    className="max-w-xs truncate px-2 py-1.5 text-[11px] text-[#b91c1c]"
                                     title={run.exception ?? undefined}
                                 >
                                     {run.exception ?? ''}

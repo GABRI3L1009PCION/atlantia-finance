@@ -196,10 +196,10 @@ function UsageList({ usage }: { usage: Usage[] }) {
                     key={row.metric}
                     className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5 text-xs"
                 >
-                    <span className="min-w-0 truncate text-slate-300">
+                    <span className="min-w-0 truncate text-slate-700">
                         {row.label}
                     </span>
-                    <span className="text-right whitespace-nowrap text-slate-400">
+                    <span className="text-right whitespace-nowrap text-slate-500">
                         {row.metric === 'storage_bytes'
                             ? bytes(row.value)
                             : row.value}{' '}
@@ -358,7 +358,7 @@ export default function OrganizationDetail({
                 }
             >
                 {ownerInvitation && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#fbbf24]/30 bg-[#fbbf24]/10 p-3 text-sm text-[#fde68a]">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#fbbf24]/30 bg-[#fbbf24]/10 p-3 text-sm text-[#92400e]">
                         <div className="flex items-start gap-2">
                             <Mail className="mt-0.5 size-4 shrink-0" />
                             <div>
@@ -405,7 +405,7 @@ export default function OrganizationDetail({
                     </div>
                 )}
                 {o.suspension_reason && (
-                    <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 p-3 text-sm text-[#fca5a5]">
+                    <div className="rounded-xl border border-[#ef4444]/30 bg-[#ef4444]/10 p-3 text-sm text-[#b91c1c]">
                         Suspendida:{' '}
                         {String(o.suspension_reason).replace('[billing] ', '')}
                     </div>
@@ -416,7 +416,7 @@ export default function OrganizationDetail({
                             key={key}
                             href={`${base}?tab=${key}`}
                             preserveScroll
-                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${tab === key ? 'bg-[#c8102e] text-white' : 'border border-white/10 text-slate-300 hover:text-white'}`}
+                            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${tab === key ? 'bg-[#c8102e] text-white' : 'border border-slate-200 text-slate-700 hover:text-slate-900'}`}
                         >
                             {label}
                         </Link>
@@ -428,7 +428,7 @@ export default function OrganizationDetail({
                         <Panel
                             title="Organización"
                             icon={
-                                <Building2 className="size-4 text-[#e8b04b]" />
+                                <Building2 className="size-4 text-[#a16207]" />
                             }
                         >
                             <dl className="grid gap-2 text-xs">
@@ -458,7 +458,7 @@ export default function OrganizationDetail({
                                         <dt className="text-slate-500">
                                             {label}
                                         </dt>
-                                        <dd className="text-slate-200">
+                                        <dd className="text-slate-800">
                                             {value}
                                         </dd>
                                     </div>
@@ -507,9 +507,9 @@ export default function OrganizationDetail({
                                 ].map(([label, value]) => (
                                     <div
                                         key={label}
-                                        className="rounded-xl bg-white/[0.03] p-3"
+                                        className="rounded-xl bg-slate-50 p-3"
                                     >
-                                        <p className="text-2xl font-black text-white">
+                                        <p className="text-2xl font-black text-slate-900">
                                             {value}
                                         </p>
                                         <p className="text-[11px] text-slate-500">
@@ -531,7 +531,7 @@ export default function OrganizationDetail({
                     <Panel title="Suscripción">
                         {s === null ? (
                             <div className="space-y-3">
-                                <p className="text-sm text-slate-400">
+                                <p className="text-sm text-slate-500">
                                     La organización no tiene suscripción.
                                 </p>
                                 {can.subscriptions && (
@@ -569,7 +569,7 @@ export default function OrganizationDetail({
                                                 ))}
                                             </select>
                                         </Field>
-                                        <label className="flex items-center gap-2 text-xs text-slate-300">
+                                        <label className="flex items-center gap-2 text-xs text-slate-700">
                                             <input
                                                 type="checkbox"
                                                 checked={
@@ -633,7 +633,7 @@ export default function OrganizationDetail({
                                         <dt className="text-slate-500">
                                             {label}
                                         </dt>
-                                        <dd className="mt-0.5 text-slate-100">
+                                        <dd className="mt-0.5 text-slate-800">
                                             {value}
                                         </dd>
                                     </div>
@@ -902,10 +902,10 @@ export default function OrganizationDetail({
                                     <td className="px-2 py-2 font-mono">
                                         {office.code}
                                     </td>
-                                    <td className="px-2 py-2 font-semibold text-white">
+                                    <td className="px-2 py-2 font-semibold text-slate-900">
                                         {office.name}
                                         {office.primary && (
-                                            <span className="ml-2 text-[10px] text-[#e8b04b]">
+                                            <span className="ml-2 text-[10px] text-[#a16207]">
                                                 Principal
                                             </span>
                                         )}
@@ -945,7 +945,7 @@ export default function OrganizationDetail({
                         >
                             {detail.users.map((user) => (
                                 <tr key={user.id}>
-                                    <td className="px-2 py-2 font-semibold text-white">
+                                    <td className="px-2 py-2 font-semibold text-slate-900">
                                         {user.name}
                                     </td>
                                     <td className="px-2 py-2">{user.email}</td>
@@ -998,9 +998,9 @@ export default function OrganizationDetail({
                             ].map(([label, value]) => (
                                 <div
                                     key={label}
-                                    className="rounded-xl bg-white/[0.03] p-3"
+                                    className="rounded-xl bg-slate-50 p-3"
                                 >
-                                    <p className="text-2xl font-black text-white">
+                                    <p className="text-2xl font-black text-slate-900">
                                         {value}
                                     </p>
                                     <p className="text-[11px] text-slate-500">
@@ -1136,7 +1136,7 @@ export default function OrganizationDetail({
                                         {detail.credits.map((c) => (
                                             <li
                                                 key={c.id}
-                                                className="flex justify-between text-slate-300"
+                                                className="flex justify-between text-slate-700"
                                             >
                                                 <span>{c.reason}</span>
                                                 <span>
@@ -1202,7 +1202,7 @@ export default function OrganizationDetail({
 
                 {tab === 'security' && (
                     <Panel title="Seguridad">
-                        <p className="text-sm text-slate-300">
+                        <p className="text-sm text-slate-700">
                             {detail.security.users_with_2fa} usuario(s) con 2FA
                             · {detail.security.offices_requiring_2fa} oficina(s)
                             exigen 2FA.
@@ -1261,7 +1261,7 @@ export default function OrganizationDetail({
                                     <td className="px-2 py-2">
                                         <Link
                                             href={`/control-center/support/tickets?ticket=${ticket.id}`}
-                                            className="font-mono text-white"
+                                            className="font-mono text-slate-900"
                                         >
                                             {ticket.code}
                                         </Link>
@@ -1304,7 +1304,7 @@ export default function OrganizationDetail({
                                     className="flex justify-between gap-3"
                                 >
                                     <span>
-                                        <span className="font-mono text-slate-200">
+                                        <span className="font-mono text-slate-800">
                                             {event.action}
                                         </span>{' '}
                                         <span className="text-slate-500">

@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { Flag } from 'lucide-react';
+import { Flag, CircleCheck, Target, Building2 } from 'lucide-react';
 import { useState } from 'react';
 import {
     CCPage,
@@ -10,6 +10,7 @@ import {
     ccButton,
     ccGhost,
     ccInput,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Target = {
@@ -157,6 +158,35 @@ export default function FeatureFlags({
                 title="Feature Flags"
                 subtitle="Lanzamientos graduales. Resolución: usuario → organización → grupo beta → plan → valor global. Cada cambio queda auditado con valor anterior, nuevo, destino, autor y motivo."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Feature flags',
+                            value: flags.length,
+                            icon: Flag,
+                        },
+                        {
+                            label: 'Encendidos para todos',
+                            value: flags.filter((f) => f.enabled_globally)
+                                .length,
+                            icon: CircleCheck,
+                            tone: '#15803d',
+                        },
+                        {
+                            label: 'Con segmentación',
+                            value: flags.filter((f) => f.targets.length > 0)
+                                .length,
+                            icon: Target,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Organizaciones afectadas',
+                            value: affected,
+                            icon: Building2,
+                            tone: '#64748b',
+                        },
+                    ]}
+                />
                 {can_manage && (
                     <Panel title="Nuevo flag">
                         <form
@@ -241,10 +271,10 @@ export default function FeatureFlags({
                                 </span>
                             </>
                         }
-                        icon={<Flag className="size-4 text-[#c084fc]" />}
+                        icon={<Flag className="size-4 text-[#7e22ce]" />}
                         action={
                             <div className="flex items-center gap-2">
-                                <span className="text-[11px] text-slate-400">
+                                <span className="text-[11px] text-slate-500">
                                     Global
                                 </span>
                                 <Pill
@@ -276,7 +306,7 @@ export default function FeatureFlags({
                         }
                     >
                         {flag.description && (
-                            <p className="mb-2 text-xs text-slate-400">
+                            <p className="mb-2 text-xs text-slate-500">
                                 {flag.description}
                             </p>
                         )}
@@ -289,7 +319,7 @@ export default function FeatureFlags({
                             {flag.targets.map((target) => (
                                 <span
                                     key={target.id}
-                                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-slate-300"
+                                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] text-slate-700"
                                     title={target.reason ?? undefined}
                                 >
                                     {target.type_label}: {target.label}{' '}
@@ -304,7 +334,7 @@ export default function FeatureFlags({
                                     {can_manage && (
                                         <button
                                             type="button"
-                                            className="text-slate-500 hover:text-white"
+                                            className="text-slate-500 hover:text-slate-900"
                                             onClick={() => {
                                                 const reason = window.prompt(
                                                     'Motivo para quitar el destino',

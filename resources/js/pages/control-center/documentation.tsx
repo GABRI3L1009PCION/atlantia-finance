@@ -23,7 +23,7 @@ function Errors({ errors }: { errors: Record<string, string | undefined> }) {
     const messages = Object.values(errors).filter(Boolean);
 
     return messages.length > 0 ? (
-        <p className="text-xs text-[#f87171]">{messages.join(' ')}</p>
+        <p className="text-xs text-[#dc2626]">{messages.join(' ')}</p>
     ) : null;
 }
 
@@ -44,7 +44,7 @@ function PasswordPanel({
             title="Contraseña de acceso"
             action={
                 <span
-                    className={`text-xs ${hasPassword ? 'text-emerald-400' : 'text-amber-400'}`}
+                    className={`text-xs ${hasPassword ? 'text-[#15803d]' : 'text-amber-700'}`}
                 >
                     {hasPassword
                         ? 'Configurada'
@@ -157,7 +157,7 @@ function UploadPanel({ maxUploadMb }: { maxUploadMb: number }) {
                     key={form.data.file === null ? 'empty' : 'selected'}
                     type="file"
                     accept="application/pdf,.pdf"
-                    className="block w-full text-xs text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
+                    className="block w-full text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-900"
                     onChange={(event) =>
                         form.setData('file', event.target.files?.[0] ?? null)
                     }
@@ -226,28 +226,28 @@ export default function Documentation({
                 <Panel
                     title="Documentos publicados"
                     action={
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-500">
                             {documents.length}
                         </span>
                     }
                 >
                     {documents.length === 0 ? (
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-slate-500">
                             Aún no hay documentos.
                         </p>
                     ) : (
-                        <ul className="divide-y divide-white/5">
+                        <ul className="divide-y divide-slate-100">
                             {documents.map((document) => (
                                 <li
                                     key={document.id}
                                     className="flex flex-wrap items-center justify-between gap-3 py-3"
                                 >
                                     <div className="min-w-0">
-                                        <p className="font-semibold text-white">
+                                        <p className="font-semibold text-slate-900">
                                             {document.title}
                                         </p>
                                         {document.description && (
-                                            <p className="text-xs text-slate-400">
+                                            <p className="text-xs text-slate-500">
                                                 {document.description}
                                             </p>
                                         )}

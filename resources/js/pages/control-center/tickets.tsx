@@ -1,4 +1,5 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
+import { LifeBuoy, Clock, AlertTriangle, CircleCheck } from 'lucide-react';
 import {
     CCPage,
     Panel,
@@ -10,6 +11,7 @@ import {
     ccTextarea,
     date,
     statusTone,
+    KpiRow,
 } from '@/components/control-center/kit';
 
 type Ticket = {
@@ -83,14 +85,14 @@ function Conversation({
                 canRequestAccess && (
                     <Link
                         href={`/control-center/support-access?organization=${ticket.organization_id}`}
-                        className="text-xs text-[#e8b04b]"
+                        className="text-xs text-[#a16207]"
                     >
                         Solicitar acceso de soporte →
                     </Link>
                 )
             }
         >
-            <p className="mb-3 text-xs text-slate-400">
+            <p className="mb-3 text-xs text-slate-500">
                 {ticket.organization} · {ticket.requester ?? '—'} ·{' '}
                 {ticket.module_label} · abierto {date(ticket.created_at, true)}
             </p>
@@ -139,9 +141,9 @@ function Conversation({
                 {ticket.messages.map((message) => (
                     <div
                         key={message.id}
-                        className={`rounded-lg border p-3 text-sm ${message.internal ? 'border-[#f59e0b]/30 bg-[#f59e0b]/10' : message.side === 'staff' ? 'ml-8 border-[#3b82f6]/30 bg-[#3b82f6]/10' : 'mr-8 border-white/10 bg-white/[0.03]'}`}
+                        className={`rounded-lg border p-3 text-sm ${message.internal ? 'border-[#f59e0b]/30 bg-[#f59e0b]/10' : message.side === 'staff' ? 'ml-8 border-[#3b82f6]/30 bg-[#3b82f6]/10' : 'mr-8 border-slate-200 bg-slate-50'}`}
                     >
-                        <p className="mb-1 text-[11px] text-slate-400">
+                        <p className="mb-1 text-[11px] text-slate-500">
                             {message.author} ·{' '}
                             {message.internal
                                 ? 'Nota interna'
@@ -150,7 +152,7 @@ function Conversation({
                                   : 'Cliente'}{' '}
                             · {ago(message.at)}
                         </p>
-                        <p className="whitespace-pre-wrap text-slate-200">
+                        <p className="whitespace-pre-wrap text-slate-800">
                             {message.body}
                         </p>
                     </div>
@@ -183,7 +185,7 @@ function Conversation({
                         required
                     />
                     <div className="flex flex-wrap items-center gap-3">
-                        <label className="flex items-center gap-2 text-xs text-slate-300">
+                        <label className="flex items-center gap-2 text-xs text-slate-700">
                             <input
                                 type="checkbox"
                                 checked={form.data.internal}
@@ -252,6 +254,42 @@ export default function Tickets({
                 title="Tickets de soporte"
                 subtitle="Solicitudes de clientes. Un ticket no da acceso a los datos de la organización: para revisar información se solicita un acceso de soporte formal."
             >
+                <KpiRow
+                    items={[
+                        {
+                            label: 'Tickets',
+                            value: tickets.length,
+                            icon: LifeBuoy,
+                        },
+                        {
+                            label: 'Abiertos',
+                            value: tickets.filter(
+                                (t) =>
+                                    !['resolved', 'closed'].includes(t.status),
+                            ).length,
+                            icon: Clock,
+                            tone: '#d39a2c',
+                        },
+                        {
+                            label: 'Urgentes o altos',
+                            value: tickets.filter(
+                                (t) =>
+                                    ['urgent', 'high'].includes(t.priority) &&
+                                    !['resolved', 'closed'].includes(t.status),
+                            ).length,
+                            icon: AlertTriangle,
+                            tone: '#b91c1c',
+                        },
+                        {
+                            label: 'Resueltos',
+                            value: tickets.filter((t) =>
+                                ['resolved', 'closed'].includes(t.status),
+                            ).length,
+                            icon: CircleCheck,
+                            tone: '#15803d',
+                        },
+                    ]}
+                />
                 <div className="flex flex-wrap gap-2">
                     <select
                         className={`${ccInput} max-w-[200px]`}
@@ -325,7 +363,7 @@ export default function Tickets({
                                     key={ticket.id}
                                     className={
                                         selected?.id === ticket.id
-                                            ? 'bg-white/[0.04]'
+                                            ? 'bg-slate-50'
                                             : ''
                                     }
                                 >
@@ -350,11 +388,11 @@ export default function Tickets({
                                                 },
                                             )}`}
                                             preserveScroll
-                                            className="font-semibold text-white"
+                                            className="font-semibold text-slate-900"
                                         >
                                             {ticket.code}
                                         </Link>
-                                        <span className="block max-w-[220px] truncate text-[11px] text-slate-400">
+                                        <span className="block max-w-[220px] truncate text-[11px] text-slate-500">
                                             {ticket.subject}
                                         </span>
                                     </td>
