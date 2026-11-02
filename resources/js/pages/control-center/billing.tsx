@@ -38,6 +38,7 @@ type Invoice = {
     id: number;
     number: string;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string | null;
     status: string;
     status_label: string;
@@ -78,6 +79,7 @@ type Summary =
 type Credit = {
     id: number;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string;
     remaining: string;
     amount: string;
@@ -285,11 +287,11 @@ function GrantCredit({
     organizations,
     onClose,
 }: {
-    organizations: { id: number; name: string }[];
+    organizations: { id: number; public_id: string; name: string }[];
     onClose: () => void;
 }) {
     const form = useForm({
-        organization_id: organizations[0]?.id ?? 0,
+        organization_id: organizations[0]?.public_id ?? '',
         amount: '',
         reason: '',
         expires_at: '',
@@ -326,16 +328,13 @@ function GrantCredit({
                             className={ccInput}
                             value={form.data.organization_id}
                             onChange={(e) =>
-                                form.setData(
-                                    'organization_id',
-                                    Number(e.target.value),
-                                )
+                                form.setData('organization_id', e.target.value)
                             }
                         >
                             {organizations.map((organization) => (
                                 <option
-                                    key={organization.id}
-                                    value={organization.id}
+                                    key={organization.public_id}
+                                    value={organization.public_id}
                                 >
                                     {organization.name}
                                 </option>
@@ -460,7 +459,7 @@ export default function Billing({
     statuses: Record<string, string>;
     summary: Summary;
     credits: Credit[];
-    organizations: { id: number; name: string }[];
+    organizations: { id: number; public_id: string; name: string }[];
     can_manage: boolean;
     can_pay: boolean;
 }) {
@@ -641,7 +640,7 @@ export default function Billing({
                                     </tr>
                                 )}
                                 {invoices.map((invoice) => {
-                                    const organizationUrl = `/control-center/organizations/${invoice.organization_id}`;
+                                    const organizationUrl = `/control-center/organizations/${invoice.organization_public_id}`;
 
                                     return (
                                         <tr
@@ -826,7 +825,7 @@ export default function Billing({
                                         <td className="px-3 py-3">
                                             <div className="flex justify-center">
                                                 <Link
-                                                    href={`/control-center/organizations/${credit.organization_id}?tab=billing`}
+                                                    href={`/control-center/organizations/${credit.organization_public_id}?tab=billing`}
                                                     className={iconButton}
                                                     aria-label="Ver organización"
                                                     title="Billing de la organización"

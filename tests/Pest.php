@@ -96,6 +96,12 @@ function ccPrice(string $planCode, string $period = 'monthly'): int
 }
 
 /** Client organization onboarded through the Control Center service; returns its id. */
+/** Control Center URL of an organization: by its random public id, the way every screen links to it. */
+function ccOrgUrl(int|string|null $organizationId): string
+{
+    return '/control-center/organizations/'.DB::table('organizations')->where('id', (int) $organizationId)->value('public_id');
+}
+
 function ccOrganization(User $actor, string $planCode = 'professional', bool $trial = false, string $name = 'Firma Cliente'): int
 {
     return app(OrganizationManagementService::class)->onboard($actor, ['name' => $name, 'plan_price_id' => ccPrice($planCode), 'trial' => $trial,

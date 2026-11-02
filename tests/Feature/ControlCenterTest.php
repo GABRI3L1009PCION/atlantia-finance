@@ -121,7 +121,7 @@ test('organizations are onboarded, then suspended with re-authentication, reacti
     $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Otra', 'plan_price_id' => ccPrice('essential'), 'trial' => true,
         'owner_name' => 'Yo', 'owner_email' => $owner->email, 'office_name' => 'Central'])->assertSessionHasErrors('owner_email');
 
-    $url = '/control-center/organizations/'.$organization->id.'/status/';
+    $url = ccOrgUrl($organization->id).'/status/';
     $this->actingAs($owner)->post($url.'suspend', ['password' => 'incorrecta', 'reason' => 'Revisión de cuenta'])->assertSessionHasErrors('password');
     $this->actingAs($owner)->post($url.'suspend', ccConfirm(['reason' => 'x']))->assertSessionHasErrors('reason');
     expect(DB::table('organizations')->where('id', $organization->id)->value('status'))->toBe('trial');
@@ -141,7 +141,7 @@ test('organizations are onboarded, then suspended with re-authentication, reacti
         ->and(DB::table('platform_audit_events')->where('entity_id', (string) $organization->id)->whereIn('action', ['organization.created', 'organization.suspended', 'organization.reactivated', 'organization.archived'])->count())->toBe(5)
         ->and(DB::table('platform_audit_events')->where('action', 'organization.suspended')->value('sensitive'))->toBeTrue();
     // Deleting is a sensitive action too: without re-authentication nothing happens.
-    $this->actingAs($owner)->delete('/control-center/organizations/'.$organization->id, ['reason' => 'Creada por error'])->assertSessionHasErrors('password');
+    $this->actingAs($owner)->delete(ccOrgUrl($organization->id), ['reason' => 'Creada por error'])->assertSessionHasErrors('password');
     expect(DB::table('organizations')->where('id', $organization->id)->value('deleted_at'))->toBeNull();
 });
 
@@ -434,10 +434,10 @@ test('the owner invitation can be resent from the Control Center with a fresh li
     $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Reenvío', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
         'owner_name' => 'Ana Dueña', 'owner_email' => 'ana@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
     $organizationId = (int) DB::table('organizations')->where('name', 'Reenvío')->value('id');
-    $this->get('/control-center/organizations/'.$organizationId)->assertInertia(fn (Assert $page) => $page->where('owner_invitation.email', 'ana@cliente.test')->where('owner_invitation.sent_count', 1));
+    $this->get(ccOrgUrl($organizationId))->assertInertia(fn (Assert $page) => $page->where('owner_invitation.email', 'ana@cliente.test')->where('owner_invitation.sent_count', 1));
 
     $this->travel(20)->days();
-    $this->post('/control-center/organizations/'.$organizationId.'/invitation/resend')->assertSessionHasNoErrors();
+    $this->post(ccOrgUrl($organizationId).'/invitation/resend')->assertSessionHasNoErrors();
 
     $urls = [];
     Notification::assertSentOnDemand(WorkspaceInvitation::class, function (WorkspaceInvitation $notification) use (&$urls): bool {
@@ -457,7 +457,7 @@ test('the owner invitation can be resent from the Control Center with a fresh li
 
     // Once the owner has joined there is nothing to resend.
     DB::table('invitations')->where('id', $invitation->id)->update(['status' => 'accepted', 'accepted_at' => now()]);
-    $this->actingAs($owner)->post('/control-center/organizations/'.$organizationId.'/invitation/resend')->assertSessionHasErrors('invitation');
+    $this->actingAs($owner)->post(ccOrgUrl($organizationId).'/invitation/resend')->assertSessionHasErrors('invitation');
 });
 
 test('a firm created by mistake can be deleted, but not one that was already used', function () {
@@ -470,17 +470,17 @@ test('a firm created by mistake can be deleted, but not one that was already use
     $used = (int) DB::table('organizations')->where('name', 'En Uso')->value('id');
     DB::table('organization_user')->insert(['organization_id' => $used, 'user_id' => User::factory()->create()->id, 'role' => 'owner', 'status' => 'active', 'joined_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
 
-    $this->get('/control-center/organizations/'.$used)->assertInertia(fn (Assert $page) => $page->where('deletion_blocker', 'Ya tiene usuarios que activaron su cuenta.'));
-    $this->delete('/control-center/organizations/'.$used, ccConfirm())->assertSessionHasErrors('organization');
+    $this->get(ccOrgUrl($used))->assertInertia(fn (Assert $page) => $page->where('deletion_blocker', 'Ya tiene usuarios que activaron su cuenta.'));
+    $this->delete(ccOrgUrl($used), ccConfirm())->assertSessionHasErrors('organization');
     expect(DB::table('organizations')->where('id', $used)->value('deleted_at'))->toBeNull();
 
-    $this->delete('/control-center/organizations/'.$mistake, ccConfirm())->assertRedirect('/control-center/organizations')->assertSessionHasNoErrors();
+    $this->delete(ccOrgUrl($mistake), ccConfirm())->assertRedirect('/control-center/organizations')->assertSessionHasNoErrors();
     expect(DB::table('organizations')->where('id', $mistake)->first())->deleted_at->not->toBeNull()->status->toBe('archived')
         ->and(DB::table('subscriptions')->where('organization_id', $mistake)->value('status'))->toBe('cancelled')
         ->and(DB::table('invitations')->where('organization_id', $mistake)->value('status'))->toBe('canceled')
         ->and(DB::table('platform_audit_events')->where('action', 'organization.deleted')->value('sensitive'))->toBeTrue();
     $this->get('/control-center/organizations')->assertInertia(fn (Assert $page) => $page->has('organizations', 1)->where('organizations.0.name', 'En Uso'));
-    $this->get('/control-center/organizations/'.$mistake)->assertNotFound();
+    $this->get(ccOrgUrl($mistake))->assertNotFound();
 });
 
 test('the link of a deleted firm shows a clear page, while the firm created again with the same owner works', function () {
@@ -488,7 +488,7 @@ test('the link of a deleted firm shows a clear page, while the firm created agai
     $create = fn () => $this->actingAs($owner)->post('/control-center/organizations', ['name' => 'Repetida', 'plan_price_id' => ccPrice('professional'), 'trial' => true,
         'owner_name' => 'Ana Dueña', 'owner_email' => 'ana@cliente.test', 'office_name' => 'Central'])->assertSessionHasNoErrors();
     $create();
-    $this->delete('/control-center/organizations/'.DB::table('organizations')->where('name', 'Repetida')->value('id'), ccConfirm())->assertSessionHasNoErrors();
+    $this->delete(ccOrgUrl(DB::table('organizations')->where('name', 'Repetida')->value('id')), ccConfirm())->assertSessionHasNoErrors();
     $create();
 
     $urls = [];
@@ -513,7 +513,7 @@ test('the organizations list carries every field the edit form sends back, so ed
     $this->get('/control-center/organizations')->assertInertia(fn (Assert $page) => $page->where('organizations', fn ($rows) => collect($rows)->contains(fn ($row) => $row['id'] === $id
         && $row['legal_name'] === 'Contadores del Sur, S.A.' && $row['timezone'] === 'America/Guatemala' && $row['beta_program'] === true && $row['tax_id'] === '7654321-0')));
 
-    $this->put('/control-center/organizations/'.$id, ['name' => 'Contadores del Sur Guatemala', 'legal_name' => 'Contadores del Sur, S.A.', 'tax_identifier' => '7654321-0',
+    $this->put(ccOrgUrl($id), ['name' => 'Contadores del Sur Guatemala', 'legal_name' => 'Contadores del Sur, S.A.', 'tax_identifier' => '7654321-0',
         'timezone' => 'America/Guatemala', 'beta_program' => true])->assertSessionHasNoErrors();
 
     expect(DB::table('organizations')->where('id', $id)->first())
@@ -556,7 +556,7 @@ test('the subscriptions screen lists the client organizations a new subscription
             && ! collect($rows)->contains(fn ($row) => $row['id'] === PlatformIssuer::organizationId())));
 
     // The firm already has a trial, so a second current subscription is refused: its plan is changed instead.
-    $this->post('/control-center/organizations/'.$id.'/subscriptions', ['plan_price_id' => ccPrice('professional'), 'trial' => false, 'discount_percent' => 10])->assertSessionHasErrors('subscription');
+    $this->post(ccOrgUrl($id).'/subscriptions', ['plan_price_id' => ccPrice('professional'), 'trial' => false, 'discount_percent' => 10])->assertSessionHasErrors('subscription');
     expect(DB::table('subscriptions')->where('organization_id', $id)->count())->toBe(1);
 });
 
@@ -569,7 +569,23 @@ test('a credit can be granted to a client organization chosen from the billing s
     $this->get('/control-center/billing')->assertInertia(fn (Assert $page) => $page->component('control-center/billing')
         ->where('organizations', fn ($rows) => collect($rows)->contains(fn ($row) => $row['id'] === $id)));
 
-    $this->post('/control-center/organizations/'.$id.'/credits', ['amount' => 150, 'reason' => 'Compensación por incidente'])->assertSessionHasNoErrors();
+    $this->post(ccOrgUrl($id).'/credits', ['amount' => 150, 'reason' => 'Compensación por incidente'])->assertSessionHasNoErrors();
     $this->get('/control-center/billing')->assertInertia(fn (Assert $page) => $page
         ->where('credits', fn ($credits) => collect($credits)->contains(fn ($credit) => (int) $credit['organization_id'] === $id && (float) $credit['remaining'] === 150.0)));
+});
+
+test('organizations are reached by their random public id: the sequential id no longer opens anything', function () {
+    $owner = ccOwner();
+    $id = ccOrganization($owner, 'professional', true, 'Firma Oculta');
+    $publicId = (string) DB::table('organizations')->where('id', $id)->value('public_id');
+    $this->actingAs($owner);
+
+    $this->get('/control-center/organizations/'.$id)->assertNotFound();
+    $this->get('/control-center/organizations/'.$publicId)->assertOk()->assertInertia(fn (Assert $page) => $page->component('control-center/organization')
+        ->where('detail.organization.public_id', $publicId));
+    $this->get('/control-center/organizations/00000000-0000-4000-8000-000000000000')->assertNotFound();
+    $this->get('/control-center/organizations')->assertInertia(fn (Assert $page) => $page
+        ->where('organizations', fn ($rows) => collect($rows)->contains(fn ($row) => $row['destination'] === '/control-center/organizations/'.$publicId)));
+    $this->get('/control-center/offices')->assertInertia(fn (Assert $page) => $page
+        ->where('offices', fn ($rows) => collect($rows)->contains(fn ($row) => $row['organization_id'] === $id && $row['organization_public_id'] === $publicId)));
 });

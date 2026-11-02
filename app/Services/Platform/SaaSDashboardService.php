@@ -112,12 +112,12 @@ class SaaSDashboardService
         return array_values(DB::table('saas_invoices')->join('organizations', 'organizations.id', '=', 'saas_invoices.organization_id')
             ->leftJoin('subscriptions', 'subscriptions.id', '=', 'saas_invoices.subscription_id')->whereIn('saas_invoices.status', ['open', 'past_due'])
             ->where('saas_invoices.due_on', '<', now()->toDateString())->orderBy('saas_invoices.due_on')->limit(10)
-            ->get(['saas_invoices.*', 'organizations.name as organization_name', 'subscriptions.status as subscription_status', 'subscriptions.grace_ends_at'])
+            ->get(['saas_invoices.*', 'organizations.name as organization_name', 'organizations.public_id as organization_public_id', 'subscriptions.status as subscription_status', 'subscriptions.grace_ends_at'])
             ->map(fn (stdClass $row): array => ['organization' => (string) $row->organization_name, 'invoice' => (string) $row->number, 'amount' => (float) $row->total, 'currency' => (string) $row->currency_code,
                 'days_overdue' => (int) Carbon::parse($row->due_on)->diffInDays(now()->startOfDay()), 'subscription_status' => $row->subscription_status,
                 'subscription_label' => PlatformStatus::SUBSCRIPTION_LABELS[$row->subscription_status ?? ''] ?? '—',
                 'grace_period_remaining' => $row->grace_ends_at === null ? null : max(0, (int) now()->startOfDay()->diffInDays(Carbon::parse($row->grace_ends_at), false)),
-                'destination' => '/control-center/organizations/'.$row->organization_id.'?tab=billing'])->all());
+                'destination' => '/control-center/organizations/'.$row->organization_public_id.'?tab=billing'])->all());
     }
 
     /** @return array<string, mixed> */

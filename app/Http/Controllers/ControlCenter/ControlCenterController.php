@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use stdClass;
 
 /**
  * Shared base of the Atlantia Control Center screens: the SaaS role, permissions (for the dynamic menu), badges and
@@ -64,7 +65,62 @@ abstract class ControlCenterController extends Controller
                     ->get(['support_access_requests.id', 'organizations.name as organization', 'support_access_requests.expires_at'])->all(),
             ],
             'reveal' => $request->session()->get('platform_reveal'),
-            ...$props,
+            ...$this->withOrganizationPublicIds($props),
         ]);
+    }
+
+    /**
+     * Next to every organization_id the screens receive, adds that organization's public id (organization_public_id):
+     * links are built with it, so the sequential id never shows up in a URL. One query covers the whole page.
+     *
+     * @param  array<string, mixed>  $props
+     * @return array<string, mixed>
+     */
+    private function withOrganizationPublicIds(array $props): array
+    {
+        $ids = [];
+        $collect = function (mixed $value) use (&$collect, &$ids): void {
+            if ($value instanceof stdClass) {
+                $value = get_object_vars($value);
+            }
+            if (! is_array($value)) {
+                return;
+            }
+            if (isset($value['organization_id']) && is_numeric($value['organization_id'])) {
+                $ids[(int) $value['organization_id']] = true;
+            }
+            foreach ($value as $item) {
+                $collect($item);
+            }
+        };
+        $collect($props);
+        if ($ids === []) {
+            return $props;
+        }
+        $publicIds = DB::table('organizations')->whereIn('id', array_keys($ids))->pluck('public_id', 'id')->all();
+        $attach = function (mixed $value) use (&$attach, $publicIds): mixed {
+            if ($value instanceof stdClass) {
+                foreach (get_object_vars($value) as $key => $item) {
+                    $value->{$key} = $attach($item);
+                }
+                if (isset($value->organization_id) && is_numeric($value->organization_id)) {
+                    $value->organization_public_id = $publicIds[(int) $value->organization_id] ?? null;
+                }
+
+                return $value;
+            }
+            if (! is_array($value)) {
+                return $value;
+            }
+            $value = array_map($attach, $value);
+            if (isset($value['organization_id']) && is_numeric($value['organization_id'])) {
+                $value['organization_public_id'] = $publicIds[(int) $value['organization_id']] ?? null;
+            }
+
+            return $value;
+        };
+
+        /** @var array<string, mixed> */
+        return $attach($props);
     }
 }

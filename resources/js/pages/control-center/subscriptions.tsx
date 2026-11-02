@@ -35,6 +35,7 @@ import {
 type Subscription = {
     id: number;
     organization_id: number;
+    organization_public_id: string | null;
     organization: string | null;
     plan: string | null;
     plan_version: number | null;
@@ -223,12 +224,12 @@ function NewSubscription({
     prices,
     onClose,
 }: {
-    organizations: { id: number; name: string }[];
+    organizations: { id: number; public_id: string; name: string }[];
     prices: { id: number; label: string }[];
     onClose: () => void;
 }) {
     const form = useForm({
-        organization_id: organizations[0]?.id ?? 0,
+        organization_id: organizations[0]?.public_id ?? '',
         plan_price_id: prices[0]?.id ?? 0,
         trial: true,
         discount_percent: '',
@@ -259,16 +260,13 @@ function NewSubscription({
                             className={ccInput}
                             value={form.data.organization_id}
                             onChange={(e) =>
-                                form.setData(
-                                    'organization_id',
-                                    Number(e.target.value),
-                                )
+                                form.setData('organization_id', e.target.value)
                             }
                         >
                             {organizations.map((organization) => (
                                 <option
-                                    key={organization.id}
-                                    value={organization.id}
+                                    key={organization.public_id}
+                                    value={organization.public_id}
                                 >
                                     {organization.name}
                                 </option>
@@ -562,7 +560,7 @@ export default function Subscriptions({
     filters: { status?: string; search?: string };
     statuses: Record<string, string>;
     prices: { id: number; label: string }[];
-    organizations: { id: number; name: string }[];
+    organizations: { id: number; public_id: string; name: string }[];
     can_manage: boolean;
 }) {
     const [search, setSearch] = useState(filters.search ?? '');
@@ -789,7 +787,7 @@ export default function Subscriptions({
                                     </tr>
                                 )}
                                 {shown.map((s) => {
-                                    const organizationUrl = `/control-center/organizations/${s.organization_id}`;
+                                    const organizationUrl = `/control-center/organizations/${s.organization_public_id}`;
 
                                     return (
                                         <tr
