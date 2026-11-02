@@ -12,6 +12,7 @@ use App\Services\Platform\PlatformHealthService;
 use App\Services\Platform\PlatformLogReader;
 use App\Services\Platform\PlatformLuzmaAssistant;
 use App\Services\Platform\SupportTicketService;
+use App\Support\PlatformIssuer;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -552,7 +553,7 @@ test('the subscriptions screen lists the client organizations a new subscription
 
     $this->get('/control-center/subscriptions')->assertInertia(fn (Assert $page) => $page->component('control-center/subscriptions')
         ->where('organizations', fn ($rows) => collect($rows)->contains(fn ($row) => $row['id'] === $id && $row['name'] === 'Firma Nueva')
-            && ! collect($rows)->contains(fn ($row) => $row['id'] === App\Support\PlatformIssuer::organizationId())));
+            && ! collect($rows)->contains(fn ($row) => $row['id'] === PlatformIssuer::organizationId())));
 
     // The firm already has a trial, so a second current subscription is refused: its plan is changed instead.
     $this->post('/control-center/organizations/'.$id.'/subscriptions', ['plan_price_id' => ccPrice('professional'), 'trial' => false, 'discount_percent' => 10])->assertSessionHasErrors('subscription');
