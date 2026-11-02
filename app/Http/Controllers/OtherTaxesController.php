@@ -32,7 +32,7 @@ class OtherTaxesController extends Controller
             'iusi' => $this->taxes->iusi($record->id, $year),
             'uses' => OtherTaxesService::PROPERTY_USES,
             'stamps' => $this->taxes->stamps($record->id, $year.'-01-01', $year.'-12-31'),
-            'stampRate' => OtherTaxesService::STAMP_RATE_BP,
+            'stampRate' => $this->taxes->stampRate($record->id, now()->toDateString()),
             'contributions' => $this->taxes->employerContributions($record->id, $year),
             'iso' => $this->taxes->iso($record->id, $year),
             'canManage' => $this->can($request, $organization, $record, 'fiscal.manage'),

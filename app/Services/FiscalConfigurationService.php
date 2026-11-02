@@ -75,6 +75,14 @@ class FiscalConfigurationService
             'accounts' => ['recoverable' => null, 'payable' => '2203'],
             'rate_basis_points' => 500, 'threshold_cents' => null, 'calculation_note' => 'fesp_withholding', 'valid_from' => '2019-06-01',
         ],
+        [
+            // Documents taxed with timbres fiscales (contracts, leases…). Its own type so it never opens a withholding return.
+            'code' => 'TIMBRES_FISCALES', 'name' => 'Impuesto de timbres fiscales', 'tax_type' => 'stamp', 'regime' => 'general',
+            'applies_to' => 'both', 'price_includes_tax' => false, 'recoverable' => false,
+            'legal_basis' => 'Decreto 37-92, Ley del Impuesto de Timbres Fiscales, artículo 4', 'sat_form' => '',
+            'accounts' => ['recoverable' => null, 'payable' => '2209'],
+            'rate_basis_points' => 300, 'threshold_cents' => null, 'calculation_note' => 'stamp_documents', 'valid_from' => '1992-07-01',
+        ],
     ];
 
     public function ensureDefaults(int $companyId, ?int $userId = null): stdClass
@@ -107,7 +115,7 @@ class FiscalConfigurationService
                     'price_includes_tax' => $tax['price_includes_tax'],
                     'recoverable' => $tax['recoverable'],
                     'legal_basis' => $tax['legal_basis'],
-                    'sat_form' => $tax['sat_form'],
+                    'sat_form' => $tax['sat_form'] === '' ? null : $tax['sat_form'],
                     'is_system' => true,
                     'status' => 'active',
                     'created_by' => $userId,

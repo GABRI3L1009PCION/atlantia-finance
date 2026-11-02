@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
+use App\Services\FiscalConfigurationService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -38,8 +39,8 @@ class OtherTaxesService
         ['from' => '2026-11-26', 'law' => 'Decreto 18-2026', 'exempt_uses' => ['residential', 'mixed'], 'brackets' => [[50000000, 30], [100000000, 60], [null, 90]]],
     ];
 
-    /** General rate of the timbres fiscales on documents (Decreto 37-92, artículo 4). */
-    public const STAMP_RATE_BP = 300;
+    /** Code of the timbres fiscales tax in the company's fiscal parameters (3 % by default, Decreto 37-92, artículo 4). */
+    public const STAMP_TAX_CODE = 'TIMBRES_FISCALES';
 
     private const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -48,7 +49,16 @@ class OtherTaxesService
         private AccountingAutomationService $automation,
         private IsoService $iso,
         private IsrService $isr,
+        private FiscalConfigurationService $fiscal,
     ) {}
+
+    /** Timbres fiscales rate valid on a date, in basis points, as configured in the company's fiscal parameters. */
+    public function stampRate(int $companyId, string $date): int
+    {
+        $this->fiscal->ensureDefaults($companyId);
+
+        return (int) $this->fiscal->activeRule($companyId, self::STAMP_TAX_CODE, $date)->rate_basis_points;
+    }
 
     /**
      * @return array{law: string, rate_bp: int, annual_cents: int, quarterly_cents: int}
@@ -167,8 +177,9 @@ class OtherTaxesService
      */
     public function addStamp(Organization $organization, User $user, int $companyId, array $data): int
     {
-        $tax = intdiv($data['taxable_cents'] * self::STAMP_RATE_BP + 5000, 10000);
-        $id = DB::table('stamp_tax_documents')->insertGetId([...$data, 'organization_id' => $organization->id, 'company_id' => $companyId, 'rate_bp' => self::STAMP_RATE_BP, 'tax_cents' => $tax,
+        $rate = $this->stampRate($companyId, $data['document_date']);
+        $tax = intdiv($data['taxable_cents'] * $rate + 5000, 10000);
+        $id = DB::table('stamp_tax_documents')->insertGetId([...$data, 'organization_id' => $organization->id, 'company_id' => $companyId, 'rate_bp' => $rate, 'tax_cents' => $tax,
             'created_by' => $user->id, 'created_at' => now(), 'updated_at' => now()]);
         $this->draft($organization, $user, $companyId, 'stamp_tax', $id, $data['document_date'], 'Timbres fiscales: '.$data['description'], '5259', '2209', $tax);
         $this->accounting->audit($organization, $user, 'fiscal.stamp_tax.recorded', 'stamp_tax_documents', $id, ['taxable_cents' => $data['taxable_cents'], 'tax_cents' => $tax]);

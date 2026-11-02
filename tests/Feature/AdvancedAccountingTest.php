@@ -255,6 +255,13 @@ test('as a withholding agent the payment suggests IVA and ISR by law and the SAT
         ->where('withholdingSuggestions', [['kind' => 'iva', 'base_cents' => 300000, 'rate_bp' => 500, 'amount_cents' => 15000, 'reason' => 'Pequeño contribuyente: se le retiene el 5 % del total de la factura.']]));
     $this->get(route('accounting.purchaseShow', [$f['uuid'], $purchase($supplierId, 'FACT', '1000.00')]))->assertInertia(fn (Assert $page) => $page->where('withholdingSuggestions', []));
 
+    // The rates come from the fiscal parameters: a new version of the pequeño contribuyente rate changes the suggestion.
+    $fiscal = app(FiscalConfigurationService::class);
+    $smallTax = (int) DB::table('fiscal_taxes')->where('company_id', $f['companyId'])->where('code', 'IVA_PEQUENO')->value('id');
+    $fiscal->addVersion($f['companyId'], $smallTax, $f['owner']->id, ['rate_basis_points' => 600, 'valid_from' => '2026-08-01']);
+    $this->get(route('accounting.purchaseShow', [$f['uuid'], $purchase($small, 'FPEQ', '3000.00')]))->assertInertia(fn (Assert $page) => $page
+        ->where('withholdingSuggestions.0.rate_bp', 600)->where('withholdingSuggestions.0.amount_cents', 18000)->where('withholdingSuggestions.0.reason', 'Pequeño contribuyente: se le retiene el 6 % del total de la factura.'));
+
     $this->post(route('accounting.purchasePayment', [$f['uuid'], $big]), ['request_id' => (string) Str::uuid(), 'amount' => '40320.00', 'paid_on' => '2026-08-20', 'reference' => 'TRF-9',
         'withholdings' => [['kind' => 'iva', 'base' => '4320.00', 'rate' => '15'], ['kind' => 'isr', 'base' => '36000.00', 'rate' => '5.33']]])->assertSessionHasNoErrors();
     $withholding = DB::table('purchase_payment_withholdings')->where('kind', 'iva')->first();
