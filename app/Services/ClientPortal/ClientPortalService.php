@@ -108,7 +108,7 @@ class ClientPortalService
             $open = DB::table('client_requests')->where('company_id', $companyId)->where('source_type', 'fiscal_obligations')->whereIn('status', ClientRequestService::OPEN)
                 ->groupBy('source_id')->selectRaw('source_id, CAST(COUNT(*) AS BIGINT) as total')->pluck('total', 'source_id');
             $rows = DB::table('fiscal_obligations')->where('company_id', $companyId)->whereNotIn('status', ['cancelled', 'not_applicable'])->where('due_on', '>=', now()->subMonths(3)->toDateString())
-                ->orderBy('due_on')->limit(60)->get(['id', 'name', 'reference_period', 'due_on', 'status', 'completed_at', 'filed_on']);
+                ->orderBy('due_on')->limit(60)->get(['id', 'name', 'reference_period', 'due_on', 'status', 'completed_at', 'filed_on', 'payment_amount_cents', 'payment_access_number', 'evidence_path']);
 
             return ['error' => false, 'rows' => array_values($rows->map(function (stdClass $row) use ($open): array {
                 $missing = (int) ($open[$row->id] ?? 0);
@@ -116,7 +116,11 @@ class ClientPortalService
 
                 return ['id' => (int) $row->id, 'name' => (string) $row->name, 'period' => (string) $row->reference_period, 'due_date' => (string) $row->due_on, 'status' => $status === 'information_pending' ? 'information_pending' : ($row->status === 'completed' ? 'completed' : 'in_progress'),
                     'status_label' => $missing > 0 ? 'Pendiente de información' : (self::OBLIGATION_LABELS[$row->status] ?? 'En preparación'), 'documentation' => $missing > 0 ? 'Faltan '.$missing : 'Completa',
-                    'missing' => $missing, 'filed_on' => $row->filed_on, 'note' => $row->status === 'completed' ? null : 'La obligación está en preparación; los montos se informan cuando estén aprobados.'];
+                    'missing' => $missing, 'filed_on' => $row->filed_on,
+                    'payment_amount_cents' => $row->payment_amount_cents === null ? null : (int) $row->payment_amount_cents,
+                    'payment_access_number' => $row->payment_access_number === null ? null : (string) $row->payment_access_number,
+                    'has_evidence' => $row->status === 'completed' && $row->evidence_path !== null,
+                    'note' => $row->status === 'completed' || $row->payment_amount_cents !== null ? null : 'La obligación está en preparación; los montos se informan cuando estén aprobados.'];
             })->all())];
         } catch (Throwable $exception) {
             Log::warning('Client obligations failed', ['company_id' => $companyId, 'error' => $exception->getMessage()]);

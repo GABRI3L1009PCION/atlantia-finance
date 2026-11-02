@@ -240,6 +240,17 @@ class ClientPortalController extends Controller
         return $this->render($request, 'client/obligations', ['obligations' => $this->portal->obligations((int) $company->id)]);
     }
 
+    /** The filing receipt of one of the company's presented obligations. */
+    public function obligationEvidence(Request $request, int $obligation): HttpResponse
+    {
+        [$organization, $user, $company] = $this->resolve($request, 'client.obligations.view');
+        $row = DB::table('fiscal_obligations')->where('company_id', $company->id)->where('id', $obligation)->where('status', 'completed')->whereNotNull('evidence_path')->first();
+        abort_if($row === null || ! Storage::disk('local')->exists((string) $row->evidence_path), 404);
+        app(AccountingService::class)->audit($organization, $user, 'client.obligation.evidence_downloaded', 'fiscal_obligations', (int) $row->id, []);
+
+        return Storage::disk('local')->download((string) $row->evidence_path, (string) ($row->evidence_name ?? 'constancia'), ['Cache-Control' => 'no-store, private']);
+    }
+
     public function fel(Request $request): Response
     {
         [$organization, $user, $company] = $this->resolve($request, 'client.fel.view');
