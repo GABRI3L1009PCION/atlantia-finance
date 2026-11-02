@@ -15,7 +15,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import type { LibraryDocument } from '@/components/library/kit';
 
-type Cover = {
+export type Cover = {
     from: string;
     to: string;
     accent: string;
@@ -86,9 +86,70 @@ export const categoryTabIcon: Record<string, LucideIcon> = {
     interna: BookOpen,
 };
 
+/** Palette of every cover, so other screens (project documentation) can dress their files the same way. */
+export const bookCovers = covers;
+
+/** The printed cover of a book: spine shadow, page edges, framed title. Shared by the library and the project documentation. */
+export function BookCover({
+    cover,
+    title,
+    reference,
+    footer = 'Guatemala',
+}: {
+    cover: Cover;
+    title: string;
+    reference?: string | null;
+    footer?: string;
+}) {
+    const Icon = cover.icon;
+
+    return (
+        <div
+            className="relative aspect-[3/4.1] overflow-hidden rounded-l-sm rounded-r-lg shadow-[6px_10px_18px_-6px_rgba(0,0,0,.45)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[8px_16px_24px_-8px_rgba(0,0,0,.5)]"
+            style={{
+                backgroundImage: `linear-gradient(145deg, ${cover.from}, ${cover.to})`,
+                color: cover.text,
+            }}
+        >
+            <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/45 to-transparent"
+            />
+            <span
+                aria-hidden
+                className="absolute inset-y-0 right-0 w-1.5 bg-[repeating-linear-gradient(0deg,rgba(255,255,255,.55)_0_1px,rgba(210,200,180,.9)_1px_3px)] opacity-70"
+            />
+            <span
+                aria-hidden
+                className="absolute inset-3 rounded-sm border"
+                style={{ borderColor: `${cover.accent}88` }}
+            />
+            <div className="relative flex h-full flex-col items-center px-5 pt-6 pb-4 text-center">
+                <Icon className="size-7" style={{ color: cover.accent }} />
+                <p
+                    className="mt-3 font-serif text-[15px] leading-tight font-bold tracking-wide uppercase"
+                    style={{ textWrap: 'balance' }}
+                >
+                    {title}
+                </p>
+                {reference && (
+                    <p
+                        className="mt-2 font-serif text-[11px]"
+                        style={{ color: cover.accent }}
+                    >
+                        {reference}
+                    </p>
+                )}
+                <p className="mt-auto text-[10px] tracking-[0.25em] uppercase opacity-80">
+                    {footer}
+                </p>
+            </div>
+        </div>
+    );
+}
+
 function Book({ document }: { document: LibraryDocument }) {
     const cover = covers[document.category] ?? fallbackCover;
-    const Icon = cover.icon;
     const kind = document.is_full_text ? cover.kind : 'Resumen';
 
     return (
@@ -98,50 +159,11 @@ function Book({ document }: { document: LibraryDocument }) {
                 className="group block"
                 aria-label={`Abrir ${document.title}`}
             >
-                <div
-                    className="relative aspect-[3/4.1] overflow-hidden rounded-l-sm rounded-r-lg shadow-[6px_10px_18px_-6px_rgba(0,0,0,.45)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[8px_16px_24px_-8px_rgba(0,0,0,.5)]"
-                    style={{
-                        backgroundImage: `linear-gradient(145deg, ${cover.from}, ${cover.to})`,
-                        color: cover.text,
-                    }}
-                >
-                    <span
-                        aria-hidden
-                        className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/45 to-transparent"
-                    />
-                    <span
-                        aria-hidden
-                        className="absolute inset-y-0 right-0 w-1.5 bg-[repeating-linear-gradient(0deg,rgba(255,255,255,.55)_0_1px,rgba(210,200,180,.9)_1px_3px)] opacity-70"
-                    />
-                    <span
-                        aria-hidden
-                        className="absolute inset-3 rounded-sm border"
-                        style={{ borderColor: `${cover.accent}88` }}
-                    />
-                    <div className="relative flex h-full flex-col items-center px-5 pt-6 pb-4 text-center">
-                        <Icon
-                            className="size-7"
-                            style={{ color: cover.accent }}
-                        />
-                        <p
-                            className="mt-3 font-serif text-[15px] leading-tight font-bold tracking-wide uppercase"
-                            style={{ textWrap: 'balance' }}
-                        >
-                            {document.short_title}
-                        </p>
-                        {document.reference && (
-                            <p
-                                className="mt-2 font-serif text-[11px]"
-                                style={{ color: cover.accent }}
-                            >
-                                {document.reference}
-                            </p>
-                        )}
-                        <p className="mt-auto text-[10px] tracking-[0.25em] uppercase opacity-80">
-                            Guatemala
-                        </p>
-                    </div>
-                </div>
+                <BookCover
+                    cover={cover}
+                    title={document.short_title}
+                    reference={document.reference}
+                />
                 <p className="mt-3 text-xs font-bold text-[#061633]">{kind}</p>
                 <p className="line-clamp-2 min-h-8 text-[11px] text-[#526b92]">
                     {document.title}
