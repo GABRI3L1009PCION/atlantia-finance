@@ -131,7 +131,7 @@ class ClientReminderService
             if (! $settings['enabled'] || $settings['days_before'] === []) {
                 continue;
             }
-            $companyIds = DB::table('companies')->where('organization_id', $organization->id)->where('office_id', $office->id)->pluck('id')->map(fn ($id): int => (int) $id)->all();
+            $companyIds = array_values(DB::table('companies')->where('organization_id', $organization->id)->where('office_id', $office->id)->pluck('id')->map(fn ($id): int => (int) $id)->all());
             if ($companyIds === []) {
                 continue;
             }
