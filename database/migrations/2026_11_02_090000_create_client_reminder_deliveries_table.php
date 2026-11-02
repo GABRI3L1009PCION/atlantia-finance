@@ -43,6 +43,7 @@ return new class extends Migration
         DB::statement('ALTER TABLE client_reminder_deliveries ENABLE ROW LEVEL SECURITY');
         DB::statement('ALTER TABLE client_reminder_deliveries FORCE ROW LEVEL SECURITY');
         DB::statement('CREATE POLICY tenant_isolation ON client_reminder_deliveries USING (atlantia_is_system() OR organization_id = atlantia_current_organization_id()) WITH CHECK (atlantia_is_system() OR organization_id = atlantia_current_organization_id())');
+        DB::statement('CREATE POLICY hide_deleted_companies ON client_reminder_deliveries AS RESTRICTIVE USING (company_id NOT IN (SELECT unnest(atlantia_hidden_company_ids())))');
     }
 
     public function down(): void
