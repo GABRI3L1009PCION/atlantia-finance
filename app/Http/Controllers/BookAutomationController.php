@@ -59,8 +59,8 @@ class BookAutomationController extends Controller
         ], ['match_text.min' => 'El texto a buscar necesita al menos 3 caracteres.']);
         $this->rules->create($organization, $request->user(), (int) $record->id, [
             'name' => $data['name'], 'match_text' => $data['match_text'], 'flow' => $data['flow'],
-            'min_amount_cents' => $data['min_amount'] === null ? null : (int) round(((float) $data['min_amount']) * 100),
-            'max_amount_cents' => $data['max_amount'] === null ? null : (int) round(((float) $data['max_amount']) * 100),
+            'min_amount_cents' => ($data['min_amount'] ?? null) === null ? null : (int) round(((float) $data['min_amount']) * 100),
+            'max_amount_cents' => ($data['max_amount'] ?? null) === null ? null : (int) round(((float) $data['max_amount']) * 100),
             'ledger_account_id' => (int) $data['ledger_account_id'], 'priority' => (int) ($data['priority'] ?? 100),
         ]);
 

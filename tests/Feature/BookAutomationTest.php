@@ -52,7 +52,9 @@ test('bank rules classify the pending movements their text recognizes and draft 
     $deposit = $movement('DEPOSITO ENERGUATE REEMBOLSO', 'inflow', 5000);
     $other = $movement('CHEQUE 1001', 'outflow', 100000);
 
-    $this->post($base.'/bank-rules', ['name' => 'Energía eléctrica', 'match_text' => 'energuate', 'flow' => 'outflow', 'ledger_account_id' => $f['accounts']['5204']])->assertSessionHasNoErrors();
+    $this->post($base.'/bank-rules', ['name' => 'Energía eléctrica', 'match_text' => 'energuate', 'flow' => 'outflow', 'ledger_account_id' => $f['accounts']['5204']])
+        ->assertRedirect()->assertSessionHasNoErrors();
+    expect(DB::table('bank_rules')->where('company_id', $f['companyId'])->count())->toBe(1);
     $this->post($base.'/bank-rules', ['name' => 'Corto', 'match_text' => 'ab', 'flow' => 'any', 'ledger_account_id' => $f['accounts']['5204']])->assertSessionHasErrors('match_text');
     $this->post($base.'/bank-rules/apply')->assertSessionHasNoErrors();
     // A second pass finds nothing left and reports no failure: any reason a recognized movement could not be drafted shows here.
