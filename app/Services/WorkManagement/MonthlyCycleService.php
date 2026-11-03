@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\ClientPortal\ClientRequestService;
 use App\Services\ClientPortal\PublishedReportService;
 use App\Services\Fiscal\FiscalObligationGenerationService;
+use App\Support\SpanishMonth;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -98,7 +99,7 @@ class MonthlyCycleService
     {
         $today = CarbonImmutable::parse(($today ?? now('America/Guatemala'))->toDateString());
         $totals = ['obligations' => 0, 'opened' => 0, 'tasks' => 0, 'requests' => 0, 'packages' => 0];
-        $companyIds = DB::table('companies')->where('organization_id', $organization->id)->pluck('id')->map(fn ($id): int => (int) $id)->values()->all();
+        $companyIds = array_values(DB::table('companies')->where('organization_id', $organization->id)->pluck('id')->map(fn ($id): int => (int) $id)->all());
         if ($companyIds === []) {
             return $totals;
         }
@@ -141,7 +142,7 @@ class MonthlyCycleService
     {
         $month = $today->startOfMonth()->subMonthNoOverflow();
         $period = $month->format('Y-m');
-        $label = $month->locale('es')->translatedFormat('F Y');
+        $label = SpanishMonth::label($month);
         if ($this->claim($organization, (int) $company->id, $period, 'opened')) {
             try {
                 $created = DB::transaction(function () use ($organization, $owner, $company, $month): int {
@@ -229,7 +230,7 @@ class MonthlyCycleService
             return null;
         }
 
-        return (int) DB::table('accounting_periods')->insertGetId(['company_id' => $companyId, 'name' => ucfirst($month->locale('es')->translatedFormat('F Y')),
+        return (int) DB::table('accounting_periods')->insertGetId(['company_id' => $companyId, 'name' => ucfirst(SpanishMonth::label($month)),
             'starts_on' => $start, 'ends_on' => $end, 'status' => 'open', 'created_at' => now(), 'updated_at' => now()]);
     }
 
@@ -240,8 +241,8 @@ class MonthlyCycleService
      */
     private function reviewers(int $organizationId, int $companyId, int $preparerId): array
     {
-        return DB::table('company_assignments')->where('organization_id', $organizationId)->where('company_id', $companyId)->where('status', 'active')->whereNull('deleted_at')
-            ->where('user_id', '<>', $preparerId)->pluck('user_id')->map(fn ($id): int => (int) $id)->unique()->values()->all();
+        return array_values(DB::table('company_assignments')->where('organization_id', $organizationId)->where('company_id', $companyId)->where('status', 'active')->whereNull('deleted_at')
+            ->where('user_id', '<>', $preparerId)->pluck('user_id')->map(fn ($id): int => (int) $id)->unique()->all());
     }
 
     private function owner(Organization $organization): ?User
