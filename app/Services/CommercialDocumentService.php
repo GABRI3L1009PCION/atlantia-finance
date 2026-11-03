@@ -119,15 +119,15 @@ class CommercialDocumentService
             } elseif ($data['target'] === 'sales_invoice') {
                 $convertedId = $this->invoices->create($organization, $user, $company, [
                     'request_id' => $requestId, 'customer_id' => (int) $document->sales_customer_id, 'issued_on' => $data['document_date'], 'due_on' => $data['due_on'],
-                    'lines' => array_map(fn (array $line): array => ['description' => $line['description'], 'quantity' => $line['quantity'], 'unit_price' => $line['unit_price'],
-                        'tax_treatment' => $line['tax_treatment']], $lines),
+                    'lines' => array_values(array_map(fn (array $line): array => ['description' => $line['description'], 'quantity' => $line['quantity'], 'unit_price' => $line['unit_price'],
+                        'tax_treatment' => $line['tax_treatment']], $lines)),
                 ], ['source' => 'commercial_document', 'document' => $document->public_id])['id'];
             } else {
                 $convertedId = $this->purchases->create($organization, $user, $company, [
                     'request_id' => $requestId, 'supplier_id' => (int) $document->purchase_supplier_id, 'document_type' => 'purchase', 'document_date' => $data['document_date'],
                     'due_on' => $data['due_on'], 'external_reference' => $this->code('purchase_order', (int) $document->number),
-                    'lines' => array_map(fn (array $line): array => ['account_id' => (int) $line['account_id'], 'description' => $line['description'], 'quantity' => $line['quantity'],
-                        'unit_price' => $line['unit_price'], 'tax_treatment' => $line['tax_treatment']], $lines),
+                    'lines' => array_values(array_map(fn (array $line): array => ['account_id' => (int) $line['account_id'], 'description' => $line['description'], 'quantity' => $line['quantity'],
+                        'unit_price' => $line['unit_price'], 'tax_treatment' => $line['tax_treatment']], $lines)),
                     'fiscal_document_type' => 'FACT', 'fiscal_series' => $data['fiscal_series'] ?? null, 'fiscal_number' => $data['fiscal_number'] ?? null,
                     'fiscal_authorization' => $data['fiscal_authorization'] ?? null,
                 ], ['source' => 'commercial_document', 'document' => $document->public_id])['id'];
