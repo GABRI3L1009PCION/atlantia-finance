@@ -151,6 +151,7 @@ class WorkAdminService
         return [
             'info' => (array) $office,
             'client_reminders' => app(ClientReminderService::class)->overview($office),
+            'monthly_cycle' => app(MonthlyCycleService::class)->overview($office),
             'companies' => DB::table('companies')
                 ->where('office_id', $officeId)
                 ->orderBy('name')

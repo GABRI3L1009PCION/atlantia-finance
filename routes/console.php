@@ -22,6 +22,7 @@ use App\Services\Receivables\CollectionAutomationService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkManagement\CompanyDeletionService;
 use App\Services\WorkManagement\CrmAlertService;
+use App\Services\WorkManagement\MonthlyCycleService;
 use App\Services\WorkManagement\OfficeStaffingAlertService;
 use App\Services\WorkManagement\ReminderService;
 use App\Services\WorkManagement\TaskSyncService;
@@ -269,6 +270,23 @@ Artisan::command('budgets:alerts', function (BudgetService $budgets) {
 })->purpose('Avisa una vez al mes de los presupuestos aprobados cuyas cuentas se desvían del umbral');
 
 Schedule::command('budgets:alerts')->dailyAt('09:10')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
+
+Artisan::command('month:cycle', function (TenantDatabaseContext $tenancy, MonthlyCycleService $cycle) {
+    $totals = $tenancy->runAsSystem(function () use ($cycle): array {
+        $sum = ['obligations' => 0, 'opened' => 0, 'tasks' => 0, 'requests' => 0, 'packages' => 0];
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            foreach ($cycle->sweep($organization) as $key => $value) {
+                $sum[$key] += $value;
+            }
+        }
+
+        return $sum;
+    });
+    $this->info("Ciclo mensual: {$totals['obligations']} obligaciones nuevas, {$totals['opened']} meses abiertos con {$totals['tasks']} tareas, {$totals['requests']} solicitudes al cliente, {$totals['packages']} paquetes de cierre en revisión.");
+})->purpose('Abre el mes de trabajo de cada oficina: calendario fiscal, período y tareas, solicitudes recurrentes al cliente y paquete de cierre');
+
+// Before the office arrives: the day's tasks, requests and packages are ready when the team logs in.
+Schedule::command('month:cycle')->dailyAt('06:40')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
 
 Artisan::command('clients:remind', function (TenantDatabaseContext $tenancy, ClientReminderService $reminders) {
     $sent = $tenancy->runAsSystem(function () use ($reminders): int {

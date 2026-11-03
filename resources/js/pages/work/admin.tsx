@@ -858,6 +858,237 @@ function OfficesScreen({ admin }: { admin: Props['admin'] }) {
     );
 }
 
+type MonthlyCycle = {
+    settings: {
+        enabled: boolean;
+        open_day: number;
+        recurring_requests: { title: string; type: string; due_day: number }[];
+        close_package: boolean;
+    };
+    request_types: Record<string, string>;
+    recent: {
+        company: string;
+        period: string;
+        step: string;
+        items: number;
+        at: string;
+    }[];
+};
+
+const cycleSteps: Record<string, string> = {
+    opened: 'Mes abierto (tareas)',
+    requests: 'Solicitudes al cliente',
+    close_package: 'Paquete de cierre en revisión',
+};
+
+function MonthlyCycleForm({
+    officeId,
+    overview,
+}: {
+    officeId: number;
+    overview: MonthlyCycle;
+}) {
+    const form = useForm({
+        enabled: overview.settings.enabled,
+        open_day: overview.settings.open_day,
+        recurring_requests: overview.settings.recurring_requests,
+        close_package: overview.settings.close_package,
+    });
+    const messages = Object.values(
+        form.errors as Record<string, string | undefined>,
+    ).filter(Boolean);
+    const updateRequest = (
+        index: number,
+        values: Partial<{ title: string; type: string; due_day: number }>,
+    ) =>
+        form.setData(
+            'recurring_requests',
+            form.data.recurring_requests.map((request, position) =>
+                position === index ? { ...request, ...values } : request,
+            ),
+        );
+
+    return (
+        <form
+            onSubmit={(event) => {
+                event.preventDefault();
+                form.patch(`/office/offices/${officeId}/monthly-cycle`, {
+                    preserveScroll: true,
+                });
+            }}
+            className={`${panel} space-y-4 p-5`}
+        >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                    <ListChecks className="mt-0.5 size-5 text-[#640000]" />
+                    <div>
+                        <h2 className="text-lg font-black">
+                            Ciclo mensual automático
+                        </h2>
+                        <p className="text-sm text-slate-600">
+                            El día que elijas se abre el mes anterior de cada
+                            empresa de la oficina: su período, sus tareas y las
+                            solicitudes al cliente. Al cerrar un período, sus
+                            estados financieros quedan preparados para que un
+                            segundo contador los apruebe y los publique.
+                        </p>
+                    </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm font-bold">
+                    <input
+                        type="checkbox"
+                        className="size-4 accent-[#640000]"
+                        checked={form.data.enabled}
+                        onChange={(event) =>
+                            form.setData('enabled', event.target.checked)
+                        }
+                    />
+                    {form.data.enabled ? 'Activado' : 'Desactivado'}
+                </label>
+            </div>
+            <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+                <label className="space-y-1 text-sm">
+                    <span className="font-bold">Día de apertura</span>
+                    <input
+                        type="number"
+                        min={1}
+                        max={28}
+                        className={`${input} w-full`}
+                        value={form.data.open_day}
+                        onChange={(event) =>
+                            form.setData('open_day', Number(event.target.value))
+                        }
+                    />
+                    <span className="block text-xs text-slate-500">
+                        Del 1 al 28 de cada mes.
+                    </span>
+                </label>
+                <div className="space-y-2 text-sm">
+                    <span className="font-bold">
+                        Solicitudes al cliente cada mes
+                    </span>
+                    {form.data.recurring_requests.map((request, index) => (
+                        <div
+                            key={index}
+                            className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_110px_auto]"
+                        >
+                            <input
+                                className={input}
+                                value={request.title}
+                                placeholder="Estados de cuenta bancarios"
+                                onChange={(event) =>
+                                    updateRequest(index, {
+                                        title: event.target.value,
+                                    })
+                                }
+                            />
+                            <select
+                                className={input}
+                                value={request.type}
+                                onChange={(event) =>
+                                    updateRequest(index, {
+                                        type: event.target.value,
+                                    })
+                                }
+                            >
+                                {Object.entries(overview.request_types).map(
+                                    ([value, label]) => (
+                                        <option key={value} value={value}>
+                                            {label}
+                                        </option>
+                                    ),
+                                )}
+                            </select>
+                            <input
+                                type="number"
+                                min={1}
+                                max={28}
+                                title="Día límite"
+                                className={input}
+                                value={request.due_day}
+                                onChange={(event) =>
+                                    updateRequest(index, {
+                                        due_day: Number(event.target.value),
+                                    })
+                                }
+                            />
+                            <button
+                                type="button"
+                                className={ghostButton}
+                                onClick={() =>
+                                    form.setData(
+                                        'recurring_requests',
+                                        form.data.recurring_requests.filter(
+                                            (_, position) => position !== index,
+                                        ),
+                                    )
+                                }
+                            >
+                                <Trash2 className="size-4" />
+                            </button>
+                        </div>
+                    ))}
+                    {form.data.recurring_requests.length < 10 && (
+                        <button
+                            type="button"
+                            className={ghostButton}
+                            onClick={() =>
+                                form.setData('recurring_requests', [
+                                    ...form.data.recurring_requests,
+                                    { title: '', type: 'document', due_day: 5 },
+                                ])
+                            }
+                        >
+                            <Plus className="size-4" /> Agregar solicitud
+                        </button>
+                    )}
+                    <span className="block text-xs text-slate-500">
+                        El número es el día límite del mes para que el cliente
+                        responda.
+                    </span>
+                </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+                <input
+                    type="checkbox"
+                    className="size-4 accent-[#640000]"
+                    checked={form.data.close_package}
+                    onChange={(event) =>
+                        form.setData('close_package', event.target.checked)
+                    }
+                />
+                Preparar el paquete de cierre (estado de resultados y balance)
+                al cerrar cada período
+            </label>
+            {messages.length > 0 && (
+                <p className="text-sm text-[#b91c1c]">{messages.join(' ')}</p>
+            )}
+            <button className={button} disabled={form.processing}>
+                Guardar ciclo mensual
+            </button>
+            {overview.recent.length > 0 && (
+                <div className="overflow-x-auto border-t border-slate-100 pt-4">
+                    <p className="mb-2 text-sm font-bold">Últimos pasos</p>
+                    <table className="min-w-full text-sm">
+                        <tbody className="divide-y divide-slate-100">
+                            {overview.recent.map((row, index) => (
+                                <tr key={index}>
+                                    <td className="py-2 pr-4">{row.company}</td>
+                                    <td className="py-2 pr-4">{row.period}</td>
+                                    <td className="py-2 pr-4">
+                                        {cycleSteps[row.step] ?? row.step}
+                                    </td>
+                                    <td className="py-2 pr-4">{row.items}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </form>
+    );
+}
+
 type ClientReminders = {
     settings: {
         enabled: boolean;
@@ -1093,6 +1324,12 @@ function OfficeDetailScreen({ admin }: { admin: Props['admin'] }) {
     return (
         <div className="space-y-5">
             <OfficeForm office={office} />
+            {admin.office?.monthly_cycle && (
+                <MonthlyCycleForm
+                    officeId={Number(office.id)}
+                    overview={admin.office.monthly_cycle as MonthlyCycle}
+                />
+            )}
             {admin.office?.client_reminders && (
                 <ClientRemindersForm
                     officeId={Number(office.id)}
