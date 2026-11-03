@@ -247,7 +247,7 @@ class MonthlyCycleService
 
     private function owner(Organization $organization): ?User
     {
-        $id = DB::table('organization_user')->where('organization_id', $organization->id)->where('role', 'owner')->where('status', 'active')->orderBy('id')->value('user_id');
+        $id = DB::table('organization_user')->where('organization_id', $organization->id)->where('role', 'owner')->where('status', 'active')->orderBy('user_id')->value('user_id');
 
         return $id === null ? null : User::query()->find((int) $id);
     }
