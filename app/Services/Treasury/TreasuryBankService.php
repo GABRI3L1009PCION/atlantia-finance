@@ -151,7 +151,7 @@ class TreasuryBankService
                 }
             }
             // What no counterpart explains, the company's bank rules may recognize (ENERGUATE → electricity, etc.).
-            $byRules = $pending === [] ? 0 : $this->rules->apply($organization, $user, $companyId, $pending);
+            $byRules = $pending === [] ? 0 : $this->rules->apply($organization, $user, $companyId, $pending)['applied'];
             DB::table('bank_accounts')->where('id', $account->id)->update(['bank_balance_cents' => $balance, 'updated_at' => now()]);
             $this->accounting->audit($organization, $user, 'bank_transaction.imported', 'bank_accounts', (int) $account->id, ['imported' => $imported, 'auto_matched' => $autoMatched, 'by_rules' => $byRules], null);
 

@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
 use App\Services\FiscalConfigurationService;
+use App\Services\Treasury\BankRuleService;
 use Database\Seeders\PlanCatalogSeeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -54,6 +55,8 @@ test('bank rules classify the pending movements their text recognizes and draft 
     $this->post($base.'/bank-rules', ['name' => 'Energía eléctrica', 'match_text' => 'energuate', 'flow' => 'outflow', 'ledger_account_id' => $f['accounts']['5204']])->assertSessionHasNoErrors();
     $this->post($base.'/bank-rules', ['name' => 'Corto', 'match_text' => 'ab', 'flow' => 'any', 'ledger_account_id' => $f['accounts']['5204']])->assertSessionHasErrors('match_text');
     $this->post($base.'/bank-rules/apply')->assertSessionHasNoErrors();
+    // A second pass finds nothing left and reports no failure: any reason a recognized movement could not be drafted shows here.
+    expect(app(BankRuleService::class)->apply($f['organization'], $f['owner'], $f['companyId'], [$power, $accented]))->toBe(['applied' => 0, 'errors' => []]);
 
     $classified = DB::table('bank_transactions')->whereIn('id', [$power, $accented])->get();
     expect($classified->pluck('classification')->unique()->all())->toBe(['rule'])

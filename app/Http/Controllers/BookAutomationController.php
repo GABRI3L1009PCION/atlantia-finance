@@ -86,9 +86,10 @@ class BookAutomationController extends Controller
     public function applyRules(Request $request, string $company): RedirectResponse
     {
         [$organization, $record] = $this->scopeCompany($request, $company, 'banks.manage');
-        $applied = DB::transaction(fn (): int => $this->rules->apply($organization, $request->user(), (int) $record->id));
+        $result = DB::transaction(fn (): array => $this->rules->apply($organization, $request->user(), (int) $record->id));
 
-        return back()->with('workspace_notice', $applied.' movimiento(s) pendientes clasificados por reglas, con su asiento en borrador.');
+        return back()->with('workspace_notice', $result['applied'].' movimiento(s) pendientes clasificados por reglas, con su asiento en borrador.'
+            .($result['errors'] === [] ? '' : ' No se pudieron clasificar: '.implode('; ', array_slice($result['errors'], 0, 3)).'.'));
     }
 
     public function storeTemplate(Request $request, string $company): RedirectResponse

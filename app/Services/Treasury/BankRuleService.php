@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AccountingAutomationService;
 use App\Services\AccountingService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use stdClass;
@@ -66,15 +67,17 @@ class BankRuleService
     }
 
     /**
-     * Applies the rules to the company's pending movements (or to the given ones). Returns how many were classified.
+     * Applies the rules to the company's pending movements (or to the given ones). Returns how many were classified and
+     * why the recognized ones that could not be drafted failed.
      *
      * @param  list<int>|null  $transactionIds
+     * @return array{applied: int, errors: list<string>}
      */
-    public function apply(Organization $organization, User $user, int $companyId, ?array $transactionIds = null): int
+    public function apply(Organization $organization, User $user, int $companyId, ?array $transactionIds = null): array
     {
         $rules = DB::table('bank_rules')->where('company_id', $companyId)->where('is_active', true)->orderBy('priority')->orderBy('id')->get();
         if ($rules->isEmpty()) {
-            return 0;
+            return ['applied' => 0, 'errors' => []];
         }
         $movements = DB::table('bank_transactions')->join('bank_accounts', 'bank_accounts.id', '=', 'bank_transactions.bank_account_id')
             ->where('bank_accounts.company_id', $companyId)->where('bank_transactions.reconciliation_status', 'pending')->whereNull('bank_transactions.classification')
@@ -82,6 +85,7 @@ class BankRuleService
             ->orderBy('bank_transactions.transaction_date')->limit(2000)
             ->get(['bank_transactions.*', 'bank_accounts.ledger_account_id', 'bank_accounts.bank_name']);
         $applied = 0;
+        $errors = [];
         foreach ($movements as $movement) {
             $rule = $rules->first(fn (stdClass $rule): bool => $this->matches($rule, $movement));
             if ($rule === null || $movement->ledger_account_id === null) {
@@ -103,15 +107,17 @@ class BankRuleService
                     DB::table('bank_rules')->where('id', $rule->id)->update(['times_applied' => DB::raw('times_applied + 1'), 'last_applied_at' => now(), 'updated_at' => now()]);
                 });
                 $applied++;
-            } catch (Throwable) {
-                continue;
+            } catch (Throwable $exception) {
+                $reason = $exception instanceof ValidationException ? (string) collect($exception->errors())->flatten()->first() : $exception->getMessage();
+                $errors[] = mb_substr($movement->reference.': '.$reason, 0, 300);
+                Log::warning('Bank rule could not draft the entry', ['transaction_id' => $movement->id, 'error' => $reason]);
             }
         }
         if ($applied > 0) {
             $this->accounting->audit($organization, $user, 'bank_rule.applied', 'companies', $companyId, ['movements' => $applied]);
         }
 
-        return $applied;
+        return ['applied' => $applied, 'errors' => $errors];
     }
 
     /** Whether a rule recognizes a movement. */
