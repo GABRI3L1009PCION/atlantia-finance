@@ -75,7 +75,7 @@ class SatDteImportService
         return match ($extension) {
             'csv', 'txt' => $this->fromTable($this->csvRows((string) file_get_contents($path))),
             'xlsx', 'xls' => $this->fromTable($this->spreadsheetRows($path)),
-            'xml' => array_values(array_filter([$this->fromXml((string) file_get_contents($path))])),
+            'xml' => $this->xmlRows((string) file_get_contents($path)),
             'zip' => $this->fromZip($path),
             default => throw ValidationException::withMessages(['files' => 'Sube el listado de DTE en CSV o Excel, los XML o un ZIP con ellos.']),
         };
@@ -324,11 +324,19 @@ class SatDteImportService
                 continue;
             }
             $content = (string) $zip->getFromIndex($index);
-            $rows = [...$rows, ...($extension === 'xml' ? array_values(array_filter([$this->fromXml($content)])) : $this->fromTable($this->csvRows($content)))];
+            $rows = [...$rows, ...($extension === 'xml' ? $this->xmlRows($content) : $this->fromTable($this->csvRows($content)))];
         }
         $zip->close();
 
         return $rows;
+    }
+
+    /** @return list<DteRow> */
+    private function xmlRows(string $xml): array
+    {
+        $row = $this->fromXml($xml);
+
+        return $row === null ? [] : [$row];
     }
 
     /**
@@ -351,7 +359,8 @@ class SatDteImportService
         }
         $xpath = new DOMXPath($dom);
         $find = function (string $name) use ($xpath): ?DOMElement {
-            $node = $xpath->query('//*[local-name()="'.$name.'"]')?->item(0);
+            $nodes = $xpath->query('//*[local-name()="'.$name.'"]');
+            $node = $nodes === false ? null : $nodes->item(0);
 
             return $node instanceof DOMElement ? $node : null;
         };

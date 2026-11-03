@@ -11,6 +11,7 @@ use App\Services\AccountingService;
 use App\Services\ClientPortal\ClientAccessService;
 use App\Services\Notifications\ClientMailIdentityService;
 use App\Services\WorkManagement\WorkNotificationService;
+use App\Support\SpanishMonth;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -87,7 +88,7 @@ class ClientPaymentPackageService
         if ($package['items'] === [] || ! $package['ready']) {
             throw ValidationException::withMessages(['package' => 'Indica el monto a pagar de cada obligación del mes (0 si no hay pago) antes de enviar el paquete.']);
         }
-        $monthName = CarbonImmutable::create($year, $month, 1)->locale('es')->translatedFormat('F Y');
+        $monthName = SpanishMonth::label(CarbonImmutable::parse(sprintf('%04d-%02d-01', $year, $month)));
         $title = $payable === [] ? 'Impuestos de '.$monthName.': este mes no hay pagos' : 'Impuestos de '.$monthName.': pagas Q'.number_format($package['total_cents'] / 100, 2).' antes del '.$this->date((string) $package['due_on']);
         $lines = array_map(fn (array $item): string => '- '.$item['name'].' ('.$item['reference_period'].'): Q'.number_format(((int) $item['amount_cents']) / 100, 2).' · vence el '.$this->date($item['due_on'])
             .($item['access_number'] !== null ? ' · número de acceso '.$item['access_number'] : ''), $payable);
