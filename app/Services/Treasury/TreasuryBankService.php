@@ -30,6 +30,7 @@ class TreasuryBankService
     public function __construct(
         private AccountingService $accounting,
         private AccountingAutomationService $automation,
+        private BankRuleService $rules,
     ) {}
 
     /**
@@ -110,7 +111,7 @@ class TreasuryBankService
      * Persists the valid rows of a preview once (the token is consumed; unique hashes and references protect against
      * double imports) and auto-matches only unambiguous movements.
      *
-     * @return array{imported: int, auto_matched: int}
+     * @return array{imported: int, auto_matched: int, by_rules: int}
      */
     public function confirm(Organization $organization, User $user, int $companyId, string $token): array
     {
@@ -128,6 +129,7 @@ class TreasuryBankService
             $balance = (int) $account->bank_balance_cents;
             $imported = 0;
             $autoMatched = 0;
+            $pending = [];
 
             foreach ($rows as $row) {
                 if (DB::table('bank_transactions')->where('bank_account_id', $account->id)->where(fn ($query) => $query->where('import_hash', $row['hash'])->orWhere('reference', $row['reference']))->exists()) {
@@ -144,12 +146,16 @@ class TreasuryBankService
                 if (count($candidates) === 1 && $candidates[0]['exact_reference']) {
                     $this->applyMatch($organization, null, $id, $candidates[0]['type'], $candidates[0]['id']);
                     $autoMatched++;
+                } else {
+                    $pending[] = $id;
                 }
             }
+            // What no counterpart explains, the company's bank rules may recognize (ENERGUATE → electricity, etc.).
+            $byRules = $pending === [] ? 0 : $this->rules->apply($organization, $user, $companyId, $pending);
             DB::table('bank_accounts')->where('id', $account->id)->update(['bank_balance_cents' => $balance, 'updated_at' => now()]);
-            $this->accounting->audit($organization, $user, 'bank_transaction.imported', 'bank_accounts', (int) $account->id, ['imported' => $imported, 'auto_matched' => $autoMatched], null);
+            $this->accounting->audit($organization, $user, 'bank_transaction.imported', 'bank_accounts', (int) $account->id, ['imported' => $imported, 'auto_matched' => $autoMatched, 'by_rules' => $byRules], null);
 
-            return ['imported' => $imported, 'auto_matched' => $autoMatched];
+            return ['imported' => $imported, 'auto_matched' => $autoMatched, 'by_rules' => $byRules];
         });
     }
 
