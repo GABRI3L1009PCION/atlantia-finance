@@ -191,7 +191,7 @@ class MonthlyCycleService
             if (! $this->claim($organization, (int) $company->id, $key, 'close_package')) {
                 continue;
             }
-            $actor = $period->closed_by === null ? $owner : (User::query()->find($period->closed_by) ?? $owner);
+            $actor = $period->closed_by === null ? $owner : (User::query()->find((int) $period->closed_by) ?? $owner);
             $reports = 0;
             foreach (self::CLOSE_REPORTS as $type) {
                 try {
@@ -249,7 +249,7 @@ class MonthlyCycleService
     {
         $id = DB::table('organization_user')->where('organization_id', $organization->id)->where('role', 'owner')->where('status', 'active')->orderBy('id')->value('user_id');
 
-        return $id === null ? null : User::query()->find($id);
+        return $id === null ? null : User::query()->find((int) $id);
     }
 
     private function claim(Organization $organization, int $companyId, string $period, string $step): bool
