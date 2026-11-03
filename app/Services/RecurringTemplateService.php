@@ -230,7 +230,7 @@ class RecurringTemplateService
         }
         $owner = DB::table('organization_user')->where('organization_id', $organization->id)->where('role', 'owner')->where('status', 'active')->orderBy('id')->value('user_id');
 
-        return $owner === null ? null : User::query()->find($owner);
+        return $owner === null ? null : User::query()->find((int) $owner);
     }
 
     private function firstRun(CarbonImmutable $start, int $day): CarbonImmutable
