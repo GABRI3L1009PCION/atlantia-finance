@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Schema;
  * downloads from the Agencia Virtual (or from the XML files). They feed the bulk registration of purchases and the
  * cross-check of the books against the SAT. Each DTE is kept once per company by its authorization number; loading the
  * listing again updates its status (an invoice the issuer annulled afterwards).
-
  */
 return new class extends Migration
 {
