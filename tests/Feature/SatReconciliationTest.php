@@ -24,7 +24,7 @@ beforeEach(function () {
 });
 
 /** A firm with one company (NIT 1234567-8), its chart, fiscal defaults and a client contact in the portal. */
-function satFixture(): array
+function satCrossCheckFixture(): array
 {
     $owner = User::factory()->create();
     $organization = Organization::create(['name' => 'Firma SAT '.Str::random(4), 'status' => 'active']);
@@ -64,7 +64,7 @@ function satListing(bool $r1Annulled = false): string
 }
 
 test('the office loads the SAT listing of the month, registers the missing purchases and sees what does not match', function () {
-    $f = satFixture();
+    $f = satCrossCheckFixture();
     $this->travelTo(Carbon::parse('2026-11-03 09:00'));
     $base = '/accounting/companies/'.$f['uuid'].'/sat-reconciliation';
 
@@ -105,7 +105,7 @@ test('the office loads the SAT listing of the month, registers the missing purch
 });
 
 test('DTE can also be loaded from their XML, and documents of other NITs are ignored', function () {
-    $f = satFixture();
+    $f = satCrossCheckFixture();
     $xml = '<?xml version="1.0" encoding="UTF-8"?><dte:GTDocumento xmlns:dte="http://www.sat.gob.gt/dte/fel/0.2.0"><dte:SAT><dte:DTE><dte:DatosEmision>'
         .'<dte:DatosGenerales Tipo="FACT" FechaHoraEmision="2026-09-12T10:00:00-06:00" CodigoMoneda="GTQ"/>'
         .'<dte:Emisor NITEmisor="5544332" NombreEmisor="Ferretería El Sol, S.A."/><dte:Receptor IDReceptor="12345678" NombreReceptor="Comercial Maya, S.A."/>'
@@ -126,7 +126,7 @@ test('DTE can also be loaded from their XML, and documents of other NITs are ign
 });
 
 test('the office sends the client what it pays this month and the client downloads the filing receipt', function () {
-    $f = satFixture();
+    $f = satCrossCheckFixture();
     $this->travelTo(Carbon::parse('2026-11-03 09:00'));
     Mail::fake();
     Storage::fake('local');
