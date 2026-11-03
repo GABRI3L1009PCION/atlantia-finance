@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     BookCheck,
     BookOpenCheck,
+    Workflow,
     Handshake,
     MessagesSquare,
     ListChecks,
@@ -289,6 +290,9 @@ export function AppSidebar() {
     const satReconciliationPath = companyId
         ? `/accounting/companies/${companyId}/sat-reconciliation`
         : '';
+    const automationPath = companyId
+        ? `/accounting/companies/${companyId}/automation`
+        : '';
 
     const home: NavItem[] = companyId
         ? [
@@ -526,6 +530,12 @@ export function AppSidebar() {
                             href: satReconciliationPath,
                             icon: BadgeCheck,
                             isActive: currentPath === satReconciliationPath,
+                        },
+                        {
+                            title: 'Automatización',
+                            href: automationPath,
+                            icon: Workflow,
+                            isActive: currentPath === automationPath,
                         },
                     ]
                   : []),

@@ -121,7 +121,8 @@ class TreasuryController extends Controller
         $result = $bank->confirm($organization, $request->user(), (int) $data['company_id'], (string) $data['token']);
         $this->treasury->syncWork($organization, [(int) $data['company_id']]);
 
-        return back()->with('workspace_notice', $result['imported'].' movimiento(s) importados; '.$result['auto_matched'].' conciliado(s) automáticamente por coincidencia única.');
+        return back()->with('workspace_notice', $result['imported'].' movimiento(s) importados; '.$result['auto_matched'].' conciliado(s) automáticamente por coincidencia única'
+            .($result['by_rules'] > 0 ? ' y '.$result['by_rules'].' clasificado(s) por reglas bancarias' : '').'.');
     }
 
     public function movementAction(Request $request, int $movement, string $action, TreasuryBankService $bank): RedirectResponse

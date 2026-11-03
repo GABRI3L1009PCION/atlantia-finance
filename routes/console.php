@@ -19,6 +19,7 @@ use App\Services\Platform\PlatformHealthService;
 use App\Services\Platform\SupportAccessService;
 use App\Services\Platform\UsageMeterService;
 use App\Services\Receivables\CollectionAutomationService;
+use App\Services\RecurringTemplateService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\WorkManagement\CompanyDeletionService;
 use App\Services\WorkManagement\CrmAlertService;
@@ -270,6 +271,22 @@ Artisan::command('budgets:alerts', function (BudgetService $budgets) {
 })->purpose('Avisa una vez al mes de los presupuestos aprobados cuyas cuentas se desvían del umbral');
 
 Schedule::command('budgets:alerts')->dailyAt('09:10')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
+
+Artisan::command('recurring:run', function (TenantDatabaseContext $tenancy, RecurringTemplateService $recurring) {
+    $totals = $tenancy->runAsSystem(function () use ($recurring): array {
+        $sum = ['entries' => 0, 'invoices' => 0, 'reversals' => 0, 'errors' => 0];
+        foreach (Organization::where('status', 'active')->get() as $organization) {
+            foreach ($recurring->run($organization) as $key => $value) {
+                $sum[$key] += $value;
+            }
+        }
+
+        return $sum;
+    });
+    $this->info("Recurrentes: {$totals['entries']} asientos y {$totals['invoices']} facturas en borrador, {$totals['reversals']} reversos automáticos, {$totals['errors']} con error.");
+})->purpose('Crea los asientos y facturas recurrentes del día y revierte las provisiones programadas');
+
+Schedule::command('recurring:run')->dailyAt('06:10')->timezone('America/Guatemala')->withoutOverlapping()->onOneServer();
 
 Artisan::command('month:cycle', function (TenantDatabaseContext $tenancy, MonthlyCycleService $cycle) {
     $totals = $tenancy->runAsSystem(function () use ($cycle): array {
