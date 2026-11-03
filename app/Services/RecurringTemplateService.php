@@ -228,7 +228,7 @@ class RecurringTemplateService
         if ($preferred !== null && $active($preferred)) {
             return User::query()->find($preferred);
         }
-        $owner = DB::table('organization_user')->where('organization_id', $organization->id)->where('role', 'owner')->where('status', 'active')->orderBy('id')->value('user_id');
+        $owner = DB::table('organization_user')->where('organization_id', $organization->id)->where('role', 'owner')->where('status', 'active')->orderBy('user_id')->value('user_id');
 
         return $owner === null ? null : User::query()->find((int) $owner);
     }
