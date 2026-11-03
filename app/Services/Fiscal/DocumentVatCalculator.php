@@ -14,9 +14,10 @@ use Illuminate\Validation\ValidationException;
  */
 class DocumentVatCalculator
 {
-    public const PURCHASE_TYPES = ['FACT', 'FCAM', 'FPEQ', 'FESP'];
+    /** A debit note (NDEB) raises the balance of an earlier document and carries VAT like an invoice. */
+    public const PURCHASE_TYPES = ['FACT', 'FCAM', 'FPEQ', 'FESP', 'NDEB'];
 
-    public const SALE_TYPES = ['FACT', 'FCAM', 'FPEQ'];
+    public const SALE_TYPES = ['FACT', 'FCAM', 'FPEQ', 'NDEB'];
 
     public const TREATMENTS = ['goods', 'services', 'exempt'];
 

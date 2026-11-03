@@ -12,6 +12,7 @@ export const fiscalDocumentTypes: Record<string, string> = {
     FCAM: 'Factura cambiaria (FCAM)',
     FPEQ: 'Factura pequeño contribuyente (FPEQ)',
     FESP: 'Factura especial (FESP)',
+    NDEB: 'Nota de débito (NDEB)',
 };
 
 export const taxTreatments: Record<TaxTreatment, string> = {
