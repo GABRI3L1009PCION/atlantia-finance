@@ -172,8 +172,8 @@ class RecurringTemplateService
         $this->invoices->create($organization, $actor, $company, [
             'request_id' => (string) Str::uuid(), 'customer_id' => (int) ($payload['customer_id'] ?? 0), 'issued_on' => $date,
             'due_on' => CarbonImmutable::parse($date)->addDays((int) ($payload['due_days'] ?? 0))->toDateString(),
-            'lines' => array_map(fn (array $line): array => ['description' => (string) $line['description'], 'quantity' => (int) $line['quantity'], 'unit_price' => (string) $line['unit_price'],
-                'tax_treatment' => (string) ($line['tax_treatment'] ?? 'services')], $payload['lines'] ?? []),
+            'lines' => array_values(array_map(fn (array $line): array => ['description' => (string) $line['description'], 'quantity' => (int) $line['quantity'], 'unit_price' => (string) $line['unit_price'],
+                'tax_treatment' => (string) ($line['tax_treatment'] ?? 'services')], $payload['lines'] ?? [])),
         ], ['source' => 'recurring_template', 'template_id' => (int) $template->id]);
     }
 
