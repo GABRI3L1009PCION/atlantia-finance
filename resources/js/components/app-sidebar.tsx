@@ -286,6 +286,9 @@ export function AppSidebar() {
         ? `/accounting/companies/${companyId}/fiscal-settings`
         : '';
     const vatBooksPath = companyId ? accounting.vatBooks.url(companyId) : '';
+    const satReconciliationPath = companyId
+        ? `/accounting/companies/${companyId}/sat-reconciliation`
+        : '';
 
     const home: NavItem[] = companyId
         ? [
@@ -517,6 +520,12 @@ export function AppSidebar() {
                             href: accounting.vatBooks(companyId),
                             icon: BookMarked,
                             isActive: currentPath === vatBooksPath,
+                        },
+                        {
+                            title: 'Cruce con la SAT',
+                            href: satReconciliationPath,
+                            icon: BadgeCheck,
+                            isActive: currentPath === satReconciliationPath,
                         },
                     ]
                   : []),

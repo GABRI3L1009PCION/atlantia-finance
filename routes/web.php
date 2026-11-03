@@ -65,6 +65,7 @@ use App\Http\Controllers\RegionalController;
 use App\Http\Controllers\RevenueController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\SatFileController;
+use App\Http\Controllers\SatReconciliationController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\SupportTicketController;
@@ -178,6 +179,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('companies/{company}/vat-books/export', [VatBookController::class, 'export'])->middleware('throttle:10,1')->name('vatBooksExport');
         Route::post('companies/{company}/vat-books/close', [VatBookController::class, 'close'])->middleware('throttle:10,1')->name('vatBooksClose');
         Route::post('companies/{company}/vat-books/reopen', [VatBookController::class, 'reopen'])->middleware('throttle:10,1')->name('vatBooksReopen');
+        Route::get('companies/{company}/sat-reconciliation', [SatReconciliationController::class, 'index'])->name('satReconciliation');
+        Route::post('companies/{company}/sat-reconciliation/import', [SatReconciliationController::class, 'import'])->middleware('throttle:10,1')->name('satReconciliationImport');
+        Route::post('companies/{company}/sat-reconciliation/purchases', [SatReconciliationController::class, 'registerPurchases'])->middleware('throttle:10,1')->name('satReconciliationPurchases');
+        Route::patch('companies/{company}/sat-reconciliation/obligations/{obligation}', [SatReconciliationController::class, 'obligationPayment'])->whereNumber('obligation')->middleware('throttle:60,1')->name('satReconciliationObligation');
+        Route::post('companies/{company}/sat-reconciliation/package', [SatReconciliationController::class, 'sendPackage'])->middleware('throttle:10,1')->name('satReconciliationPackage');
         Route::post('companies/{company}/fiscal-settings/taxes', [FiscalSettingsController::class, 'storeTax'])->middleware('throttle:20,1')->name('fiscalTaxStore');
         Route::patch('companies/{company}/fiscal-settings/taxes/{tax}', [FiscalSettingsController::class, 'updateTax'])->whereNumber('tax')->middleware('throttle:20,1')->name('fiscalTaxUpdate');
         Route::post('companies/{company}/fiscal-settings/taxes/{tax}/versions', [FiscalSettingsController::class, 'storeTaxVersion'])->whereNumber('tax')->middleware('throttle:20,1')->name('fiscalTaxVersionStore');
@@ -748,6 +754,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('approvals', 'approvals')->name('approvals');
             Route::post('approvals/{approval}/respond', 'respondApproval')->whereNumber('approval')->middleware('throttle:30,1')->name('approvals.respond');
             Route::get('obligations', 'obligations')->name('obligations');
+            Route::get('obligations/{obligation}/evidence', 'obligationEvidence')->whereNumber('obligation')->middleware('throttle:60,1')->name('obligations.evidence');
             Route::get('fel', 'fel')->name('fel');
             Route::get('fel/{document}/pdf', 'felPdf')->whereNumber('document')->middleware('throttle:60,1')->name('fel.pdf');
             Route::get('reports', 'reportsIndex')->name('reports');

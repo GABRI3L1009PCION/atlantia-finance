@@ -130,6 +130,9 @@ export type Obligation = {
     documentation: string;
     missing: number;
     filed_on: string | null;
+    payment_amount_cents: number | null;
+    payment_access_number: string | null;
+    has_evidence: boolean;
     note: string | null;
 };
 
