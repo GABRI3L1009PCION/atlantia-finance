@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\SpanishMonth;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -124,8 +125,13 @@ class RecurringTemplateService
                 }
                 try {
                     DB::transaction(function () use ($organization, $actor, $template, $date, &$totals): void {
-                        $template->kind === 'entry' ? $this->runEntry($organization, $actor, $template, $date) : $this->runInvoice($organization, $actor, $template, $date);
-                        $totals[$template->kind === 'entry' ? 'entries' : 'invoices']++;
+                        if ($template->kind === 'entry') {
+                            $this->runEntry($organization, $actor, $template, $date);
+                            $totals['entries']++;
+                        } else {
+                            $this->runInvoice($organization, $actor, $template, $date);
+                            $totals['invoices']++;
+                        }
                     });
                     $template->next_run_on = $this->next(CarbonImmutable::parse($date), (string) $template->frequency, (int) $template->day_of_month)->toDateString();
                     DB::table('recurring_templates')->where('id', $template->id)->update(['next_run_on' => $template->next_run_on, 'last_run_on' => $date, 'runs' => DB::raw('runs + 1'),
@@ -151,7 +157,7 @@ class RecurringTemplateService
         $lines = $this->accounting->lines((int) $template->company_id, $payload['lines'] ?? []);
         $entryId = $this->accounting->createDraft($organization, $actor, (object) ['id' => (int) $template->company_id], [
             'request_id' => (string) Str::uuid(), 'period_id' => $this->period((int) $template->company_id, $date), 'entry_date' => $date,
-            'description' => mb_substr(($payload['description'] ?? $template->name).' · '.CarbonImmutable::parse($date)->locale('es')->translatedFormat('F Y'), 0, 250),
+            'description' => mb_substr(($payload['description'] ?? $template->name).' · '.SpanishMonth::label(CarbonImmutable::parse($date)), 0, 250),
             'reference' => 'REC-'.$template->id, 'kind' => $template->auto_reverse ? 'provision' : 'standard', 'posting_key' => 'recurring:'.$template->id.':'.$date,
         ], $lines);
         if ($template->auto_reverse) {
@@ -212,7 +218,7 @@ class RecurringTemplateService
         }
         $day = CarbonImmutable::parse($date);
 
-        return (int) DB::table('accounting_periods')->insertGetId(['company_id' => $companyId, 'name' => ucfirst($day->locale('es')->translatedFormat('F Y')),
+        return (int) DB::table('accounting_periods')->insertGetId(['company_id' => $companyId, 'name' => ucfirst(SpanishMonth::label($day)),
             'starts_on' => $day->startOfMonth()->toDateString(), 'ends_on' => $day->endOfMonth()->toDateString(), 'status' => 'open', 'created_at' => now(), 'updated_at' => now()]);
     }
 
