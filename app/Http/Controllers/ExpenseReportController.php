@@ -8,6 +8,7 @@ use App\Http\Controllers\Concerns\ScopesAccountingCompany;
 use App\Services\ExpenseReportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -53,10 +54,13 @@ class ExpenseReportController extends Controller
             'lines.*.receipt' => ['nullable', 'file', 'max:10240', 'extensions:pdf,jpg,jpeg,png'],
         ], ['lines.*.receipt.extensions' => 'El comprobante debe ser PDF o una foto (JPG o PNG).', 'lines.*.receipt.max' => 'Cada comprobante puede pesar hasta 10 MB.']);
         $lines = [];
-        foreach ($data['lines'] as $index => $line) {
-            $lines[] = [...$line, 'amount' => number_format((float) $line['amount'], 2, '.', ''), 'receipt' => $request->file("lines.{$index}.receipt")];
+        foreach (array_values((array) $data['lines']) as $index => $line) {
+            $receipt = $request->file("lines.{$index}.receipt");
+            $lines[] = ['spent_on' => (string) $line['spent_on'], 'description' => (string) $line['description'],
+                'supplier' => isset($line['supplier']) ? (string) $line['supplier'] : null, 'document_reference' => isset($line['document_reference']) ? (string) $line['document_reference'] : null,
+                'account_id' => (int) $line['account_id'], 'amount' => number_format((float) $line['amount'], 2, '.', ''), 'receipt' => $receipt instanceof UploadedFile ? $receipt : null];
         }
-        $this->reports->create($organization, $request->user(), (int) $record->id, ['employee_name' => $data['employee_name'], 'purpose' => $data['purpose'], 'lines' => $lines]);
+        $this->reports->create($organization, $request->user(), (int) $record->id, ['employee_name' => (string) $data['employee_name'], 'purpose' => (string) $data['purpose'], 'lines' => $lines]);
 
         return back()->with('workspace_notice', 'Liquidación de gastos registrada en borrador.');
     }

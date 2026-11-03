@@ -71,12 +71,13 @@ class ExpenseReportService
             ]);
             foreach ($lines as $line) {
                 $receipt = $line['receipt'] ?? null;
-                $path = $receipt instanceof UploadedFile ? $receipt->storeAs('expense-receipts/'.$organization->id.'/'.$companyId, Str::uuid().'.'.$receipt->getClientOriginalExtension(), 'local') : null;
+                $receiptName = $receipt === null ? null : mb_substr($receipt->getClientOriginalName(), 0, 250);
+                $path = $receipt === null ? null : $receipt->storeAs('expense-receipts/'.$organization->id.'/'.$companyId, Str::uuid().'.'.$receipt->getClientOriginalExtension(), 'local') : null;
                 DB::table('expense_report_lines')->insert(['expense_report_id' => $id, 'spent_on' => $line['spent_on'], 'description' => mb_substr($line['description'], 0, 250),
                     'supplier' => filled($line['supplier'] ?? null) ? mb_substr((string) $line['supplier'], 0, 150) : null,
                     'document_reference' => filled($line['document_reference'] ?? null) ? mb_substr((string) $line['document_reference'], 0, 80) : null,
                     'ledger_account_id' => (int) $line['account_id'], 'amount_cents' => $line['amount_cents'], 'receipt_path' => $path === false ? null : $path,
-                    'receipt_name' => $receipt instanceof UploadedFile ? mb_substr($receipt->getClientOriginalName(), 0, 250) : null, 'created_at' => now(), 'updated_at' => now()]);
+                    'receipt_name' => $receiptName, 'created_at' => now(), 'updated_at' => now()]);
             }
             $this->accounting->audit($organization, $user, 'expense_report.created', 'expense_reports', $id, ['lines' => count($lines)]);
 

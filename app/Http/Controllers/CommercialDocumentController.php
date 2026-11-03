@@ -85,7 +85,11 @@ class CommercialDocumentController extends Controller
             'due_on' => 'nullable|date_format:Y-m-d|after_or_equal:document_date', 'fiscal_series' => 'nullable|string|max:40', 'fiscal_number' => 'nullable|string|max:40',
             'fiscal_authorization' => 'nullable|string|max:64',
         ]);
-        $publicId = $this->documents->convert($organization, $request->user(), $record, $document, [...$data, 'due_on' => $data['due_on'] ?? null]);
+        $publicId = $this->documents->convert($organization, $request->user(), $record, $document, [
+            'target' => (string) $data['target'], 'document_date' => (string) $data['document_date'], 'due_on' => isset($data['due_on']) ? (string) $data['due_on'] : null,
+            'fiscal_series' => isset($data['fiscal_series']) ? (string) $data['fiscal_series'] : null, 'fiscal_number' => isset($data['fiscal_number']) ? (string) $data['fiscal_number'] : null,
+            'fiscal_authorization' => isset($data['fiscal_authorization']) ? (string) $data['fiscal_authorization'] : null,
+        ]);
 
         return match ($data['target']) {
             'sales_invoice' => to_route('accounting.invoice', [$company, $publicId])->with('workspace_notice', 'Factura creada en borrador desde el documento.'),
