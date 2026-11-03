@@ -293,6 +293,12 @@ export function AppSidebar() {
     const automationPath = companyId
         ? `/accounting/companies/${companyId}/automation`
         : '';
+    const commercialPath = companyId
+        ? `/accounting/companies/${companyId}/commercial`
+        : '';
+    const expensesPath = companyId
+        ? `/accounting/companies/${companyId}/expenses`
+        : '';
 
     const home: NavItem[] = companyId
         ? [
@@ -536,6 +542,18 @@ export function AppSidebar() {
                             href: automationPath,
                             icon: Workflow,
                             isActive: currentPath === automationPath,
+                        },
+                        {
+                            title: 'Cotizaciones y órdenes',
+                            href: commercialPath,
+                            icon: FileSignature,
+                            isActive: currentPath === commercialPath,
+                        },
+                        {
+                            title: 'Gastos de empleados',
+                            href: expensesPath,
+                            icon: Receipt,
+                            isActive: currentPath === expensesPath,
                         },
                     ]
                   : []),

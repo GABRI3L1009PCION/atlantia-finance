@@ -1029,7 +1029,11 @@ export default function Sales({
                                                 types={
                                                     isSmallTaxpayer
                                                         ? ['FPEQ']
-                                                        : ['FACT', 'FCAM']
+                                                        : [
+                                                              'FACT',
+                                                              'FCAM',
+                                                              'NDEB',
+                                                          ]
                                                 }
                                                 onChange={(key, value) =>
                                                     draft.setData(key, value)
