@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\BackupArchiveService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 test('backup verifier accepts checksums and rejects altered archives', function () {
@@ -37,4 +38,21 @@ test('backup commands expose the controlled operational interface', function () 
         ->assertFailed();
 
     expect(config('backup.retention_days'))->toBeGreaterThan(0);
+});
+
+test('the trash filter works with the empty search path that pg_dump and pg_restore use', function () {
+    $schema = DB::selectOne('SELECT current_schema() AS name')->name;
+    DB::statement("SELECT set_config('search_path', '', true)");
+
+    $hidden = DB::selectOne("SELECT \"{$schema}\".atlantia_hidden_company_ids() AS ids")->ids;
+
+    expect($hidden)->toBe('{}');
+});
+
+test('backups read every organization and the companies in the trash', function () {
+    $environment = (fn (): array => $this->databaseEnvironment())->call(app(BackupArchiveService::class));
+
+    expect($environment['PGOPTIONS'])
+        ->toContain('atlantia.system=on')
+        ->toContain('atlantia.include_deleted=on');
 });
