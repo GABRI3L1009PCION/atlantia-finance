@@ -17,6 +17,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+
+pest()->group('demo-seeders');
+
 beforeEach(function () {
     $this->travelTo(now()->setDate(2026, 10, 29)->setTime(10, 0));
     $this->seed(PlanCorporativoDemoSeeder::class);
