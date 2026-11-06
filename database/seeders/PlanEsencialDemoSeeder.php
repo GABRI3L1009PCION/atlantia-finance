@@ -540,8 +540,24 @@ class PlanEsencialDemoSeeder extends Seeder
         $entries = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
             ->where('p.company_id', $company->id)->where('e.status', 'draft')->orderBy('e.entry_date')->orderBy('e.id')->get(['e.*']);
         foreach ($entries as $entry) {
+            if (in_array($entry->kind, ['standard', 'adjustment', 'opening'], true) && ! DB::table('journal_entry_documents')->where('journal_entry_id', $entry->id)->exists()) {
+                $this->attachSupport($company, $entry);
+            }
             $this->at(CarbonImmutable::parse((string) $entry->entry_date)->setTime(18, 30), fn () => $accounting->post((int) $company->id, $entry, $this->owner));
         }
+    }
+
+    /**
+     * Soporte del asiento antes de contabilizarlo (por ejemplo, la orden de producción): un asiento contabilizado ya no
+     * admite respaldos y, sin ellos, el cierre del período se bloquea.
+     */
+    private function attachSupport(stdClass $company, stdClass $entry): void
+    {
+        $file = UploadedFile::fake()->createWithContent('soporte-'.Str::slug((string) $entry->reference).'.pdf', $this->pdf(['Documento de soporte - demostracion',
+            'Empresa: '.Str::ascii((string) $company->name).'  NIT '.$company->tax_id, 'Concepto: '.Str::ascii((string) $entry->description), 'Referencia: '.$entry->reference,
+            'Fecha: '.$entry->entry_date]));
+        $this->at(CarbonImmutable::parse((string) $entry->entry_date)->setTime(18, 0),
+            fn () => $this->act($this->bookkeeperOf($company), AccountingDocumentController::class, 'store', [], $company, ['entry' => (string) $entry->public_id], ['document' => $file]));
     }
 
     /** Conciliación del banco al cierre del mes anterior: un cheque en circulación y la comisión sin registrar explican la diferencia. */
@@ -949,7 +965,7 @@ class PlanEsencialDemoSeeder extends Seeder
         } catch (ValidationException $exception) {
             $this->warn("{$company->name}: no se completó {$step}. ".collect($exception->errors())->flatten()->implode(' '));
         } catch (HttpExceptionInterface $exception) {
-            $this->warn("{$company->name}: no se completó {$step}. ".$exception->getMessage());
+            $this->warn("{$company->name}: no se completó {$step}. ".($exception->getMessage() !== '' ? $exception->getMessage() : 'HTTP '.$exception->getStatusCode().' en '.basename($exception->getFile()).':'.$exception->getLine()));
         }
     }
 

@@ -117,9 +117,10 @@ php artisan test --compact tests/Feature/PlanCorporativoDemoSeederTest.php
 
 **Separación de funciones:** cada paso lo hace quien tiene el permiso real, y nadie aprueba lo que preparó.
 - El auxiliar registra.
-- Cuentas por Cobrar emite y cobra.
-- Cuentas por Pagar aprueba y paga.
-- Tesorería maneja los bancos y concilia.
+- Cuentas por Cobrar emite las facturas y Cuentas por Pagar aprueba las compras.
+- Tesorería registra cada cobro contra su depósito, prepara y ejecuta los pagos (con comprobante) y concilia cada movimiento del banco.
+- El Contador Encargado aprueba cada orden de pago: quien la prepara no la aprueba.
+- Por eso el mes cerrado no tiene movimientos bancarios pendientes y el supervisor lo puede cerrar.
 - El contador general de la sede contabiliza.
 
 **Otros datos:**
@@ -131,7 +132,7 @@ php artisan test --compact tests/Feature/PlanCorporativoDemoSeederTest.php
   - documentos;
   - conversación;
   - autorizaciones;
-  - un estado de resultados preparado por el contador y aprobado y publicado por el contador general.
+  - un estado de resultados preparado por el contador encargado y aprobado y publicado por el Director.
 
 ## Grupos consolidados
 
@@ -156,9 +157,10 @@ El consolidado lo calcula la aplicación al consultarlo; el seeder solo registra
 - **Llave de la auditoría externa 2026:** vencida.
 
 **Llamadas de demostración:** se hacen dentro del proceso a través del kernel HTTP de la aplicación, nunca por la red, y quedan en `api_request_logs`. El resultado esperado de cada una es este:
-- 200 en las consultas;
+- 200 en las consultas, incluidos la balanza de comprobación y el estado de resultados del período;
 - 201 al crear un cliente y un borrador de factura;
-- 403 cuando la llave del ERP consulta otra empresa;
+- 404 cuando la llave del ERP consulta otra empresa (la API no revela si existe);
+- 403 cuando la llave de solo lectura pide clientes, un permiso que no tiene;
 - 401 con las llaves revocada y vencida.
 
 **Seguridad de las llaves:**
@@ -167,7 +169,7 @@ El consolidado lo calcula la aplicación al consultarlo; el seeder solo registra
 
 **Llaves de la prueba:** la prueba crea sus propias llaves temporales y verifica:
 - 401 sin llave o con llave inválida;
-- 403 por empresa no permitida y por permiso faltante;
+- 404 por empresa no permitida y 403 por permiso faltante;
 - 429 por límite por minuto;
 - 402 con la suscripción cancelada.
 

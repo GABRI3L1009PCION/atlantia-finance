@@ -73,8 +73,9 @@ La Contadora General ve todas las empresas por su rol de alcance de oficina.
 |---|---|
 | Registrar ventas, compras, asientos y soportes | Auxiliar |
 | Emitir ventas, cobrar, registrar notas de crédito y retenciones recibidas (`sales.process`) | Cuentas por Cobrar |
-| Aprobar compras, pagar y registrar notas de crédito de proveedor (`purchases.approve`) | Cuentas por Pagar |
-| Cuentas bancarias, estado de cuenta, clasificación de comisiones e intereses, preparación de la conciliación | Tesorería |
+| Aprobar compras y registrar notas de crédito de proveedor (`purchases.approve`) | Cuentas por Pagar |
+| Cuentas bancarias, estado de cuenta, cobros contra su depósito, órdenes de pago (preparación y ejecución con comprobante), clasificación de comisiones e intereses y conciliación | Tesorería |
+| Aprobar cada orden de pago (`treasury.payments.approve`; quien la prepara no la aprueba) | Contador Encargado |
 | Revisar asientos y aprobar el primer nivel; revisar la conciliación | Contador Encargado |
 | Contabilizar (`journal.post`) y hacer la revisión superior | Contadora General |
 | Rechazar asientos improcedentes, aprobación fiscal, cierre supervisado e incidencias | Supervisora |
@@ -164,7 +165,7 @@ Se usan `CompanyPeriodReviewService` en doble nivel y el cierre supervisado de `
   - documentos subidos por el cliente: uno aceptado y otro por revisar;
   - una conversación con su respuesta;
   - una autorización aprobada por el cliente y otra pendiente;
-  - el estado de resultados del primer mes, preparado por la Contadora General, aprobado y publicado por el propietario.
+  - el estado de resultados del primer mes, preparado por el Contador Encargado, aprobado y publicado por el propietario.
 - **Auditoría:** cada acción queda en `audit_logs` porque se ejecuta con los servicios del sistema; no se fabrican registros.
 
 ## Validaciones
