@@ -7,6 +7,8 @@ use Database\Seeders\PlanEsencialDemoCatalog;
 use Database\Seeders\PlanEsencialDemoSeeder;
 use Illuminate\Support\Facades\DB;
 
+pest()->group('demo-seeders');
+
 beforeEach(function () {
     $this->travelTo(now()->setDate(2026, 10, 29)->setTime(10, 0));
 });
