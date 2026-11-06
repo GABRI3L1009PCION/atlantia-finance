@@ -10,7 +10,6 @@ use Database\Seeders\PlanMultiOficinaDemoCatalog;
 use Database\Seeders\PlanMultiOficinaDemoSeeder;
 use Illuminate\Support\Facades\DB;
 
-
 pest()->group('demo-seeders');
 
 beforeEach(function () {

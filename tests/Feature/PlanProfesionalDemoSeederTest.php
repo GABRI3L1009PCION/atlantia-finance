@@ -8,7 +8,6 @@ use Database\Seeders\PlanProfesionalDemoCatalog;
 use Database\Seeders\PlanProfesionalDemoSeeder;
 use Illuminate\Support\Facades\DB;
 
-
 pest()->group('demo-seeders');
 
 beforeEach(function () {
