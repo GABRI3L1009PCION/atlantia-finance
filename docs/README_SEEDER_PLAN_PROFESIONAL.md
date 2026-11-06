@@ -4,7 +4,7 @@
 
 Los datos propios del escenario (firma, equipo, empresas y contactos del cliente) están en `database/seeders/PlanProfesionalDemoCatalog.php`. Las plantillas de operaciones por sector y de empleados se leen de `PlanMultiOficinaDemoCatalog`, sin modificarlo.
 
-> **Solo para desarrollo o pruebas.** El seeder se niega a correr con `APP_ENV=production`. No modifica los seeders de los otros planes.
+> **Datos de demostración.** En producción el seeder solo corre si el `.env` tiene `ATLANTIA_ALLOW_DEMO_SEED=true` (quítalo al terminar). Correos, notificaciones, colas y llamadas HTTP externas se simulan, así que nada sale del servidor. No modifica los seeders de los otros planes.
 
 ## Ejecución
 
@@ -38,7 +38,7 @@ php artisan test --compact tests/Feature/PlanProfesionalDemoSeederTest.php
 ## Usuarios, roles y credenciales
 
 - **Correo:** `<usuario>@asesorescaribe.test`.
-- **Contraseña:** la de `config('demo.password')`, es decir, la variable `ATLANTIA_DEMO_PASSWORD`. Fuera de producción, el valor por defecto es `AtlantiaDemo!2026`.
+- **Contraseña:** cada usuario recibe una contraseña aleatoria propia al crearse. El seeder la muestra **una sola vez**, en una tabla al terminar; en la base solo queda su hash. Si el usuario ya existía, conserva su contraseña.
 
 | Usuario | Nombre | Rol principal (`ROLE_PRESETS`) | Rol adicional | Panel |
 |---|---|---|---|---|
@@ -73,8 +73,9 @@ La Contadora General ve todas las empresas por su rol de alcance de oficina.
 |---|---|
 | Registrar ventas, compras, asientos y soportes | Auxiliar |
 | Emitir ventas, cobrar, registrar notas de crédito y retenciones recibidas (`sales.process`) | Cuentas por Cobrar |
-| Aprobar compras, pagar y registrar notas de crédito de proveedor (`purchases.approve`) | Cuentas por Pagar |
-| Cuentas bancarias, estado de cuenta, clasificación de comisiones e intereses, preparación de la conciliación | Tesorería |
+| Aprobar compras y registrar notas de crédito de proveedor (`purchases.approve`) | Cuentas por Pagar |
+| Cuentas bancarias, estado de cuenta, cobros contra su depósito, órdenes de pago (preparación y ejecución con comprobante), clasificación de comisiones e intereses y conciliación | Tesorería |
+| Aprobar cada orden de pago (`treasury.payments.approve`; quien la prepara no la aprueba) | Contador Encargado |
 | Revisar asientos y aprobar el primer nivel; revisar la conciliación | Contador Encargado |
 | Contabilizar (`journal.post`) y hacer la revisión superior | Contadora General |
 | Rechazar asientos improcedentes, aprobación fiscal, cierre supervisado e incidencias | Supervisora |
@@ -85,7 +86,7 @@ La Contadora General ve todas las empresas por su rol de alcance de oficina.
 **Contactos del cliente (portal).** No ocupan asientos de oficina: el sistema les asigna el rol `client_user`. Son 8 contactos, uno por cada una de las primeras 8 empresas, con correo `<usuario>@clientes-asesorescaribe.test` (por ejemplo, `julio.aldana`, `carlos.paiz`, `lilian.monroy`).
 
 - Se crean con `ClientAccessAdminService::createContact`.
-- Su contraseña se fija a la de demostración, y el sistema sigue exigiendo cambiarla y activar la doble autenticación al primer ingreso.
+- Reciben una contraseña aleatoria propia (en la tabla final del seeder), y el sistema sigue exigiendo cambiarla y activar la doble autenticación al primer ingreso.
 - Cada uno ve **solo su empresa**.
 
 ## Empresas (20)
@@ -164,7 +165,7 @@ Se usan `CompanyPeriodReviewService` en doble nivel y el cierre supervisado de `
   - documentos subidos por el cliente: uno aceptado y otro por revisar;
   - una conversación con su respuesta;
   - una autorización aprobada por el cliente y otra pendiente;
-  - el estado de resultados del primer mes, preparado por la Contadora General, aprobado y publicado por el propietario.
+  - el estado de resultados del primer mes, preparado por el Contador Encargado, aprobado y publicado por el propietario.
 - **Auditoría:** cada acción queda en `audit_logs` porque se ejecuta con los servicios del sistema; no se fabrican registros.
 
 ## Validaciones

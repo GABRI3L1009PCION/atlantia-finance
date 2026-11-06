@@ -44,6 +44,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon as IlluminateCarbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Ramsey\Uuid\Uuid;
@@ -111,10 +115,19 @@ class PlanMultiOficinaDemoSeeder extends Seeder
     /** @var list<string> */
     private array $warnings = [];
 
+    /** @var list<array{0: string, 1: string, 2: string}> Usuarios creados en esta ejecución con su contraseña aleatoria (correo, nombre, contraseña). */
+    private array $credentials = [];
+
     public function run(): void
     {
-        $this->refuseInProduction();
+        $this->refuseInProductionUnlessAllowed();
         $this->call([PlanCatalogSeeder::class, PayrollParameterSeeder::class]);
+        // Nada sale del servidor: correos, notificaciones, trabajos en cola y llamadas HTTP externas se simulan.
+        Mail::fake();
+        Notification::fake();
+        Queue::fake();
+        Http::preventStrayRequests();
+        Http::fake(['*' => Http::response('', 404)]);
 
         DB::transaction(fn () => $this->firm());
         $this->member = $this->owner->organizations()->whereKey($this->organization->id)->firstOrFail();
@@ -238,10 +251,24 @@ class PlanMultiOficinaDemoSeeder extends Seeder
     private function user(string $email, string $name): User
     {
         $email = str_contains($email, '@') ? $email : $email.'@'.PlanMultiOficinaDemoCatalog::DOMAIN;
-        $user = User::query()->updateOrCreate(['email' => $email], ['name' => $name, 'password' => config('demo.password')]);
+        $user = User::query()->where('email', $email)->first();
+        if ($user === null) {
+            $user = User::query()->create(['email' => $email, 'name' => $name, 'password' => $this->newPassword($email, $name)]);
+        } else {
+            $user->forceFill(['name' => $name])->save();
+        }
         $user->forceFill(['email_verified_at' => $user->email_verified_at ?? now()])->save();
 
         return $user;
+    }
+
+    /** Contraseña aleatoria para un usuario nuevo: se muestra una sola vez al final y en la base queda solo su hash. */
+    private function newPassword(string $email, string $name): string
+    {
+        $password = Str::password(16, symbols: false);
+        $this->credentials[] = [$email, $name, $password];
+
+        return $password;
     }
 
     private function subscription(Organization $organization): void
@@ -927,8 +954,24 @@ class PlanMultiOficinaDemoSeeder extends Seeder
         $entries = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
             ->where('p.company_id', $company->id)->where('e.status', 'draft')->orderBy('e.entry_date')->orderBy('e.id')->get(['e.*']);
         foreach ($entries as $entry) {
+            if (in_array($entry->kind, ['standard', 'adjustment', 'opening'], true) && ! DB::table('journal_entry_documents')->where('journal_entry_id', $entry->id)->exists()) {
+                $this->attachSupport($company, $entry);
+            }
             $this->at(CarbonImmutable::parse((string) $entry->entry_date)->setTime(18, 30), fn () => $accounting->post((int) $company->id, $entry, $poster));
         }
+    }
+
+    /**
+     * Soporte del asiento antes de contabilizarlo (por ejemplo, la orden de producción): un asiento contabilizado ya no
+     * admite respaldos y, sin ellos, el cierre del período se bloquea.
+     */
+    private function attachSupport(stdClass $company, stdClass $entry): void
+    {
+        $file = UploadedFile::fake()->createWithContent('soporte-'.Str::slug((string) $entry->reference).'.pdf', $this->pdf(['Documento de soporte - demostracion',
+            'Empresa: '.Str::ascii((string) $company->name).'  NIT '.$company->tax_id, 'Concepto: '.Str::ascii((string) $entry->description), 'Referencia: '.$entry->reference,
+            'Fecha: '.$entry->entry_date]));
+        $this->at(CarbonImmutable::parse((string) $entry->entry_date)->setTime(18, 0),
+            fn () => $this->act($this->bookkeeperOf($company), AccountingDocumentController::class, 'store', [], $company, ['entry' => (string) $entry->public_id], ['document' => $file]));
     }
 
     /** @param array{company: stdClass, date: string, reference: string, product: int, flour: int, sugar: int} $plan */
@@ -1332,7 +1375,7 @@ class PlanMultiOficinaDemoSeeder extends Seeder
         } catch (ValidationException $exception) {
             $this->warn("{$company->name}: no se completó {$step}. ".collect($exception->errors())->flatten()->implode(' '));
         } catch (HttpExceptionInterface $exception) {
-            $this->warn("{$company->name}: no se completó {$step}. ".$exception->getMessage());
+            $this->warn("{$company->name}: no se completó {$step}. ".($exception->getMessage() !== '' ? $exception->getMessage() : 'HTTP '.$exception->getStatusCode().' en '.basename($exception->getFile()).':'.$exception->getLine()));
         }
     }
 
@@ -1377,7 +1420,13 @@ class PlanMultiOficinaDemoSeeder extends Seeder
             ['Pasos no completados', (string) count($this->warnings)],
         ];
         $this->command->table(['Registro', 'Resultado'], $rows);
-        $this->command->info('Usuarios: <correo>@'.PlanMultiOficinaDemoCatalog::DOMAIN.' (ver README_SEEDER_PLAN_MULTI_OFICINA.md) · Contraseña: la de config(\'demo.password\').');
+        $this->command->info('Usuarios: <correo>@'.PlanMultiOficinaDemoCatalog::DOMAIN.' (ver README_SEEDER_PLAN_MULTI_OFICINA.md) · Cada usuario tiene su propia contraseña aleatoria.');
+        if ($this->credentials !== []) {
+            $this->command->warn('Credenciales de los usuarios creados ahora. Anótalas: no se guardan en claro y no se vuelven a mostrar.');
+            $this->command->table(['Correo', 'Nombre', 'Contraseña'], $this->credentials);
+        } else {
+            $this->command->info('No se crearon usuarios nuevos: los existentes conservan su contraseña.');
+        }
     }
 
     /** @param list<string> $lines */

@@ -4,7 +4,7 @@
 
 Los datos ficticios están en `database/seeders/PlanEsencialDemoCatalog.php`: nombres, NIT, direcciones, teléfonos, clientes, proveedores, ventas y compras.
 
-> **Solo para desarrollo o pruebas.** El seeder se niega a correr con `APP_ENV=production` (trait `RefusesProduction`).
+> **Datos de demostración.** En producción el seeder solo corre si el `.env` tiene `ATLANTIA_ALLOW_DEMO_SEED=true` (quítalo al terminar). Correos, notificaciones, colas y llamadas HTTP externas se simulan, así que nada sale del servidor.
 
 ## Ejecución
 
@@ -33,7 +33,7 @@ php artisan test --compact tests/Feature/PlanEsencialDemoSeederTest.php
 | José Miguel Ramírez López | `jose.ramirez@contadoresdelatlantico.test` | Propietario (`owner` / Director-Socio) |
 | María Fernanda Castillo Morales | `maria.castillo@contadoresdelatlantico.test` | Contadora Encargada (`accountant_in_charge`) |
 
-- **Contraseña:** la de `config('demo.password')`, es decir, la variable `ATLANTIA_DEMO_PASSWORD`. Fuera de producción, el valor por defecto es `AtlantiaDemo!2026`.
+- **Contraseña:** cada usuario recibe una contraseña aleatoria propia al crearse. El seeder la muestra **una sola vez**, en una tabla al terminar; en la base solo queda su hash. Si el usuario ya existía, conserva su contraseña.
 - **Organización:** Contadores Asociados del Atlántico, NIT ficticio `9081726-3`. Tiene una oficina: Oficina Puerto Barrios.
 
 ## Qué genera

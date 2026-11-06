@@ -4,7 +4,7 @@
 
 Los datos ficticios están en `database/seeders/PlanMultiOficinaDemoCatalog.php`: oficinas, equipo, sectores, empresas, grupo empresarial y empleados.
 
-> **Solo para desarrollo o pruebas.** El seeder se niega a correr con `APP_ENV=production` (trait `RefusesProduction`). No modifica los seeders de los otros planes.
+> **Datos de demostración.** En producción el seeder solo corre si el `.env` tiene `ATLANTIA_ALLOW_DEMO_SEED=true` (quítalo al terminar). Correos, notificaciones, colas y llamadas HTTP externas se simulan, así que nada sale del servidor. No modifica los seeders de los otros planes.
 
 ## Ejecución
 
@@ -42,7 +42,7 @@ Las políticas de cierre de cada sede (`*_close_policy`) quedan en `warn`, el va
 ## Usuarios, roles y credenciales
 
 - **Correo:** `<usuario>@consultoresdelatlantico.test`.
-- **Contraseña:** la de `config('demo.password')`, es decir, la variable `ATLANTIA_DEMO_PASSWORD`. Fuera de producción, el valor por defecto es `AtlantiaDemo!2026`.
+- **Contraseña:** cada usuario recibe una contraseña aleatoria propia al crearse. El seeder la muestra **una sola vez**, en una tabla al terminar; en la base solo queda su hash. Si el usuario ya existía, conserva su contraseña.
 
 | Usuario (correo) | Nombre | Rol (`ROLE_PRESETS`) | Alcance |
 |---|---|---|---|

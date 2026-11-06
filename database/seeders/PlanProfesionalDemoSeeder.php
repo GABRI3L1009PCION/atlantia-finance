@@ -35,6 +35,8 @@ use App\Services\Payroll\PayrollPeriodService;
 use App\Services\Payroll\PayrollRecordService;
 use App\Services\Tenancy\TenantDatabaseContext;
 use App\Services\Treasury\TreasuryBankService;
+use App\Services\Treasury\TreasuryPaymentService;
+use App\Services\Treasury\TreasuryReceiptService;
 use App\Services\WorkManagement\CompanyAdministrationService;
 use App\Services\WorkManagement\CompanyAssignmentService;
 use App\Services\WorkManagement\CompanyPeriodReviewService;
@@ -51,6 +53,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon as IlluminateCarbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Ramsey\Uuid\Uuid;
@@ -65,9 +71,9 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
  * activos fijos, bancos, retenciones, libros de IVA, revisión del período en doble nivel con cierre supervisado,
  * obligaciones, tareas, incidencias y el portal del cliente.
  *
- * Cada paso lo ejecuta quien tiene el permiso real: la auxiliar registra, Cuentas por Cobrar emite y cobra
- * (`sales.process`), Cuentas por Pagar aprueba y paga (`purchases.approve`), el Contador Encargado revisa y aprueba en
- * primer nivel, la Contadora General contabiliza (`journal.post`) y hace la revisión superior, la Supervisora aprueba lo
+ * Cada paso lo ejecuta quien tiene el permiso real: la auxiliar registra, Cuentas por Cobrar emite (`sales.process`),
+ * Cuentas por Pagar aprueba las compras (`purchases.approve`), Tesorería registra cobros, prepara y ejecuta los pagos y
+ * concilia el banco, el Contador Encargado aprueba las órdenes de pago, revisa y aprueba en primer nivel, la Contadora General contabiliza (`journal.post`) y hace la revisión superior, la Supervisora aprueba lo
  * fiscal y cierra. Nadie aprueba lo que preparó. Todo pasa por los controladores y servicios de las pantallas; nada se
  * escribe como cifra calculada. No se certifica FEL, no se cobra, no se envían correos ni se consulta la IA. Es
  * idempotente y solo toca su propia organización.
@@ -119,10 +125,19 @@ class PlanProfesionalDemoSeeder extends Seeder
     /** @var list<string> */
     private array $warnings = [];
 
+    /** @var list<array{0: string, 1: string, 2: string}> Usuarios creados en esta ejecución con su contraseña aleatoria (correo, nombre, contraseña). */
+    private array $credentials = [];
+
     public function run(): void
     {
-        $this->refuseInProduction();
+        $this->refuseInProductionUnlessAllowed();
         $this->call([PlanCatalogSeeder::class, PayrollParameterSeeder::class]);
+        // Nada sale del servidor: correos, notificaciones, trabajos en cola y llamadas HTTP externas se simulan.
+        Mail::fake();
+        Notification::fake();
+        Queue::fake();
+        Http::preventStrayRequests();
+        Http::fake(['*' => Http::response('', 404)]);
 
         DB::transaction(fn () => $this->firm());
         $this->member = $this->owner->organizations()->whereKey($this->organization->id)->firstOrFail();
@@ -232,10 +247,24 @@ class PlanProfesionalDemoSeeder extends Seeder
     private function user(string $email, string $name): User
     {
         $email = str_contains($email, '@') ? $email : $email.'@'.PlanProfesionalDemoCatalog::DOMAIN;
-        $user = User::query()->updateOrCreate(['email' => $email], ['name' => $name, 'password' => config('demo.password')]);
+        $user = User::query()->where('email', $email)->first();
+        if ($user === null) {
+            $user = User::query()->create(['email' => $email, 'name' => $name, 'password' => $this->newPassword($email, $name)]);
+        } else {
+            $user->forceFill(['name' => $name])->save();
+        }
         $user->forceFill(['email_verified_at' => $user->email_verified_at ?? now()])->save();
 
         return $user;
+    }
+
+    /** Contraseña aleatoria para un usuario nuevo: se muestra una sola vez al final y en la base queda solo su hash. */
+    private function newPassword(string $email, string $name): string
+    {
+        $password = Str::password(16, symbols: false);
+        $this->credentials[] = [$email, $name, $password];
+
+        return $password;
     }
 
     /**
@@ -344,7 +373,8 @@ class PlanProfesionalDemoSeeder extends Seeder
         if ($first === 'closed' && $index === 0) {
             $this->attempt($company, 'la solicitud de reapertura', fn () => $this->requestReopening($company, $months[0]));
         }
-        $stages = ['none', 'submitted', 'in_review', 'changes', 'first_level', 'fiscal_pending', 'ready', 'fiscal_changes', 'closed'];
+        // El mes anterior no se cierra: conserva a propósito una comisión bancaria y un cheque en circulación sin conciliar.
+        $stages = ['none', 'submitted', 'in_review', 'changes', 'first_level', 'fiscal_pending', 'ready', 'fiscal_changes'];
         $this->attempt($company, 'la revisión de '.$months[1]->format('m/Y'), fn () => $this->reviewPeriod($company, $months[1], $stages[$index % count($stages)]));
     }
 
@@ -423,8 +453,8 @@ class PlanProfesionalDemoSeeder extends Seeder
         if (! $hasAccess) {
             app(ClientAccessAdminService::class)->createContact($this->member, $this->owner, ['name' => $name, 'email' => $email, 'company_id' => (int) $company->id, 'contact_role' => $role]);
             $client = User::query()->where('email', $email)->firstOrFail();
-            // Contraseña de demostración conocida; el sistema sigue exigiendo cambiarla al primer ingreso.
-            $client->forceFill(['password' => config('demo.password')])->save();
+            // Contraseña aleatoria propia; el sistema sigue exigiendo cambiarla y activar la doble autenticación al primer ingreso.
+            $client->forceFill(['password' => $this->newPassword($email, $name)])->save();
         }
         $requests = app(ClientRequestService::class);
         $documents = app(ClientDocumentService::class);
@@ -470,8 +500,9 @@ class PlanProfesionalDemoSeeder extends Seeder
 
         if (! DB::table('published_reports')->where('company_id', $company->id)->exists()) {
             $reports = app(PublishedReportService::class);
-            $reportId = $reports->prepare($this->member, $this->team['general'], (int) $company->id, 'income_statement', $months[0]->toDateString(), $months[0]->endOfMonth()->toDateString(), null);
-            $reports->action($this->member, $this->team['general'], $reportId, 'submit', null);
+            // Lo prepara el Contador Encargado (asignado a la empresa) y lo aprueba y publica el Director: nunca quien lo preparó.
+            $reportId = $reports->prepare($this->member, $this->team['accountant'], (int) $company->id, 'income_statement', $months[0]->toDateString(), $months[0]->endOfMonth()->toDateString(), null);
+            $reports->action($this->member, $this->team['accountant'], $reportId, 'submit', null);
             $reports->action($this->member, $this->owner, $reportId, 'approve', null);
             $reports->action($this->member, $this->owner, $reportId, 'publish', null);
         }
@@ -767,7 +798,8 @@ class PlanProfesionalDemoSeeder extends Seeder
             $this->act($this->team['receivables'], BankController::class, 'storeAccount', ['ledger_account_id' => $this->account('1102'), 'bank_name' => $bankName,
                 'account_name' => $accountName, 'account_type' => 'checking', 'last_four' => $lastFour, 'bank_balance' => '0.00', 'currency' => 'GTQ'], $company);
             $account = DB::table('bank_accounts')->where('company_id', $company->id)->where('last_four', $lastFour)->firstOrFail();
-            $this->bankMovement($company, $account, $firstMonth->toDateString(), 'DEP-APERTURA', 'Depósito del aporte inicial de capital', 'inflow', $capital);
+            // El saldo inicial ya estaba en el banco el día anterior al primer mes que se lleva en Atlantia.
+            $this->bankMovement($company, $account, $firstMonth->subDay()->toDateString(), 'DEP-APERTURA', 'Saldo inicial de la cuenta al iniciar en Atlantia', 'inflow', $capital);
         }
 
         return $account;
@@ -817,17 +849,29 @@ class PlanProfesionalDemoSeeder extends Seeder
         return DB::table('sales_invoices')->where('public_id', $requestId)->firstOrFail();
     }
 
+    /** Quien opera Tesorería: registra cobros, prepara y ejecuta pagos y concilia el banco. */
+    private function treasurer(): User
+    {
+        return $this->team['receivables'];
+    }
+
+    /**
+     * Cobro de una factura como en Tesorería: el depósito llega al estado de cuenta y Tesorería registra el cobro
+     * aplicado a la factura y conciliado con ese depósito (el recibo de la factura y su asiento los genera el servicio).
+     */
     private function collect(stdClass $company, stdClass $bank, stdClass $invoice, string $date, float $share, bool $cash): void
     {
-        $requestId = $this->uuid($company, 'receipt:'.$invoice->public_id);
-        if (DB::table('sales_receipts')->where('public_id', $requestId)->exists()) {
+        $reference = ($cash ? 'EFE-' : 'TRF-').$invoice->fiscal_number;
+        if (DB::table('sales_receipts')->where('public_id', $this->uuid($company, 'receipt:'.$invoice->public_id))->exists()
+            || DB::table('treasury_receipts')->where('company_id', $company->id)->where('reference', $reference)->exists()) {
             return;
         }
-        $amount = $this->decimal((int) round((int) $invoice->total_cents * $share));
-        $reference = ($cash ? 'EFE-' : 'TRF-').$invoice->fiscal_number;
-        $this->at(CarbonImmutable::parse($date)->setTime(15, 10), fn () => $this->act($this->team['receivables'], SalesController::class, 'receipt', ['request_id' => $requestId,
-            'amount' => $amount, 'received_on' => $date, 'reference' => $reference], $company, ['invoice' => (string) $invoice->public_id]));
-        $this->bankMovement($company, $bank, $date, $reference, $cash ? 'Depósito de ventas al contado' : 'Transferencia recibida de '.$invoice->customer_name, 'inflow', $amount);
+        $amount = (int) round((int) $invoice->total_cents * $share);
+        $this->bankMovement($company, $bank, $date, $reference, $cash ? 'Depósito de ventas al contado' : 'Transferencia recibida de '.$invoice->customer_name, 'inflow', $this->decimal($amount));
+        $movement = DB::table('bank_transactions')->where('bank_account_id', $bank->id)->where('reference', $reference)->where('reconciliation_status', 'pending')->value('id');
+        $this->at(CarbonImmutable::parse($date)->setTime(15, 10), fn () => app(TreasuryReceiptService::class)->register($this->organization, $this->treasurer(), (int) $company->id, [
+            'bank_account_id' => (int) $bank->id, 'method' => $cash ? 'deposit' : 'transfer', 'amount_cents' => $amount, 'received_on' => $date, 'reference' => $reference,
+            'bank_transaction_id' => $movement === null ? null : (int) $movement, 'allocations' => [['sales_invoice_id' => (int) $invoice->id, 'amount_cents' => $amount]]]));
     }
 
     private function purchase(stdClass $company, int $supplierId, string $date, string $account, string $treatment, string $description, string $amount, string $number): stdClass
@@ -856,18 +900,35 @@ class PlanProfesionalDemoSeeder extends Seeder
         return strtoupper(substr(preg_replace('/[^A-Za-z]/', '', Str::ascii((string) $supplier->name)) ?? 'PROV', 0, 4));
     }
 
+    /**
+     * Pago a proveedor como en Tesorería: Tesorería prepara la orden de pago, el Contador Encargado la aprueba (quien
+     * prepara no aprueba), Tesorería la ejecuta con su comprobante y, cuando el débito aparece en el banco, lo concilia.
+     */
     private function pay(stdClass $company, stdClass $bank, stdClass $document, string $date, bool $cashed, bool $transfer): void
     {
-        $requestId = $this->uuid($company, 'payment:'.$document->public_id);
-        if (DB::table('purchase_payments')->where('public_id', $requestId)->exists()) {
+        if (DB::table('purchase_payments')->where('purchase_document_id', $document->id)->exists()) {
             return;
         }
         $reference = ($transfer ? 'TRF-' : 'CHQ-').str_pad((string) $document->number, 5, '0', STR_PAD_LEFT);
-        $amount = $this->decimal((int) $document->total_cents);
-        $this->at(CarbonImmutable::parse($date)->setTime(16, 20), fn () => $this->act($this->team['payables'], PurchaseController::class, 'payment', ['request_id' => $requestId,
-            'amount' => $amount, 'paid_on' => $date, 'reference' => $reference], $company, ['document' => (string) $document->public_id]));
+        $payments = app(TreasuryPaymentService::class);
+        $treasurer = $this->treasurer();
+        $instruction = 0;
+        $this->at(CarbonImmutable::parse($date)->setTime(14, 0), function () use ($payments, $treasurer, $company, $bank, $document, $transfer, &$instruction): void {
+            $instruction = $payments->prepare($this->organization, $treasurer, (int) $company->id, ['bank_account_id' => (int) $bank->id, 'method' => $transfer ? 'transfer' : 'check',
+                'concept' => 'Pago de la factura '.$document->number.' de '.$document->supplier_name, 'priority' => 'normal', 'scheduled_on' => null,
+                'items' => [['purchase_document_id' => (int) $document->id, 'amount_cents' => (int) $document->total_cents]]]);
+        });
+        $this->at(CarbonImmutable::parse($date)->setTime(15, 0), fn () => $payments->approve($this->organization, $this->bookkeeperOf($company), $instruction, 'Factura revisada contra la orden de compra.'));
+        $proof = UploadedFile::fake()->createWithContent('comprobante-'.Str::slug($reference).'.pdf', $this->pdf(['Comprobante de pago - documento de demostracion',
+            'Empresa: '.Str::ascii((string) $company->name), 'Proveedor: '.Str::ascii((string) $document->supplier_name), 'Referencia: '.$reference, 'Fecha: '.$date]));
+        $this->at(CarbonImmutable::parse($date)->setTime(16, 20), fn () => $payments->execute($this->organization, $treasurer, $instruction, $date, $reference, $proof));
         $clearedOn = $cashed ? $date : $this->paidOn(CarbonImmutable::parse($date)->startOfMonth()->addMonth()->toDateString(), 2);
-        $this->bankMovement($company, $bank, $clearedOn, $reference, ($transfer ? 'Transferencia pagada a ' : 'Cheque pagado a ').$document->supplier_name, 'outflow', $amount);
+        $this->bankMovement($company, $bank, $clearedOn, $reference, ($transfer ? 'Transferencia pagada a ' : 'Cheque pagado a ').$document->supplier_name, 'outflow', $this->decimal((int) $document->total_cents));
+        $movement = DB::table('bank_transactions')->where('bank_account_id', $bank->id)->where('reference', $reference)->where('reconciliation_status', 'pending')->value('id');
+        $banking = app(TreasuryBankService::class);
+        if ($movement !== null && collect($banking->suggestions((int) $movement))->contains(fn (array $row): bool => $row['type'] === 'payment_instructions' && $row['id'] === $instruction)) {
+            $this->at(CarbonImmutable::parse($clearedOn)->setTime(17, 30), fn () => $banking->match($this->organization, $treasurer, (int) $movement, 'payment_instructions', $instruction));
+        }
     }
 
     /** Comisión mensual: la del primer mes la clasifica Tesorería (asiento automático y movimiento conciliado); la del segundo queda pendiente. */
@@ -1080,8 +1141,24 @@ class PlanProfesionalDemoSeeder extends Seeder
         $entries = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
             ->where('p.company_id', $company->id)->where('e.status', 'draft')->orderBy('e.entry_date')->orderBy('e.id')->get(['e.*']);
         foreach ($entries as $entry) {
+            if (in_array($entry->kind, ['standard', 'adjustment', 'opening'], true) && ! DB::table('journal_entry_documents')->where('journal_entry_id', $entry->id)->exists()) {
+                $this->attachSupport($company, $entry);
+            }
             $this->at(CarbonImmutable::parse((string) $entry->entry_date)->setTime(18, 30), fn () => $accounting->post((int) $company->id, $entry, $poster));
         }
+    }
+
+    /**
+     * Soporte del asiento antes de contabilizarlo (por ejemplo, la orden de producción): un asiento contabilizado ya no
+     * admite respaldos y, sin ellos, el cierre del período se bloquea.
+     */
+    private function attachSupport(stdClass $company, stdClass $entry): void
+    {
+        $file = UploadedFile::fake()->createWithContent('soporte-'.Str::slug((string) $entry->reference).'.pdf', $this->pdf(['Documento de soporte - demostracion',
+            'Empresa: '.Str::ascii((string) $company->name).'  NIT '.$company->tax_id, 'Concepto: '.Str::ascii((string) $entry->description), 'Referencia: '.$entry->reference,
+            'Fecha: '.$entry->entry_date]));
+        $this->at(CarbonImmutable::parse((string) $entry->entry_date)->setTime(18, 0),
+            fn () => $this->act($this->bookkeeperOf($company), AccountingDocumentController::class, 'store', [], $company, ['entry' => (string) $entry->public_id], ['document' => $file]));
     }
 
     /** @param array{company: stdClass, date: string, reference: string, product: int, flour: int, sugar: int} $plan */
@@ -1435,7 +1512,7 @@ class PlanProfesionalDemoSeeder extends Seeder
         } catch (ValidationException $exception) {
             $this->warn("{$company->name}: no se completó {$step}. ".collect($exception->errors())->flatten()->implode(' '));
         } catch (HttpExceptionInterface $exception) {
-            $this->warn("{$company->name}: no se completó {$step}. ".$exception->getMessage());
+            $this->warn("{$company->name}: no se completó {$step}. ".($exception->getMessage() !== '' ? $exception->getMessage() : 'HTTP '.$exception->getStatusCode().' en '.basename($exception->getFile()).':'.$exception->getLine()));
         }
     }
 
@@ -1482,7 +1559,13 @@ class PlanProfesionalDemoSeeder extends Seeder
             ['Pasos no completados', (string) count($this->warnings)],
         ];
         $this->command->table(['Registro', 'Resultado'], $rows);
-        $this->command->info('Usuarios: <correo>@'.PlanProfesionalDemoCatalog::DOMAIN.' y contactos @'.PlanProfesionalDemoCatalog::CLIENT_DOMAIN.' (ver README_SEEDER_PLAN_PROFESIONAL.md) · Contraseña: la de config(\'demo.password\').');
+        $this->command->info('Usuarios: <correo>@'.PlanProfesionalDemoCatalog::DOMAIN.' y contactos @'.PlanProfesionalDemoCatalog::CLIENT_DOMAIN.' (ver README_SEEDER_PLAN_PROFESIONAL.md) · Cada usuario tiene su propia contraseña aleatoria.');
+        if ($this->credentials !== []) {
+            $this->command->warn('Credenciales de los usuarios creados ahora. Anótalas: no se guardan en claro y no se vuelven a mostrar.');
+            $this->command->table(['Correo', 'Nombre', 'Contraseña'], $this->credentials);
+        } else {
+            $this->command->info('No se crearon usuarios nuevos: los existentes conservan su contraseña.');
+        }
     }
 
     /** @param list<string> $lines */

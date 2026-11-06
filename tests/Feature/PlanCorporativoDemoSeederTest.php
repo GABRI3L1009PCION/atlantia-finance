@@ -215,7 +215,7 @@ test('the Corporativo demo seeds a complete, balanced, secure and idempotent sce
         $this->getJson('/api/v1/companies')->assertStatus(401)->assertJsonPath('error.code', 'unauthenticated');
         $this->withToken('atl_invalida_'.Str::random(40))->getJson('/api/v1/companies')->assertStatus(401);
         $this->withToken($restricted)->getJson('/api/v1/companies/'.$erp->public_id.'/accounts')->assertOk();
-        $this->withToken($restricted)->getJson('/api/v1/companies/'.$other->public_id.'/accounts')->assertStatus(403);
+        $this->withToken($restricted)->getJson('/api/v1/companies/'.$other->public_id.'/accounts')->assertStatus(404);
         $this->withToken($restricted)->getJson('/api/v1/companies/'.$erp->public_id.'/customers')->assertStatus(403);
 
         config(['integrations.api.rate_limit_per_minute' => 2]);
