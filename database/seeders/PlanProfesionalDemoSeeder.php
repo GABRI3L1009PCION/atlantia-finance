@@ -346,7 +346,8 @@ class PlanProfesionalDemoSeeder extends Seeder
         if ($first === 'closed' && $index === 0) {
             $this->attempt($company, 'la solicitud de reapertura', fn () => $this->requestReopening($company, $months[0]));
         }
-        $stages = ['none', 'submitted', 'in_review', 'changes', 'first_level', 'fiscal_pending', 'ready', 'fiscal_changes', 'closed'];
+        // El mes anterior no se cierra: conserva a propósito una comisión bancaria y un cheque en circulación sin conciliar.
+        $stages = ['none', 'submitted', 'in_review', 'changes', 'first_level', 'fiscal_pending', 'ready', 'fiscal_changes'];
         $this->attempt($company, 'la revisión de '.$months[1]->format('m/Y'), fn () => $this->reviewPeriod($company, $months[1], $stages[$index % count($stages)]));
     }
 
