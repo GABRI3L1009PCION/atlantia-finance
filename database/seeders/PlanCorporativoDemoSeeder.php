@@ -145,6 +145,9 @@ class PlanCorporativoDemoSeeder extends Seeder
     /** @var list<string> */
     private array $warnings = [];
 
+    /** @var list<array{0: string, 1: string, 2: string}> Usuarios creados en esta ejecución con su contraseña aleatoria (correo, nombre, contraseña). */
+    private array $credentials = [];
+
     public function run(): void
     {
         $this->refuseInProduction();
@@ -344,10 +347,24 @@ class PlanCorporativoDemoSeeder extends Seeder
     private function user(string $email, string $name): User
     {
         $email = str_contains($email, '@') ? $email : $email.'@'.PlanCorporativoDemoCatalog::DOMAIN;
-        $user = User::query()->updateOrCreate(['email' => $email], ['name' => $name, 'password' => config('demo.password')]);
+        $user = User::query()->where('email', $email)->first();
+        if ($user === null) {
+            $user = User::query()->create(['email' => $email, 'name' => $name, 'password' => $this->newPassword($email, $name)]);
+        } else {
+            $user->forceFill(['name' => $name])->save();
+        }
         $user->forceFill(['email_verified_at' => $user->email_verified_at ?? now()])->save();
 
         return $user;
+    }
+
+    /** Contraseña aleatoria para un usuario nuevo: se muestra una sola vez al final y en la base queda solo su hash. */
+    private function newPassword(string $email, string $name): string
+    {
+        $password = Str::password(16, symbols: false);
+        $this->credentials[] = [$email, $name, $password];
+
+        return $password;
     }
 
     /**
@@ -588,7 +605,7 @@ class PlanCorporativoDemoSeeder extends Seeder
         if ($client === null || ! DB::table('client_company_access')->where('company_id', $company->id)->where('user_id', $client->id)->exists()) {
             app(ClientAccessAdminService::class)->createContact($this->member, $this->owner, ['name' => $name, 'email' => $email, 'company_id' => (int) $company->id, 'contact_role' => 'owner_contact']);
             $client = User::query()->where('email', $email)->firstOrFail();
-            $client->forceFill(['password' => config('demo.password')])->save();
+            $client->forceFill(['password' => $this->newPassword($email, $name)])->save();
         }
         $assistant = $this->assistantOf($company);
         $accountant = $this->bookkeeperOf($company);
@@ -1922,7 +1939,13 @@ class PlanCorporativoDemoSeeder extends Seeder
         foreach ($this->apiResults as $line) {
             $this->command->line('  API v1 · '.$line);
         }
-        $this->command->info('Usuarios: <correo>@'.PlanCorporativoDemoCatalog::DOMAIN.' y contactos @'.PlanCorporativoDemoCatalog::CLIENT_DOMAIN.' (ver README_SEEDER_PLAN_CORPORATIVO.md) · Contraseña: la de config(\'demo.password\').');
+        $this->command->info('Usuarios: <correo>@'.PlanCorporativoDemoCatalog::DOMAIN.' y contactos @'.PlanCorporativoDemoCatalog::CLIENT_DOMAIN.' (ver README_SEEDER_PLAN_CORPORATIVO.md) · Cada usuario tiene su propia contraseña aleatoria.');
+        if ($this->credentials !== []) {
+            $this->command->warn('Credenciales de los usuarios creados ahora. Anótalas: no se guardan en claro y no se vuelven a mostrar.');
+            $this->command->table(['Correo', 'Nombre', 'Contraseña'], $this->credentials);
+        } else {
+            $this->command->info('No se crearon usuarios nuevos: los existentes conservan su contraseña.');
+        }
     }
 
     /** @param list<string> $lines */

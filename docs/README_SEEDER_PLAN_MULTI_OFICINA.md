@@ -42,7 +42,7 @@ Las políticas de cierre de cada sede (`*_close_policy`) quedan en `warn`, el va
 ## Usuarios, roles y credenciales
 
 - **Correo:** `<usuario>@consultoresdelatlantico.test`.
-- **Contraseña:** la de `config('demo.password')`, es decir, la variable `ATLANTIA_DEMO_PASSWORD`. Fuera de producción, el valor por defecto es `AtlantiaDemo!2026`.
+- **Contraseña:** cada usuario recibe una contraseña aleatoria propia al crearse. El seeder la muestra **una sola vez**, en una tabla al terminar; en la base solo queda su hash. Si el usuario ya existía, conserva su contraseña.
 
 | Usuario (correo) | Nombre | Rol (`ROLE_PRESETS`) | Alcance |
 |---|---|---|---|

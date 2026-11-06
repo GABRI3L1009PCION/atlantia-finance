@@ -55,8 +55,8 @@ php artisan test --compact tests/Feature/PlanCorporativoDemoSeederTest.php
 ## Usuarios, roles y credenciales
 
 - **Correo:** `<primer nombre>.<primer apellido>@grupocontableatlantico.test`; el detalle está en `PlanCorporativoDemoCatalog::team()`.
-- **Contraseña:** la de `config('demo.password')`. No se escribe en este documento.
-- **Contactos del portal:** usan el dominio `clientes-grupocontableatlantico.test`. Sus contraseñas también son las de `config('demo.password')`.
+- **Contraseña:** cada usuario recibe una contraseña aleatoria propia al crearse. El seeder la muestra **una sola vez**, en una tabla al terminar; en la base solo queda su hash. Si el usuario ya existía, conserva su contraseña.
+- **Contactos del portal:** usan el dominio `clientes-grupocontableatlantico.test` y también reciben una contraseña aleatoria propia, que aparece en la misma tabla. El sistema les exige cambiarla y activar la doble autenticación al primer ingreso.
 
 **Roles de toda la firma:**
 - Director propietario;

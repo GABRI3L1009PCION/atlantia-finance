@@ -38,7 +38,7 @@ php artisan test --compact tests/Feature/PlanProfesionalDemoSeederTest.php
 ## Usuarios, roles y credenciales
 
 - **Correo:** `<usuario>@asesorescaribe.test`.
-- **Contraseña:** la de `config('demo.password')`, es decir, la variable `ATLANTIA_DEMO_PASSWORD`. Fuera de producción, el valor por defecto es `AtlantiaDemo!2026`.
+- **Contraseña:** cada usuario recibe una contraseña aleatoria propia al crearse. El seeder la muestra **una sola vez**, en una tabla al terminar; en la base solo queda su hash. Si el usuario ya existía, conserva su contraseña.
 
 | Usuario | Nombre | Rol principal (`ROLE_PRESETS`) | Rol adicional | Panel |
 |---|---|---|---|---|
@@ -86,7 +86,7 @@ La Contadora General ve todas las empresas por su rol de alcance de oficina.
 **Contactos del cliente (portal).** No ocupan asientos de oficina: el sistema les asigna el rol `client_user`. Son 8 contactos, uno por cada una de las primeras 8 empresas, con correo `<usuario>@clientes-asesorescaribe.test` (por ejemplo, `julio.aldana`, `carlos.paiz`, `lilian.monroy`).
 
 - Se crean con `ClientAccessAdminService::createContact`.
-- Su contraseña se fija a la de demostración, y el sistema sigue exigiendo cambiarla y activar la doble autenticación al primer ingreso.
+- Reciben una contraseña aleatoria propia (en la tabla final del seeder), y el sistema sigue exigiendo cambiarla y activar la doble autenticación al primer ingreso.
 - Cada uno ve **solo su empresa**.
 
 ## Empresas (20)

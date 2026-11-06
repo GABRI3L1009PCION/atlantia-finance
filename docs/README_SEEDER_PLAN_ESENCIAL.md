@@ -33,7 +33,7 @@ php artisan test --compact tests/Feature/PlanEsencialDemoSeederTest.php
 | José Miguel Ramírez López | `jose.ramirez@contadoresdelatlantico.test` | Propietario (`owner` / Director-Socio) |
 | María Fernanda Castillo Morales | `maria.castillo@contadoresdelatlantico.test` | Contadora Encargada (`accountant_in_charge`) |
 
-- **Contraseña:** la de `config('demo.password')`, es decir, la variable `ATLANTIA_DEMO_PASSWORD`. Fuera de producción, el valor por defecto es `AtlantiaDemo!2026`.
+- **Contraseña:** cada usuario recibe una contraseña aleatoria propia al crearse. El seeder la muestra **una sola vez**, en una tabla al terminar; en la base solo queda su hash. Si el usuario ya existía, conserva su contraseña.
 - **Organización:** Contadores Asociados del Atlántico, NIT ficticio `9081726-3`. Tiene una oficina: Oficina Puerto Barrios.
 
 ## Qué genera

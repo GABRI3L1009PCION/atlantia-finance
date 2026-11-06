@@ -121,6 +121,9 @@ class PlanProfesionalDemoSeeder extends Seeder
     /** @var list<string> */
     private array $warnings = [];
 
+    /** @var list<array{0: string, 1: string, 2: string}> Usuarios creados en esta ejecución con su contraseña aleatoria (correo, nombre, contraseña). */
+    private array $credentials = [];
+
     public function run(): void
     {
         $this->refuseInProduction();
@@ -234,10 +237,24 @@ class PlanProfesionalDemoSeeder extends Seeder
     private function user(string $email, string $name): User
     {
         $email = str_contains($email, '@') ? $email : $email.'@'.PlanProfesionalDemoCatalog::DOMAIN;
-        $user = User::query()->updateOrCreate(['email' => $email], ['name' => $name, 'password' => config('demo.password')]);
+        $user = User::query()->where('email', $email)->first();
+        if ($user === null) {
+            $user = User::query()->create(['email' => $email, 'name' => $name, 'password' => $this->newPassword($email, $name)]);
+        } else {
+            $user->forceFill(['name' => $name])->save();
+        }
         $user->forceFill(['email_verified_at' => $user->email_verified_at ?? now()])->save();
 
         return $user;
+    }
+
+    /** Contraseña aleatoria para un usuario nuevo: se muestra una sola vez al final y en la base queda solo su hash. */
+    private function newPassword(string $email, string $name): string
+    {
+        $password = Str::password(16, symbols: false);
+        $this->credentials[] = [$email, $name, $password];
+
+        return $password;
     }
 
     /**
@@ -426,8 +443,8 @@ class PlanProfesionalDemoSeeder extends Seeder
         if (! $hasAccess) {
             app(ClientAccessAdminService::class)->createContact($this->member, $this->owner, ['name' => $name, 'email' => $email, 'company_id' => (int) $company->id, 'contact_role' => $role]);
             $client = User::query()->where('email', $email)->firstOrFail();
-            // Contraseña de demostración conocida; el sistema sigue exigiendo cambiarla al primer ingreso.
-            $client->forceFill(['password' => config('demo.password')])->save();
+            // Contraseña aleatoria propia; el sistema sigue exigiendo cambiarla y activar la doble autenticación al primer ingreso.
+            $client->forceFill(['password' => $this->newPassword($email, $name)])->save();
         }
         $requests = app(ClientRequestService::class);
         $documents = app(ClientDocumentService::class);
@@ -1532,7 +1549,13 @@ class PlanProfesionalDemoSeeder extends Seeder
             ['Pasos no completados', (string) count($this->warnings)],
         ];
         $this->command->table(['Registro', 'Resultado'], $rows);
-        $this->command->info('Usuarios: <correo>@'.PlanProfesionalDemoCatalog::DOMAIN.' y contactos @'.PlanProfesionalDemoCatalog::CLIENT_DOMAIN.' (ver README_SEEDER_PLAN_PROFESIONAL.md) · Contraseña: la de config(\'demo.password\').');
+        $this->command->info('Usuarios: <correo>@'.PlanProfesionalDemoCatalog::DOMAIN.' y contactos @'.PlanProfesionalDemoCatalog::CLIENT_DOMAIN.' (ver README_SEEDER_PLAN_PROFESIONAL.md) · Cada usuario tiene su propia contraseña aleatoria.');
+        if ($this->credentials !== []) {
+            $this->command->warn('Credenciales de los usuarios creados ahora. Anótalas: no se guardan en claro y no se vuelven a mostrar.');
+            $this->command->table(['Correo', 'Nombre', 'Contraseña'], $this->credentials);
+        } else {
+            $this->command->info('No se crearon usuarios nuevos: los existentes conservan su contraseña.');
+        }
     }
 
     /** @param list<string> $lines */
