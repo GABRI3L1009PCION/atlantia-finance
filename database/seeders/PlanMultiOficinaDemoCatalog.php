@@ -332,7 +332,7 @@ final class PlanMultiOficinaDemoCatalog
         $company = fn (string $taxId, string $name, string $trade, string $office, string $sector, string $address, string $phone, string $email, string $contact, string $capital, string $series, float $scale, string $bank, string $lastFour, bool $payroll = false, ?array $asset = null, bool $production = false): array => [
             'tax_id' => $taxId, 'name' => $name, 'trade_name' => $trade, 'office' => $office, 'sector' => $sector, 'address' => $address, 'phone' => $phone, 'email' => $email,
             'contact' => $contact, 'capital' => $capital, 'series' => $series, 'scale' => $scale, 'bank' => [$bank, 'Cuenta monetaria '.$trade, $lastFour], 'payroll' => $payroll,
-            'asset' => $asset, 'production' => $production,
+            'asset' => $asset === null ? null : [(string) $asset[0], (string) $asset[1], (string) $asset[2], (int) $asset[3]], 'production' => $production,
         ];
 
         return [

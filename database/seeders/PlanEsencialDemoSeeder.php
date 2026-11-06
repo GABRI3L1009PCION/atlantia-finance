@@ -102,7 +102,7 @@ class PlanEsencialDemoSeeder extends Seeder
             $this->attempt($company, 'las cotizaciones y órdenes', fn () => $this->commercialDocuments($company, $index, $months[2]));
         }
 
-        $ids = array_values(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies));
+        $ids = array_map(fn (array $pair): int => (int) $pair[0]->id, $companies);
         $this->obligations($companies, $months);
         $this->tasks($companies, $months);
         $this->report($ids);
@@ -723,7 +723,8 @@ class PlanEsencialDemoSeeder extends Seeder
             if (DB::table('commercial_documents')->where('company_id', $company->id)->where('kind', $kind)->where('notes', $notes)->exists()) {
                 continue;
             }
-            $this->at(CarbonImmutable::parse($date)->setTime(9, 0), function () use ($service, $company, $kind, $counterparty, $notes, $steps, $convert, $lines, $date, $validUntil, $purchaseAccount): void {
+            $publicId = '';
+            $this->at(CarbonImmutable::parse($date)->setTime(9, 0), function () use ($service, $company, $kind, $counterparty, $notes, $steps, $lines, $date, $validUntil, $purchaseAccount, &$publicId): void {
                 $id = $service->create($this->organization, $this->bookkeeperOf($company), (int) $company->id, ['kind' => $kind, 'counterparty_id' => $counterparty, 'issued_on' => $date,
                     'valid_until' => $kind === 'quote' ? $validUntil : null, 'notes' => $notes,
                     'lines' => array_map(fn (array $line): array => ['description' => $line[0], 'quantity' => $line[1], 'unit_price' => $line[2], 'tax_treatment' => $line[3],
@@ -732,10 +733,11 @@ class PlanEsencialDemoSeeder extends Seeder
                 foreach ($steps as $status) {
                     $service->transition($this->organization, $this->owner, (int) $company->id, $publicId, $status);
                 }
-                if ($convert) {
-                    $service->convert($this->organization, $this->owner, $company, $publicId, ['target' => 'sales_invoice', 'document_date' => $date, 'due_on' => null]);
-                }
             });
+            if ($convert) {
+                $this->at(CarbonImmutable::parse($date)->setTime(9, 30), fn () => $service->convert($this->organization, $this->owner, $company, $publicId,
+                    ['target' => 'sales_invoice', 'document_date' => $date, 'due_on' => null]));
+            }
         }
     }
 
@@ -749,7 +751,7 @@ class PlanEsencialDemoSeeder extends Seeder
      */
     private function obligations(array $companies, array $months): void
     {
-        $ids = array_values(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies));
+        $ids = array_map(fn (array $pair): int => (int) $pair[0]->id, $companies);
         app(FiscalObligationGenerationService::class)->generate($this->member, $this->owner, $ids);
         $holds = [];
         foreach ($companies as $index => [$company, $profile]) {
@@ -962,8 +964,8 @@ class PlanEsencialDemoSeeder extends Seeder
     {
         $ids = $companyIds === [] ? [-1] : $companyIds;
         $entries = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')->whereIn('p.company_id', $ids);
-        $unbalanced = DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
-            ->whereIn('p.company_id', $ids)->groupBy('e.id')->havingRaw('SUM(l.debit_cents) <> SUM(l.credit_cents)')->select('e.id')->get()->count();
+        $unbalanced = DB::query()->fromSub(DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
+            ->whereIn('p.company_id', $ids)->groupBy('e.id')->havingRaw('SUM(l.debit_cents) <> SUM(l.credit_cents)')->select('e.id'), 'unbalanced')->count();
         $rows = [
             ['Organización', PlanEsencialDemoCatalog::firm()['name'].' (NIT '.PlanEsencialDemoCatalog::ORGANIZATION_TAX_ID.')'],
             ['Usuarios de oficina', (string) DB::table('organization_user')->where('organization_id', $this->organization->id)->where('status', 'active')->count()],

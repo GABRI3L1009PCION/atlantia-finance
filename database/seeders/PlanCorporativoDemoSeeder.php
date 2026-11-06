@@ -55,6 +55,7 @@ use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon as IlluminateCarbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -199,7 +200,7 @@ class PlanCorporativoDemoSeeder extends Seeder
         // La administración general se delega cuando la firma ya está en marcha: desde ahí el Director solo supervisa.
         DB::transaction(fn () => $this->joinFirm($this->catalogMember('admin-general')));
 
-        $this->report(array_values(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies)));
+        $this->report(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies));
     }
 
     /** La firma, su perfil de facturación, la oficina principal y la suscripción; las demás sedes las crea la administración general. */
@@ -423,7 +424,7 @@ class PlanCorporativoDemoSeeder extends Seeder
         }
 
         return ['company' => $company, 'sector' => $sector, 'customers' => array_values(array_unique($customers, SORT_REGULAR)),
-            'suppliers' => array_values(array_unique($suppliers, SORT_REGULAR)), 'sales' => array_values($sales), 'purchases' => array_values($purchases)];
+            'suppliers' => array_values(array_unique($suppliers, SORT_REGULAR)), 'sales' => $sales, 'purchases' => $purchases];
     }
 
     /**
@@ -663,7 +664,7 @@ class PlanCorporativoDemoSeeder extends Seeder
             if (DB::table('company_groups')->where('organization_id', $this->organization->id)->where('name', $group['name'])->exists()) {
                 continue;
             }
-            $members = array_values(array_map(fn (array $member): array => ['company_id' => $byName[$member[0]], 'ownership_bp' => $member[1]], $group['members']));
+            $members = array_map(fn (array $member): array => ['company_id' => $byName[$member[0]], 'ownership_bp' => $member[1]], $group['members']);
             app(ConsolidationService::class)->save($this->member, $this->owner, null, $group['name'], $byName[$group['parent']], $members, null, array_values($byName));
         }
     }
@@ -796,8 +797,8 @@ class PlanCorporativoDemoSeeder extends Seeder
             return;
         }
         $service = app(TrainingService::class);
-        $assistants = array_values(array_map(fn (string $code): int => $this->team['assistant-'.strtolower(substr($code, 0, 3))]->id, array_keys($this->offices)));
-        $accountants = array_values(array_map(fn (string $code): int => $this->team['accountant-'.strtolower(substr($code, 0, 3))]->id, array_keys($this->offices)));
+        $assistants = array_map(fn (string $code): int => $this->team['assistant-'.strtolower(substr($code, 0, 3))]->id, array_keys($this->offices));
+        $accountants = array_map(fn (string $code): int => $this->team['accountant-'.strtolower(substr($code, 0, 3))]->id, array_keys($this->offices));
         $courses = [
             ['Actualización de la Ley del IVA y el régimen FEL', 'Fiscal', 'virtual', -20, 'completed', $accountants],
             ['Cierre contable mensual con Atlantia Finance', 'Contabilidad', 'híbrido', -5, 'in_progress', $assistants],
@@ -1012,7 +1013,7 @@ class PlanCorporativoDemoSeeder extends Seeder
         if ($asset !== null) {
             foreach (array_slice($months, 0, 2) as $month) {
                 $this->attempt($company, 'la depreciación de '.$month->format('m/Y'), fn () => $this->at($month->endOfMonth()->setTime(17, 30),
-                    fn () => app(FixedAssetService::class)->depreciate($this->organization, $this->bookkeeper, (int) $company->id, Carbon::parse($month->toDateString()))));
+                    fn () => app(FixedAssetService::class)->depreciate($this->organization, $this->bookkeeper, (int) $company->id, IlluminateCarbon::parse($month->toDateString()))));
             }
         }
         $this->postDrafts($company);
@@ -1610,7 +1611,7 @@ class PlanCorporativoDemoSeeder extends Seeder
      */
     private function obligations(array $companies, array $months): void
     {
-        $ids = array_values(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies));
+        $ids = array_map(fn (array $pair): int => (int) $pair[0]->id, $companies);
         app(FiscalObligationGenerationService::class)->generate($this->member, $this->owner, $ids);
         $holds = [];
         foreach ($companies as $index => [$company]) {
@@ -1827,8 +1828,8 @@ class PlanCorporativoDemoSeeder extends Seeder
         $grouped = fn ($query, string $column): string => $query->groupBy($column)->orderBy($column)->selectRaw($column.' as label, COUNT(*) as total')->get()
             ->map(fn (stdClass $row): string => $row->label.': '.$row->total)->implode(', ');
         $entries = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')->whereIn('p.company_id', $ids);
-        $unbalanced = DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
-            ->whereIn('p.company_id', $ids)->groupBy('e.id')->havingRaw('SUM(l.debit_cents) <> SUM(l.credit_cents)')->select('e.id')->get()->count();
+        $unbalanced = DB::query()->fromSub(DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
+            ->whereIn('p.company_id', $ids)->groupBy('e.id')->havingRaw('SUM(l.debit_cents) <> SUM(l.credit_cents)')->select('e.id'), 'unbalanced')->count();
         $rows = [
             ['Organización', PlanCorporativoDemoCatalog::firm()['name'].' (NIT '.PlanCorporativoDemoCatalog::ORGANIZATION_TAX_ID.')'],
             ['Oficinas', (string) DB::table('offices')->where('organization_id', $this->organization->id)->whereNull('deleted_at')->count()],

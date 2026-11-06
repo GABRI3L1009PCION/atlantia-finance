@@ -48,6 +48,7 @@ use Closure;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon as IlluminateCarbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -152,7 +153,7 @@ class PlanProfesionalDemoSeeder extends Seeder
         $this->obligations($companies, $months);
         $this->tasks($companies, $months);
 
-        $this->report(array_values(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies)));
+        $this->report(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies));
     }
 
     /** La firma, su única oficina (con revisión de doble nivel), los 8 usuarios internos y la suscripción al plan Profesional. */
@@ -288,7 +289,7 @@ class PlanProfesionalDemoSeeder extends Seeder
         }
 
         return ['company' => $company, 'sector' => $sector, 'customers' => $sector['customers'], 'suppliers' => array_values(array_unique($suppliers, SORT_REGULAR)),
-            'sales' => array_values($sales), 'purchases' => array_values($purchases)];
+            'sales' => $sales, 'purchases' => $purchases];
     }
 
     /** Quien contabiliza: la Contadora General (la única, con el propietario, que tiene `journal.post`). */
@@ -637,7 +638,7 @@ class PlanProfesionalDemoSeeder extends Seeder
         if ($asset !== null) {
             foreach (array_slice($months, 0, 2) as $month) {
                 $this->attempt($company, 'la depreciación de '.$month->format('m/Y'), fn () => $this->at($month->endOfMonth()->setTime(17, 30),
-                    fn () => app(FixedAssetService::class)->depreciate($this->organization, $this->bookkeeper, (int) $company->id, Carbon::parse($month->toDateString()))));
+                    fn () => app(FixedAssetService::class)->depreciate($this->organization, $this->bookkeeper, (int) $company->id, IlluminateCarbon::parse($month->toDateString()))));
             }
         }
         $this->postDrafts($company);
@@ -1235,7 +1236,7 @@ class PlanProfesionalDemoSeeder extends Seeder
      */
     private function obligations(array $companies, array $months): void
     {
-        $ids = array_values(array_map(fn (array $pair): int => (int) $pair[0]->id, $companies));
+        $ids = array_map(fn (array $pair): int => (int) $pair[0]->id, $companies);
         app(FiscalObligationGenerationService::class)->generate($this->member, $this->owner, $ids);
         $holds = [];
         foreach ($companies as $index => [$company]) {
@@ -1451,8 +1452,8 @@ class PlanProfesionalDemoSeeder extends Seeder
         $grouped = fn ($query, string $column): string => $query->groupBy($column)->orderBy($column)->selectRaw($column.' as label, COUNT(*) as total')->get()
             ->map(fn (stdClass $row): string => $row->label.': '.$row->total)->implode(', ');
         $entries = DB::table('journal_entries as e')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')->whereIn('p.company_id', $ids);
-        $unbalanced = DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
-            ->whereIn('p.company_id', $ids)->groupBy('e.id')->havingRaw('SUM(l.debit_cents) <> SUM(l.credit_cents)')->select('e.id')->get()->count();
+        $unbalanced = DB::query()->fromSub(DB::table('journal_lines as l')->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')->join('accounting_periods as p', 'p.id', '=', 'e.accounting_period_id')
+            ->whereIn('p.company_id', $ids)->groupBy('e.id')->havingRaw('SUM(l.debit_cents) <> SUM(l.credit_cents)')->select('e.id'), 'unbalanced')->count();
         $rows = [
             ['Organización', PlanProfesionalDemoCatalog::firm()['name'].' (NIT '.PlanProfesionalDemoCatalog::ORGANIZATION_TAX_ID.')'],
             ['Oficinas', (string) DB::table('offices')->where('organization_id', $this->organization->id)->whereNull('deleted_at')->count()],

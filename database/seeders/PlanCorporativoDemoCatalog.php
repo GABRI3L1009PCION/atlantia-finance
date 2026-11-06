@@ -57,7 +57,7 @@ final class PlanCorporativoDemoCatalog
     public static function team(): array
     {
         $member = fn (string $key, string $name, string $role, ?array $offices, ?string $custom = null): array => ['key' => $key, 'name' => $name,
-            'email' => Str::slug(implode(' ', array_slice(explode(' ', $name), 0, 1)).' '.(explode(' ', $name)[2] ?? ''), '.'), 'role' => $role, 'offices' => $offices, 'custom' => $custom];
+            'email' => Str::slug(implode(' ', array_slice(explode(' ', $name), 0, 1)).' '.(explode(' ', $name)[2] ?? ''), '.'), 'role' => $role, 'offices' => $offices === null ? null : array_values(array_map('strval', $offices)), 'custom' => $custom];
 
         $team = [
             $member('owner', 'Ricardo Antonio Paz Morales', 'owner_director', null),
@@ -220,7 +220,11 @@ final class PlanCorporativoDemoCatalog
         return $rows;
     }
 
-    /** Empresas con contacto del cliente en el portal: las dos primeras de cada oficina. @return list<string> */
+    /**
+     * Empresas con contacto del cliente en el portal: las dos primeras de cada oficina.
+     *
+     * @return list<string>
+     */
     public static function portalCompanies(): array
     {
         $names = [];
