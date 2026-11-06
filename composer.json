@@ -80,7 +80,11 @@
             "@php artisan config:clear --ansi",
             "@lint:check",
             "@types:check",
-            "@php artisan test"
+            "@php artisan test --exclude-group=demo-seeders"
+        ],
+        "test:demo-seeders": [
+            "@php artisan config:clear --ansi",
+            "@php artisan test --group=demo-seeders"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
