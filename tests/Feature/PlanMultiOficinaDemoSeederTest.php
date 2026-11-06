@@ -10,6 +10,9 @@ use Database\Seeders\PlanMultiOficinaDemoCatalog;
 use Database\Seeders\PlanMultiOficinaDemoSeeder;
 use Illuminate\Support\Facades\DB;
 
+
+pest()->group('demo-seeders');
+
 beforeEach(function () {
     $this->travelTo(now()->setDate(2026, 10, 29)->setTime(10, 0));
     $this->seed(PlanMultiOficinaDemoSeeder::class);
