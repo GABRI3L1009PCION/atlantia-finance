@@ -25,11 +25,11 @@ final class PlanCorporativoDemoCatalog
 
     public const CLIENT_DOMAIN = 'clientes-grupocontableatlantico.test';
 
-    /** @return array{name: string, legal_name: string, billing: array{name: string, nit: string, address: string}} */
+    /** @return array{name: string, legal_name: string, billing: array{name: string, nit: string, address: string, email: string}} */
     public static function firm(): array
     {
         return ['name' => 'Grupo Contable Atlántico Norte', 'legal_name' => 'Grupo Contable Atlántico Norte, S.A.',
-            'billing' => ['name' => 'Grupo Contable Atlántico Norte, S.A.', 'nit' => self::ORGANIZATION_TAX_ID, 'address' => '8a. Calle entre 6a. y 7a. Avenida, Barrio El Centro, Puerto Barrios, Izabal']];
+            'billing' => ['name' => 'Grupo Contable Atlántico Norte, S.A.', 'nit' => self::ORGANIZATION_TAX_ID, 'address' => '8a. Calle entre 6a. y 7a. Avenida, Barrio El Centro, Puerto Barrios, Izabal', 'email' => 'facturacion@'.self::DOMAIN]];
     }
 
     /** @return list<Office> */
