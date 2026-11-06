@@ -4,7 +4,7 @@
 
 Los datos ficticios están en `database/seeders/PlanEsencialDemoCatalog.php`: nombres, NIT, direcciones, teléfonos, clientes, proveedores, ventas y compras.
 
-> **Solo para desarrollo o pruebas.** El seeder se niega a correr con `APP_ENV=production` (trait `RefusesProduction`).
+> **Datos de demostración.** En producción el seeder solo corre si el `.env` tiene `ATLANTIA_ALLOW_DEMO_SEED=true` (quítalo al terminar). Correos, notificaciones, colas y llamadas HTTP externas se simulan, así que nada sale del servidor.
 
 ## Ejecución
 

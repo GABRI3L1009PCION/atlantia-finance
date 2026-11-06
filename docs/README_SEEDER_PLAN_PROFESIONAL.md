@@ -4,7 +4,7 @@
 
 Los datos propios del escenario (firma, equipo, empresas y contactos del cliente) están en `database/seeders/PlanProfesionalDemoCatalog.php`. Las plantillas de operaciones por sector y de empleados se leen de `PlanMultiOficinaDemoCatalog`, sin modificarlo.
 
-> **Solo para desarrollo o pruebas.** El seeder se niega a correr con `APP_ENV=production`. No modifica los seeders de los otros planes.
+> **Datos de demostración.** En producción el seeder solo corre si el `.env` tiene `ATLANTIA_ALLOW_DEMO_SEED=true` (quítalo al terminar). Correos, notificaciones, colas y llamadas HTTP externas se simulan, así que nada sale del servidor. No modifica los seeders de los otros planes.
 
 ## Ejecución
 

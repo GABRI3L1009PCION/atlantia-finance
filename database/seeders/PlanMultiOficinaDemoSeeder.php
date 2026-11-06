@@ -44,6 +44,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon as IlluminateCarbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Ramsey\Uuid\Uuid;
@@ -116,8 +120,14 @@ class PlanMultiOficinaDemoSeeder extends Seeder
 
     public function run(): void
     {
-        $this->refuseInProduction();
+        $this->refuseInProductionUnlessAllowed();
         $this->call([PlanCatalogSeeder::class, PayrollParameterSeeder::class]);
+        // Nada sale del servidor: correos, notificaciones, trabajos en cola y llamadas HTTP externas se simulan.
+        Mail::fake();
+        Notification::fake();
+        Queue::fake();
+        Http::preventStrayRequests();
+        Http::fake(['*' => Http::response('', 404)]);
 
         DB::transaction(fn () => $this->firm());
         $this->member = $this->owner->organizations()->whereKey($this->organization->id)->firstOrFail();

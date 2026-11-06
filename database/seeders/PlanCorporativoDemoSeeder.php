@@ -150,7 +150,7 @@ class PlanCorporativoDemoSeeder extends Seeder
 
     public function run(): void
     {
-        $this->refuseInProduction();
+        $this->refuseInProductionUnlessAllowed();
         $this->call([PlanCatalogSeeder::class, PayrollParameterSeeder::class]);
         // Nada sale del proceso: correos, notificaciones y trabajos en cola se simulan, y cualquier HTTP saliente
         // (webhooks incluidos) responde con un servidor simulado. Los destinos de demostración usan dominios .test, que
