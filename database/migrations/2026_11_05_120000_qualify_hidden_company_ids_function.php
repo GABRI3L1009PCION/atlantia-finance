@@ -31,11 +31,11 @@ return new class extends Migration
 
     private function define(string $table): void
     {
-        DB::unprepared(<<<SQL
+        DB::statement(<<<SQL
             CREATE OR REPLACE FUNCTION atlantia_hidden_company_ids() RETURNS bigint[] LANGUAGE sql STABLE AS \$\$
                 SELECT CASE WHEN current_setting('atlantia.include_deleted', true) = 'on' THEN '{}'::bigint[]
                     ELSE COALESCE((SELECT array_agg(company_id) FROM {$table} WHERE restored_at IS NULL), '{}'::bigint[]) END
-            \$\$;
+            \$\$
             SQL);
     }
 };
