@@ -11,6 +11,7 @@ import {
     panel,
     statusTone,
 } from '@/components/control-center/kit';
+import { PlainPasswordInput } from '@/components/password-input';
 
 type Integration = {
     key: string;
@@ -33,10 +34,10 @@ function SecretForm({ integration }: { integration: Integration }) {
 
     return (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-            <input
-                type="password"
+            <PlainPasswordInput
                 autoComplete="off"
-                className={`${ccInput} h-8 max-w-xs`}
+                wrapperClassName="w-full max-w-xs"
+                className={`${ccInput} h-8 w-full`}
                 placeholder="Nuevo secreto"
                 value={secret}
                 onChange={(e) => setSecret(e.target.value)}

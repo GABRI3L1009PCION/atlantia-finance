@@ -105,7 +105,7 @@ export function BookCover({
 
     return (
         <div
-            className="relative aspect-[3/4.1] overflow-hidden rounded-l-sm rounded-r-lg shadow-[6px_10px_18px_-6px_rgba(0,0,0,.45)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[8px_16px_24px_-8px_rgba(0,0,0,.5)]"
+            className="@container relative aspect-[3/4.1] overflow-hidden rounded-l-sm rounded-r-lg shadow-[6px_10px_18px_-6px_rgba(0,0,0,.45)] transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[8px_16px_24px_-8px_rgba(0,0,0,.5)]"
             style={{
                 backgroundImage: `linear-gradient(145deg, ${cover.from}, ${cover.to})`,
                 color: cover.text,
@@ -124,10 +124,11 @@ export function BookCover({
                 className="absolute inset-3 rounded-sm border"
                 style={{ borderColor: `${cover.accent}88` }}
             />
-            <div className="relative flex h-full flex-col items-center px-5 pt-6 pb-4 text-center">
+            <div className="relative flex h-full flex-col items-center px-4 pt-6 pb-4 text-center @min-[11rem]:px-5">
                 <Icon className="size-7" style={{ color: cover.accent }} />
                 <p
-                    className="mt-3 font-serif text-[15px] leading-tight font-bold tracking-wide uppercase"
+                    lang="es"
+                    className="mt-3 w-full font-serif text-[clamp(9px,7.5cqw,15px)] leading-tight font-bold tracking-wide break-words hyphens-auto uppercase @min-[11rem]:text-[15px]"
                     style={{ textWrap: 'balance' }}
                 >
                     {title}

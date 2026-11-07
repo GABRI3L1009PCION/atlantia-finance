@@ -164,7 +164,8 @@ class BackupArchiveService
     }
 
     /**
-     * Backups run with platform access so forced Row Level Security exposes every organization's rows.
+     * Backups run with platform access so forced Row Level Security exposes every organization's rows, and with the
+     * trash filter off so the companies awaiting restoration or purge are copied too.
      *
      * @return array<string, string>
      */
@@ -172,7 +173,7 @@ class BackupArchiveService
     {
         return [
             'PGPASSWORD' => (string) config('database.connections.pgsql.password'),
-            'PGOPTIONS' => '-c atlantia.system=on',
+            'PGOPTIONS' => '-c atlantia.system=on -c atlantia.include_deleted=on',
         ];
     }
 

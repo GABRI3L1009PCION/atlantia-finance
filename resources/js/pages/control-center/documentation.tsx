@@ -9,6 +9,7 @@ import {
     ccTextarea,
     date,
 } from '@/components/control-center/kit';
+import { PlainPasswordInput } from '@/components/password-input';
 
 type ProjectDocument = {
     id: string;
@@ -63,8 +64,7 @@ function PasswordPanel({
                 }}
             >
                 <div className="grid gap-2 sm:grid-cols-2">
-                    <input
-                        type="password"
+                    <PlainPasswordInput
                         autoComplete="new-password"
                         className={ccInput}
                         placeholder={
@@ -78,8 +78,7 @@ function PasswordPanel({
                             form.setData('access_password', event.target.value)
                         }
                     />
-                    <input
-                        type="password"
+                    <PlainPasswordInput
                         autoComplete="new-password"
                         className={ccInput}
                         placeholder="Repite la contraseña"

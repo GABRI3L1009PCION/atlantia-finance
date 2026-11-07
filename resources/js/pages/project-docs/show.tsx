@@ -2,6 +2,7 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import { BookOpen, Download, Eye, Lock, LogOut } from 'lucide-react';
 import { PublicHeader } from '@/components/landing/public-header';
 import { BookCover, bookCovers } from '@/components/library/book-carousel';
+import { PlainPasswordInput } from '@/components/password-input';
 
 type ProjectDocument = {
     id: string;
@@ -64,8 +65,7 @@ function PasswordForm({ available }: { available: boolean }) {
             </div>
             <label className="block">
                 <span className="sr-only">Contraseña</span>
-                <input
-                    type="password"
+                <PlainPasswordInput
                     autoComplete="current-password"
                     autoFocus
                     required
@@ -101,7 +101,7 @@ function Book({
     const kind = /^manual/i.test(document.title) ? 'Manual' : 'Documento';
 
     return (
-        <li className="group flex flex-col">
+        <li className="group @container flex flex-col">
             <a
                 href={`/documentacion/archivo/${document.id}`}
                 target="_blank"
@@ -128,7 +128,7 @@ function Book({
             <p className="mt-1 text-[10px] text-slate-400">
                 Publicado el {published(document.uploaded_at)}
             </p>
-            <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
+            <div className="mt-auto grid grid-cols-1 gap-2 pt-3 @min-[12rem]:grid-cols-2">
                 <a
                     href={`/documentacion/archivo/${document.id}`}
                     target="_blank"
