@@ -7,6 +7,7 @@ import {
     primaryButton,
     secondaryButton,
 } from '@/components/office-admin/kit';
+import { PlainPasswordInput } from '@/components/password-input';
 import {
     Dialog,
     DialogContent,
@@ -222,11 +223,11 @@ export function DeleteCompanyDialog({
                         </label>
                         <label className="text-sm font-semibold">
                             Tu contraseña
-                            <input
-                                type="password"
+                            <PlainPasswordInput
                                 required
                                 autoComplete="current-password"
-                                className={`${input} mt-1`}
+                                wrapperClassName="mt-1"
+                                className={input}
                                 value={form.data.password}
                                 onChange={(event) =>
                                     form.setData('password', event.target.value)

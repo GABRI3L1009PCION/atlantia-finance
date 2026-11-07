@@ -271,10 +271,27 @@ const groups: Group[] = [
     },
 ];
 
-function isActive(item: Item, path: string): boolean {
+function matches(item: Item, path: string): boolean {
     return item.href === '/control-center'
         ? path === item.href
         : path === item.href || path.startsWith(item.href + '/');
+}
+
+/**
+ * Only the most specific entry is highlighted: on /control-center/luzma/usage "Consumo IA" lights up, not also
+ * "Estado de Luzma", whose address is a prefix of it.
+ */
+function isActive(item: Item, path: string): boolean {
+    return (
+        matches(item, path) &&
+        !groups.some((group) =>
+            group.items.some(
+                (other) =>
+                    other.href.length > item.href.length &&
+                    matches(other, path),
+            ),
+        )
+    );
 }
 
 /**

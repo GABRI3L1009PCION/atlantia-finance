@@ -10,6 +10,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { PlainPasswordInput } from '@/components/password-input';
 
 export type PlatformProps = {
     role: string | null;
@@ -610,8 +611,7 @@ export function SensitiveAction({
                         )}
                         <label className="grid gap-1 text-xs font-semibold text-slate-700">
                             Tu contraseña
-                            <input
-                                type="password"
+                            <PlainPasswordInput
                                 autoComplete="current-password"
                                 className={ccInput}
                                 value={form.data.password}
